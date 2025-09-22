@@ -137,6 +137,7 @@ namespace WH40kCivFactoryBuilderGame
             GeneratePlanet();
         }
 
+#if UNITY_EDITOR
         private void OnValidate()
         {
             if (!recalculateEveryEdit)
@@ -144,16 +145,19 @@ namespace WH40kCivFactoryBuilderGame
                 return;
             }
 
-#if UNITY_EDITOR
-            if (!Application.isPlaying)
+            QueuePlanetGeneration();
+        }
+#else
+        private void OnValidate()
+        {
+            if (!recalculateEveryEdit)
             {
-                QueuePlanetGeneration();
                 return;
             }
-#endif
 
             GeneratePlanet();
         }
+#endif
 
         private void Update()
         {
