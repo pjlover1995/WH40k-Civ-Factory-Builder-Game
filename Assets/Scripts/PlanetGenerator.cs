@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
+#if UNITY_EDITOR
+using UnityEditor;
+#endif
 
 namespace WH40kCivFactoryBuilderGame
 {
@@ -123,6 +126,14 @@ namespace WH40kCivFactoryBuilderGame
 
         private void OnEnable()
         {
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                QueuePlanetGeneration(force: true);
+                return;
+            }
+#endif
+
             GeneratePlanet();
         }
 
@@ -132,6 +143,14 @@ namespace WH40kCivFactoryBuilderGame
             {
                 return;
             }
+
+#if UNITY_EDITOR
+            if (!Application.isPlaying)
+            {
+                QueuePlanetGeneration();
+                return;
+            }
+#endif
 
             GeneratePlanet();
         }
@@ -207,6 +226,62 @@ namespace WH40kCivFactoryBuilderGame
             lodGroup.SetLODs(lods.ToArray());
             lodGroup.RecalculateBounds();
         }
+
+#if UNITY_EDITOR
+        private bool queuedGeneration;
+        private bool queuedGenerationForce;
+
+        private void OnDisable()
+        {
+            CancelQueuedGeneration();
+        }
+
+        private void QueuePlanetGeneration(bool force = false)
+        {
+            if (queuedGeneration)
+            {
+                queuedGenerationForce |= force;
+                return;
+            }
+
+            queuedGeneration = true;
+            queuedGenerationForce = force;
+            EditorApplication.delayCall += HandleDelayedGeneration;
+        }
+
+        private void HandleDelayedGeneration()
+        {
+            EditorApplication.delayCall -= HandleDelayedGeneration;
+
+            bool force = queuedGenerationForce;
+            queuedGeneration = false;
+            queuedGenerationForce = false;
+
+            if (this == null)
+            {
+                return;
+            }
+
+            if (!force && !recalculateEveryEdit)
+            {
+                return;
+            }
+
+            GeneratePlanet();
+        }
+
+        private void CancelQueuedGeneration()
+        {
+            if (!queuedGeneration)
+            {
+                return;
+            }
+
+            EditorApplication.delayCall -= HandleDelayedGeneration;
+            queuedGeneration = false;
+            queuedGenerationForce = false;
+        }
+#endif
 
         private void EnsureMaterial()
         {
