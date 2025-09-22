@@ -33,7 +33,7 @@ namespace WH40kCivFactoryBuilderGame
         private float oceanLevel = 0.47f;
 
         [SerializeField, Range(0.05f, 1f)]
-        private float detailStrength = 0.35f;
+        private float detailStrength = 0.45f;
 
         [Header("Noise")]
         [SerializeField]
@@ -49,7 +49,7 @@ namespace WH40kCivFactoryBuilderGame
         private int continentOctaves = 4;
 
         [SerializeField, Min(1)]
-        private int detailOctaves = 5;
+        private int detailOctaves = 6;
 
         [SerializeField, Min(1)]
         private int mountainOctaves = 4;
@@ -62,17 +62,17 @@ namespace WH40kCivFactoryBuilderGame
 
         [Header("LOD")]
         [SerializeField]
-        private int[] lodResolutions = new[] { 48, 96, 192 };
+        private int[] lodResolutions = new[] { 96, 192, 384 };
 
         [SerializeField]
         private bool recalculateEveryEdit = true;
 
         [Header("Surface Texture")]
         [SerializeField]
-        private int textureWidth = 2048;
+        private int textureWidth = 4096;
 
         [SerializeField]
-        private int textureHeight = 1024;
+        private int textureHeight = 2048;
 
         [SerializeField]
         private Color deepWaterColor = new Color(0.015f, 0.05f, 0.2f);
@@ -94,13 +94,6 @@ namespace WH40kCivFactoryBuilderGame
 
         [SerializeField]
         private Color snowColor = Color.white;
-
-        [Header("Presentation")]
-        [SerializeField]
-        private bool rotatePlanet = true;
-
-        [SerializeField]
-        private float rotationSpeed = 5f;
 
         private readonly Vector3[] faceDirections =
         {
@@ -159,16 +152,6 @@ namespace WH40kCivFactoryBuilderGame
         }
 #endif
 
-        private void Update()
-        {
-            if (!rotatePlanet || !Application.isPlaying)
-            {
-                return;
-            }
-
-            transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime, Space.Self);
-        }
-
         public void GeneratePlanet()
         {
             if (!isActiveAndEnabled)
@@ -183,7 +166,7 @@ namespace WH40kCivFactoryBuilderGame
 
             if (lodResolutions == null || lodResolutions.Length == 0)
             {
-                lodResolutions = new[] { 48, 96, 192 };
+                lodResolutions = new[] { 96, 192, 384 };
             }
 
             UpdateNoiseOffset();
@@ -440,12 +423,12 @@ namespace WH40kCivFactoryBuilderGame
                     int next = current + resolution;
 
                     triangles.Add(current);
-                    triangles.Add(next);
                     triangles.Add(current + 1);
+                    triangles.Add(next);
 
                     triangles.Add(current + 1);
-                    triangles.Add(next);
                     triangles.Add(next + 1);
+                    triangles.Add(next);
                 }
             }
         }
