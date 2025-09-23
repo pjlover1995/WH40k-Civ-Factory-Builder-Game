@@ -4,9 +4,20 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
     {
         _RockColor ("Rock Color", Color) = (0.45, 0.43, 0.4, 1)
         _DirtColor ("Dirt Color", Color) = (0.36, 0.25, 0.15, 1)
+        _GrassColor ("Grass Color", Color) = (0.28, 0.46, 0.24, 1)
+        _DesertColor ("Desert Color", Color) = (0.86, 0.74, 0.5, 1)
+        _SnowColor ("Snow Color", Color) = (0.92, 0.95, 0.98, 1)
+        _OceanShallowColor ("Shallow Ocean Color", Color) = (0.12, 0.4, 0.55, 1)
+        _OceanDeepColor ("Deep Ocean Color", Color) = (0.02, 0.08, 0.2, 1)
         _TextureScale ("Noise Scale", Float) = 500.0
         _NoiseIntensity ("Noise Intensity", Range(0, 1)) = 0.35
         _BlendSharpness ("Blend Sharpness", Range(1, 8)) = 4
+        _BiomeNoiseScale ("Biome Noise Scale", Float) = 850.0
+        _BiomeContrast ("Biome Contrast", Range(0.5, 2.5)) = 1.2
+        _CoastBlend ("Coastline Blend Distance", Float) = 120.0
+        _SnowLine ("Snow Line Height", Float) = 600.0
+        _PlanetRadius ("Planet Radius", Float) = 3000.0
+        _SeaLevel ("Sea Level", Float) = 2880.0
     }
     SubShader
     {
@@ -23,9 +34,20 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
 
             fixed4 _RockColor;
             fixed4 _DirtColor;
+            fixed4 _GrassColor;
+            fixed4 _DesertColor;
+            fixed4 _SnowColor;
+            fixed4 _OceanShallowColor;
+            fixed4 _OceanDeepColor;
             float _TextureScale;
             float _NoiseIntensity;
             float _BlendSharpness;
+            float _BiomeNoiseScale;
+            float _BiomeContrast;
+            float _CoastBlend;
+            float _SnowLine;
+            float _PlanetRadius;
+            float _SeaLevel;
 
             struct appdata
             {
@@ -74,20 +96,56 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
 
             fixed4 frag(v2f i) : SV_Target
             {
+                float3 worldPos = i.worldPos;
                 float3 normal = normalize(i.worldNormal);
                 float3 blend = pow(abs(normal), _BlendSharpness);
                 blend = blend / (blend.x + blend.y + blend.z + 1e-5);
 
-                float rockNoise = SampleTriplanarNoise(i.worldPos + 173.0, blend, _TextureScale * 0.75);
-                float dirtNoise = SampleTriplanarNoise(i.worldPos, blend, _TextureScale);
+                float rockNoise = SampleTriplanarNoise(worldPos + 173.0, blend, _TextureScale * 0.75);
+                float dirtNoise = SampleTriplanarNoise(worldPos, blend, _TextureScale);
+                float biomeNoise = SampleTriplanarNoise(worldPos + 823.0, blend, max(_BiomeNoiseScale, 0.001));
 
                 float3 rock = _RockColor.rgb * NoiseVariation(rockNoise);
                 float3 dirt = _DirtColor.rgb * NoiseVariation(dirtNoise);
 
+                float altitude = length(worldPos);
+                float surfaceHeight = altitude - _SeaLevel;
+                float radiusScale = max(0.1, _PlanetRadius / 3000.0);
+                float coastWidth = max(1.0, _CoastBlend * radiusScale);
+                float landMask = saturate(smoothstep(-coastWidth, coastWidth, surfaceHeight));
+
+                float3 sphereNormal = normalize(worldPos);
+                float latAbs = abs(sphereNormal.y);
+                float temperature = 1.0 - latAbs;
+                temperature = pow(saturate(temperature), _BiomeContrast);
+                temperature *= saturate(1.0 - max(0.0, surfaceHeight) / (_SnowLine + 1200.0));
+
+                float moisture = saturate(biomeNoise * 1.35 - 0.2);
+                float desertFactor = saturate((1.0 - moisture) * temperature);
+
+                float snowHeight = _SnowLine;
+                float altitudeSnow = max(0.0, surfaceHeight) - max(0.0, (1.0 - temperature) * 180.0);
+                float snowFactor = saturate(smoothstep(snowHeight - 120.0, snowHeight + 80.0, altitudeSnow));
+                snowFactor = max(snowFactor, saturate(pow(1.0 - temperature, 2.0)));
+
+                float grassFactor = saturate(1.0 - desertFactor);
+                grassFactor *= 1.0 - snowFactor;
+
+                float weightSum = desertFactor + grassFactor + snowFactor + 1e-3;
+                float3 biomeColor = (desertFactor * _DesertColor.rgb + grassFactor * _GrassColor.rgb + snowFactor * _SnowColor.rgb) / weightSum;
+
                 float slope = saturate(1.0 - abs(normal.y));
-                float heightFactor = saturate((i.worldPos.y + 1000.0) / 2000.0);
-                float rockBlend = saturate(slope * 1.5 + heightFactor * 0.5);
-                float3 albedo = lerp(dirt, rock, rockBlend);
+                float3 soilColor = lerp(dirt, rock, saturate(pow(slope, 1.3) + snowFactor * 0.25));
+                float biomeBlend = saturate(1.0 - slope * 0.7);
+                float3 landColor = lerp(soilColor, biomeColor, biomeBlend);
+                landColor = lerp(landColor, _SnowColor.rgb, snowFactor * 0.25);
+
+                float waterDepth = saturate(-surfaceHeight / (coastWidth * 2.0));
+                float3 oceanColor = lerp(_OceanShallowColor.rgb, _OceanDeepColor.rgb, waterDepth * waterDepth);
+                float shoreFoam = exp(-abs(surfaceHeight) / (25.0 * radiusScale)) * (1.0 - landMask);
+                oceanColor = lerp(oceanColor, float3(0.9, 0.95, 1.0), shoreFoam * 0.3);
+
+                float3 albedo = lerp(oceanColor, landColor, landMask);
 
                 return fixed4(saturate(albedo), 1.0);
             }
