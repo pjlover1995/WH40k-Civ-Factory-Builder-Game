@@ -119,6 +119,7 @@ namespace WH30K.UI
             ShowNewGamePanel(true);
             ShowHud(false);
             ShowEventPanel(false);
+            ResetEventLog();
         }
 
         private void BuildNewGamePanel(Transform parent)
@@ -383,6 +384,15 @@ namespace WH30K.UI
         public void ShowEventPanel(bool visible)
         {
             eventPanel.SetActive(visible);
+        }
+
+        public void ResetEventLog()
+        {
+            eventLogEntries.Clear();
+            if (eventLogText != null)
+            {
+                eventLogText.text = "Log:\n";
+            }
         }
 
         public void SetDifficulty(GameSettings.Difficulty difficulty)

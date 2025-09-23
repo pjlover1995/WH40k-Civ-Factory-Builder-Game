@@ -49,6 +49,7 @@ namespace WH30K.Sim.Events
                 eventCoroutine = null;
             }
 
+            menu?.ShowEventPanel(false);
             rng = null;
         }
 

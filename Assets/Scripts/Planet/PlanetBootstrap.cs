@@ -220,10 +220,12 @@ namespace WH30K.Gameplay
 
             if (menu != null)
             {
+                menu.ResetEventLog();
                 menu.SetSeed(seed);
                 menu.SetDifficulty(difficulty);
                 menu.ShowNewGamePanel(false);
                 menu.ShowHud(true);
+                menu.ShowEventPanel(false);
                 menu.AppendEventLog(loadedFromSave
                     ? "Loaded previous session."
                     : $"New colony established on seed {seed} ({definition.displayName}).");
