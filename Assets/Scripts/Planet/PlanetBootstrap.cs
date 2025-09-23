@@ -43,6 +43,8 @@ namespace WH30K.Gameplay
         private Settlement settlement;
         private SimpleOrbitCamera orbitCamera;
 
+        private const int DefaultMaxPatchResolution = 1024;
+
         private string SavePath
         {
             get
@@ -59,6 +61,8 @@ namespace WH30K.Gameplay
 
         private void Awake()
         {
+            EnforcePatchResolutionCap();
+
             menu = GetComponent<NewGameMenu>();
             resourceSystem = GetComponent<ResourceSystem>();
             environmentState = GetComponent<EnvironmentState>();
@@ -69,6 +73,19 @@ namespace WH30K.Gameplay
                 : null;
 
             LoadTerrainMaterial();
+        }
+
+        private void OnValidate()
+        {
+            EnforcePatchResolutionCap();
+        }
+
+        private void EnforcePatchResolutionCap()
+        {
+            if (maxPatchResolution < DefaultMaxPatchResolution)
+            {
+                maxPatchResolution = DefaultMaxPatchResolution;
+            }
         }
 
         private void Start()
