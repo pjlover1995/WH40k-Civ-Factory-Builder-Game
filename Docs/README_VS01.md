@@ -26,6 +26,4 @@ This scene demonstrates the first playable vertical slice of the WH30K colony bu
 ## Implementation Notes
 
 - `PlanetBootstrap` owns the session lifecycle (planet generation, settlement spawn, event driver, save/load).
-- `NewGameMenu` builds the entire UI at runtime so the scene stays lightweight.
-- Resource and environment systems push data to the HUD after every tick for instant feedback.
 - Save files are stored at `Application.persistentDataPath/wh30k_vslice_save.json`.

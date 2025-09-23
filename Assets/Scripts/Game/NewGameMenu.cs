@@ -385,6 +385,7 @@ namespace WH30K.UI
             eventPanel.SetActive(visible);
         }
 
+
         public void SetDifficulty(GameSettings.Difficulty difficulty)
         {
             selectedDifficulty = difficulty;

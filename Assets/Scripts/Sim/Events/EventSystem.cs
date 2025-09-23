@@ -13,6 +13,7 @@ namespace WH30K.Sim.Events
     /// </summary>
     public class ColonyEventSystem : MonoBehaviour
     {
+
         private NewGameMenu menu;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
@@ -20,30 +21,24 @@ namespace WH30K.Sim.Events
         private GameSettings.DifficultyDefinition difficulty;
         private Coroutine eventCoroutine;
 
+
         public void ConfigureMenu(NewGameMenu newMenu)
         {
             menu = newMenu;
         }
 
         public void BeginSession(GameSettings.DifficultyDefinition definition, ResourceSystem resources,
-            EnvironmentState environment, Settlement settlementInstance)
-        {
+
             difficulty = definition;
             resourceSystem = resources;
             environmentState = environment;
             settlement = settlementInstance;
 
-            if (eventCoroutine != null)
-            {
-                StopCoroutine(eventCoroutine);
-            }
-
-            eventCoroutine = StartCoroutine(EventRoutine());
         }
 
         private IEnumerator EventRoutine()
         {
-            var delay = Mathf.Lerp(18f, 45f, Random.value);
+
             delay /= Mathf.Max(0.25f, difficulty.eventFrequencyMultiplier);
             yield return new WaitForSeconds(delay);
             TriggerIndustrialPolicyEvent();

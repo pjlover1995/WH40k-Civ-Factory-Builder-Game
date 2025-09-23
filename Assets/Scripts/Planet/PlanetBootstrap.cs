@@ -87,32 +87,7 @@ namespace WH30K.Gameplay
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
 
-            var planetTransform = BuildPlanet(seed);
-            resourceSystem.ResetForNewGame(definition);
-            environmentState.ResetForNewGame(definition);
 
-            var random = new System.Random(seed);
-            if (!planet.TryFindLandPoint(128, random, out var settlementPosition, out var settlementNormal))
-            {
-                settlementPosition = planet.EvaluateSurfacePoint(Vector3.up);
-                settlementNormal = settlementPosition.normalized;
-            }
-
-            settlement.BeginNewGame(definition, planet, settlementPosition, settlementNormal, resourceSystem,
-                environmentState);
-            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement);
-
-            menu.SetSeed(seed);
-            menu.SetDifficulty(difficulty);
-            menu.ShowNewGamePanel(false);
-            menu.ShowHud(true);
-            menu.AppendEventLog($"New colony established on seed {seed} ({definition.displayName}).");
-
-            if (orbitCamera != null)
-            {
-                orbitCamera.SetTarget(planetTransform, planetRadius);
-                orbitCamera.FrameTarget();
-            }
         }
 
         public void SaveToFile()
@@ -155,25 +130,7 @@ namespace WH30K.Gameplay
             }
 
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
-            var planetTransform = BuildPlanet(save.seed);
 
-            var definition = GameSettings.GetDefinition(save.difficulty);
-            resourceSystem.LoadFromSnapshot(save.resources, definition);
-            environmentState.LoadFromSnapshot(save.environment, definition);
-            settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
-            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement);
-
-            menu.SetSeed(save.seed);
-            menu.SetDifficulty(save.difficulty);
-            menu.ShowNewGamePanel(false);
-            menu.ShowHud(true);
-            menu.AppendEventLog("Loaded previous session.");
-
-            if (orbitCamera != null)
-            {
-                orbitCamera.SetTarget(planetTransform, planetRadius);
-                orbitCamera.FrameTarget();
-            }
         }
 
         private Transform BuildPlanet(int seed)
@@ -208,6 +165,7 @@ namespace WH30K.Gameplay
             terrainMaterialInstance = new Material(Shader.Find("Standard"));
             Debug.LogWarning("Fallback Standard shader material created for planet terrain. Resource missing?");
         }
+
 
         [Serializable]
         private class GameSaveData
