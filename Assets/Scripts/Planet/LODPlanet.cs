@@ -79,13 +79,18 @@ namespace WH30K.Planet
             }
         }
 
+        private const int DefaultPatchResolutionCap = 1024;
+
         public void ApplyConfiguration(float targetRadius, int baseRes, int depthLimit, float distance, float falloff,
             float updateInterval, int patchResolutionCap, float desiredTriangleArea)
         {
             radius = Mathf.Max(100f, targetRadius);
             baseResolution = Mathf.Max(8, baseRes);
             maxDepth = Mathf.Max(0, depthLimit);
-            maxPatchResolution = Mathf.Max(baseResolution, patchResolutionCap);
+            var effectivePatchCap = patchResolutionCap <= baseResolution
+                ? DefaultPatchResolutionCap
+                : patchResolutionCap;
+            maxPatchResolution = Mathf.Max(baseResolution, effectivePatchCap);
             targetTriangleArea = Mathf.Max(0.5f, desiredTriangleArea);
             splitDistance = Mathf.Max(radius * 0.2f, distance);
             splitFalloff = Mathf.Max(1.01f, falloff);
