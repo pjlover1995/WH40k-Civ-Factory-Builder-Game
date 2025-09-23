@@ -24,8 +24,10 @@ namespace WH30K.Gameplay
     {
         [Header("Planet")]
         [SerializeField] private float planetRadius = 3000f;
-        [SerializeField] private int basePatchResolution = 48;
-        [SerializeField] private int maximumDepth = 5;
+        [SerializeField] private int basePatchResolution = 32;
+        [SerializeField] private int maximumDepth = 6;
+        [SerializeField] private int maxPatchResolution = 1024;
+        [SerializeField] private float targetTriangleArea = 10f;
         [SerializeField] private float splitDistance = 2400f;
         [SerializeField] private float splitFalloff = 1.8f;
         [SerializeField] private float lodUpdateInterval = 0.25f;
@@ -194,7 +196,7 @@ namespace WH30K.Gameplay
             planetGO.transform.SetParent(transform, false);
             planet = planetGO.AddComponent<LODPlanet>();
             planet.ApplyConfiguration(planetRadius, basePatchResolution, maximumDepth, splitDistance, splitFalloff,
-                lodUpdateInterval);
+                lodUpdateInterval, maxPatchResolution, targetTriangleArea);
             planet.BuildPlanet(seed, terrainMaterialInstance);
             planet.SetCamera(UnityEngine.Camera.main);
             return planetGO.transform;

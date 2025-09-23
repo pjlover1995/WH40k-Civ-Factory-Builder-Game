@@ -10,18 +10,22 @@ namespace WH30K.Planet
     public class LODPlanet : MonoBehaviour
     {
         [SerializeField] private float radius = 3000f;
-        [SerializeField] private int baseResolution = 48;
-        [SerializeField] private int maxDepth = 5;
+        [SerializeField] private int baseResolution = 32;
+        [SerializeField] private int maxDepth = 6;
+        [SerializeField] private int maxPatchResolution = 1024;
+        [SerializeField] private float targetTriangleArea = 10f;
         [SerializeField] private float splitDistance = 2400f;
         [SerializeField] private float splitFalloff = 1.8f;
         [SerializeField] private float lodUpdateInterval = 0.25f;
 
         public float Radius => radius;
         public int BaseResolution => Mathf.Max(8, baseResolution);
-        public int MaxDepth => Mathf.Max(0, maxDepth);
+        public int MaxDepth => Mathf.Max(0, computedMaxDepth);
+        public int MaxPatchResolution => Mathf.Clamp(maxPatchResolution, BaseResolution, 4096);
         public float SplitDistance => splitDistance;
         public float SplitFalloff => Mathf.Max(1.01f, splitFalloff);
         public float LodUpdateInterval => Mathf.Max(0.05f, lodUpdateInterval);
+        public float TargetTriangleArea => Mathf.Max(0.5f, targetTriangleArea);
         public int Seed { get; private set; }
         public Material TerrainMaterial { get; private set; }
         public float SeaLevel => radius - 120f;
@@ -40,6 +44,8 @@ namespace WH30K.Planet
         private Camera referenceCamera;
         private float elapsed;
 
+        private int computedMaxDepth;
+
         private Vector3 continentOffset;
         private Vector3 ridgeOffset;
         private float continentScale;
@@ -50,6 +56,9 @@ namespace WH30K.Planet
         {
             Seed = seed;
             TerrainMaterial = material;
+
+            computedMaxDepth = CalculateEffectiveMaxDepth();
+            UpdateTerrainMaterialParameters();
 
             continentOffset = GenerateOffset(seed, 17);
             ridgeOffset = GenerateOffset(seed, 83);
@@ -71,14 +80,19 @@ namespace WH30K.Planet
         }
 
         public void ApplyConfiguration(float targetRadius, int baseRes, int depthLimit, float distance, float falloff,
-            float updateInterval)
+            float updateInterval, int patchResolutionCap, float desiredTriangleArea)
         {
             radius = Mathf.Max(100f, targetRadius);
             baseResolution = Mathf.Max(8, baseRes);
             maxDepth = Mathf.Max(0, depthLimit);
+            maxPatchResolution = Mathf.Max(baseResolution, patchResolutionCap);
+            targetTriangleArea = Mathf.Max(0.5f, desiredTriangleArea);
             splitDistance = Mathf.Max(radius * 0.2f, distance);
             splitFalloff = Mathf.Max(1.01f, falloff);
             lodUpdateInterval = Mathf.Max(0.05f, updateInterval);
+
+            computedMaxDepth = CalculateEffectiveMaxDepth();
+            UpdateTerrainMaterialParameters();
         }
 
         private void ClearExisting()
@@ -132,10 +146,15 @@ namespace WH30K.Planet
             var resolution = BaseResolution;
             for (var i = 0; i < depth; i++)
             {
-                resolution = Mathf.Max(8, resolution / 2);
+                if (resolution >= MaxPatchResolution)
+                {
+                    return MaxPatchResolution;
+                }
+
+                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
             }
 
-            return resolution;
+            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
         }
 
         internal float EvaluateHeight(Vector3 pointOnUnitSphere)
@@ -204,6 +223,68 @@ namespace WH30K.Planet
         public void SetCamera(Camera camera)
         {
             referenceCamera = camera;
+        }
+
+        private int CalculateEffectiveMaxDepth()
+        {
+            var baseDepth = Mathf.Max(0, maxDepth);
+            var targetArea = TargetTriangleArea;
+            var depth = baseDepth;
+
+            for (var safety = 0; safety < 12; safety++)
+            {
+                var estimated = EstimateTriangleArea(depth);
+                if (estimated <= targetArea)
+                {
+                    break;
+                }
+
+                depth++;
+            }
+
+            return depth;
+        }
+
+        private float EstimateTriangleArea(int depth)
+        {
+            var patchArea = (4f * Mathf.PI * radius * radius) / 6f / Mathf.Pow(4f, depth);
+            var resolution = EstimateResolutionForDepth(depth);
+            var triangles = Mathf.Max(1, (resolution - 1) * (resolution - 1) * 2);
+            return patchArea / triangles;
+        }
+
+        private int EstimateResolutionForDepth(int depth)
+        {
+            var resolution = BaseResolution;
+            for (var i = 0; i < depth; i++)
+            {
+                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
+            }
+
+            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
+        }
+
+        private void UpdateTerrainMaterialParameters()
+        {
+            if (TerrainMaterial == null)
+            {
+                return;
+            }
+
+            if (TerrainMaterial.HasProperty("_PlanetRadius"))
+            {
+                TerrainMaterial.SetFloat("_PlanetRadius", radius);
+            }
+
+            if (TerrainMaterial.HasProperty("_SeaLevel"))
+            {
+                TerrainMaterial.SetFloat("_SeaLevel", SeaLevel);
+            }
+
+            if (TerrainMaterial.HasProperty("_TargetDetailArea"))
+            {
+                TerrainMaterial.SetFloat("_TargetDetailArea", TargetTriangleArea);
+            }
         }
     }
 }
