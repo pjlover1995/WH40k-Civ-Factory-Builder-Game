@@ -34,6 +34,14 @@ namespace WH30K.Gameplay
         [SerializeField] private string terrainMaterialResource = "WH30K/PlanetTerrain";
         [SerializeField] private string saveFileName = "wh30k_vslice_save.json";
 
+#if UNITY_EDITOR
+        [Header("Debug")]
+        [SerializeField] private bool spawnDebugMarkers = false;
+        [SerializeField] private int debugMarkerCount = 16;
+        [SerializeField] private float debugMarkerScale = 25f;
+        [SerializeField] private Color debugMarkerColor = Color.magenta;
+#endif
+
         private LODPlanet planet;
         private Material terrainMaterialInstance;
         private NewGameMenu menu;
@@ -42,6 +50,14 @@ namespace WH30K.Gameplay
         private ColonyEventSystem colonyEventSystem;
         private Settlement settlement;
         private SimpleOrbitCamera orbitCamera;
+
+#if UNITY_EDITOR
+        private Transform debugMarkerRoot;
+        private Material debugMarkerMaterial;
+        private bool hasLastSurfacePoint;
+        private Vector3 lastSurfacePosition;
+        private Vector3 lastSurfaceNormal;
+#endif
 
         private const int DefaultMaxPatchResolution = 1024;
 
@@ -124,8 +140,21 @@ namespace WH30K.Gameplay
                     : Vector3.up;
             }
 
+#if UNITY_EDITOR
+            lastSurfacePosition = surfacePosition;
+            lastSurfaceNormal = surfaceNormal;
+            hasLastSurfacePoint = true;
+#endif
+
             settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
+
+#if UNITY_EDITOR
+            if (spawnDebugMarkers)
+            {
+                SpawnDebugMarkers();
+            }
+#endif
 
             if (menu != null)
             {
@@ -234,6 +263,98 @@ namespace WH30K.Gameplay
             terrainMaterialInstance = new Material(Shader.Find("Standard"));
             Debug.LogWarning("Fallback Standard shader material created for planet terrain. Resource missing?");
         }
+
+#if UNITY_EDITOR
+        private void SpawnDebugMarkers()
+        {
+            if (planet == null)
+            {
+                return;
+            }
+
+            if (debugMarkerRoot != null)
+            {
+                Destroy(debugMarkerRoot.gameObject);
+                debugMarkerRoot = null;
+            }
+
+            if (!hasLastSurfacePoint && debugMarkerCount <= 0)
+            {
+                return;
+            }
+
+            debugMarkerRoot = new GameObject("DebugMarkers").transform;
+            debugMarkerRoot.SetParent(planet.transform, false);
+
+            if (debugMarkerMaterial == null)
+            {
+                debugMarkerMaterial = new Material(Shader.Find("Standard"))
+                {
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+            }
+
+            debugMarkerMaterial.color = debugMarkerColor;
+
+            var markerIndex = 0;
+
+            if (hasLastSurfacePoint)
+            {
+                CreateDebugMarker($"DebugMarker_{markerIndex:00}", lastSurfacePosition, lastSurfaceNormal);
+                markerIndex++;
+            }
+
+            if (debugMarkerCount <= 0)
+            {
+                return;
+            }
+
+            var goldenAngle = Mathf.PI * (3f - Mathf.Sqrt(5f));
+            for (var i = 0; i < debugMarkerCount; i++)
+            {
+                var t = (i + 0.5f) / Math.Max(1, debugMarkerCount);
+                var inclination = Mathf.Acos(1f - 2f * t);
+                var azimuth = goldenAngle * i;
+
+                var direction = new Vector3(
+                    Mathf.Sin(inclination) * Mathf.Cos(azimuth),
+                    Mathf.Cos(inclination),
+                    Mathf.Sin(inclination) * Mathf.Sin(azimuth));
+
+                var surfacePoint = planet.EvaluateSurfacePoint(direction);
+                var surfaceNormal = surfacePoint.sqrMagnitude > 0.001f
+                    ? surfacePoint.normalized
+                    : Vector3.up;
+
+                CreateDebugMarker($"DebugMarker_{markerIndex:00}", surfacePoint, surfaceNormal);
+                markerIndex++;
+            }
+        }
+
+        private void CreateDebugMarker(string name, Vector3 localSurfacePoint, Vector3 localSurfaceNormal)
+        {
+            var marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            marker.name = name;
+            marker.transform.SetParent(debugMarkerRoot, false);
+            marker.transform.localPosition = localSurfacePoint;
+            marker.transform.localScale = Vector3.one * debugMarkerScale;
+
+            var worldNormal = planet.transform.TransformDirection(localSurfaceNormal).normalized;
+            marker.transform.rotation = Quaternion.FromToRotation(Vector3.up, worldNormal);
+
+            var collider = marker.GetComponent<Collider>();
+            if (collider != null)
+            {
+                collider.enabled = false;
+            }
+
+            var renderer = marker.GetComponent<Renderer>();
+            if (renderer != null)
+            {
+                renderer.sharedMaterial = debugMarkerMaterial;
+            }
+        }
+#endif
 
 
         [Serializable]
