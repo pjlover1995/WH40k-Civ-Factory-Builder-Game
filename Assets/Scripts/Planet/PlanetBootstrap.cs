@@ -87,7 +87,7 @@ namespace WH30K.Gameplay
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
 
-            InitializeSession(seed, difficulty, definition, null, null, null, false);
+
         }
 
         public void SaveToFile()
@@ -130,10 +130,7 @@ namespace WH30K.Gameplay
             }
 
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
-            var definition = GameSettings.GetDefinition(save.difficulty);
 
-            InitializeSession(save.seed, save.difficulty, definition, save.settlement, save.resources,
-                save.environment, true);
         }
 
         private Transform BuildPlanet(int seed)
@@ -169,74 +166,6 @@ namespace WH30K.Gameplay
             Debug.LogWarning("Fallback Standard shader material created for planet terrain. Resource missing?");
         }
 
-        private void InitializeSession(int seed, GameSettings.Difficulty difficulty,
-            GameSettings.DifficultyDefinition definition, SettlementSnapshot? settlementSnapshot,
-            ResourceSnapshot? resourceSnapshot, EnvironmentSnapshot? environmentSnapshot, bool loadedFromSave)
-        {
-            if (colonyEventSystem != null)
-            {
-                colonyEventSystem.EndSession();
-            }
-
-            var planetTransform = BuildPlanet(seed);
-
-            if (resourceSnapshot.HasValue)
-            {
-                resourceSystem.LoadFromSnapshot(resourceSnapshot.Value, definition);
-            }
-            else
-            {
-                resourceSystem.ResetForNewGame(definition);
-            }
-
-            if (environmentSnapshot.HasValue)
-            {
-                environmentState.LoadFromSnapshot(environmentSnapshot.Value, definition);
-            }
-            else
-            {
-                environmentState.ResetForNewGame(definition);
-            }
-
-            if (settlementSnapshot.HasValue)
-            {
-                settlement.LoadFromSnapshot(settlementSnapshot.Value, planet, definition, resourceSystem,
-                    environmentState);
-            }
-            else
-            {
-                var random = new System.Random(seed);
-                if (!planet.TryFindLandPoint(128, random, out var settlementPosition, out var settlementNormal))
-                {
-                    settlementPosition = planet.EvaluateSurfacePoint(Vector3.up);
-                    settlementNormal = settlementPosition.normalized;
-                }
-
-                settlement.BeginNewGame(definition, planet, settlementPosition, settlementNormal, resourceSystem,
-                    environmentState);
-            }
-
-            colonyEventSystem?.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
-
-            if (menu != null)
-            {
-                menu.ResetEventLog();
-                menu.SetSeed(seed);
-                menu.SetDifficulty(difficulty);
-                menu.ShowNewGamePanel(false);
-                menu.ShowHud(true);
-                menu.ShowEventPanel(false);
-                menu.AppendEventLog(loadedFromSave
-                    ? "Loaded previous session."
-                    : $"New colony established on seed {seed} ({definition.displayName}).");
-            }
-
-            if (orbitCamera != null)
-            {
-                orbitCamera.SetTarget(planetTransform, planetRadius);
-                orbitCamera.FrameTarget();
-            }
-        }
 
         [Serializable]
         private class GameSaveData
