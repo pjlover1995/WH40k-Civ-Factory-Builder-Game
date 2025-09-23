@@ -13,6 +13,7 @@ namespace WH30K.Sim.Events
     /// </summary>
     public class ColonyEventSystem : MonoBehaviour
     {
+        private const int EventSeedSalt = 0x5EC7;
 
         private NewGameMenu menu;
         private ResourceSystem resourceSystem;
@@ -20,7 +21,7 @@ namespace WH30K.Sim.Events
         private Settlement settlement;
         private GameSettings.DifficultyDefinition difficulty;
         private Coroutine eventCoroutine;
-
+        private System.Random rng;
 
         public void ConfigureMenu(NewGameMenu newMenu)
         {
@@ -28,17 +29,34 @@ namespace WH30K.Sim.Events
         }
 
         public void BeginSession(GameSettings.DifficultyDefinition definition, ResourceSystem resources,
+            EnvironmentState environment, Settlement settlementInstance, int seed)
+        {
+            EndSession();
 
             difficulty = definition;
             resourceSystem = resources;
             environmentState = environment;
             settlement = settlementInstance;
+            rng = new System.Random(seed ^ EventSeedSalt);
+            eventCoroutine = StartCoroutine(EventRoutine());
+        }
 
+        public void EndSession()
+        {
+            if (eventCoroutine != null)
+            {
+                StopCoroutine(eventCoroutine);
+                eventCoroutine = null;
+            }
+
+            menu?.ShowEventPanel(false);
+            rng = null;
         }
 
         private IEnumerator EventRoutine()
         {
-
+            var randomValue = rng != null ? (float)rng.NextDouble() : UnityEngine.Random.value;
+            var delay = Mathf.Lerp(18f, 45f, randomValue);
             delay /= Mathf.Max(0.25f, difficulty.eventFrequencyMultiplier);
             yield return new WaitForSeconds(delay);
             TriggerIndustrialPolicyEvent();
