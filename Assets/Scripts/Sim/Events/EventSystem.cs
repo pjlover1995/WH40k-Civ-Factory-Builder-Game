@@ -31,18 +31,25 @@ namespace WH30K.Sim.Events
         public void BeginSession(GameSettings.DifficultyDefinition definition, ResourceSystem resources,
             EnvironmentState environment, Settlement settlementInstance, int seed)
         {
+            EndSession();
+
             difficulty = definition;
             resourceSystem = resources;
             environmentState = environment;
             settlement = settlementInstance;
             rng = new System.Random(seed ^ EventSeedSalt);
+            eventCoroutine = StartCoroutine(EventRoutine());
+        }
 
+        public void EndSession()
+        {
             if (eventCoroutine != null)
             {
                 StopCoroutine(eventCoroutine);
+                eventCoroutine = null;
             }
 
-            eventCoroutine = StartCoroutine(EventRoutine());
+            rng = null;
         }
 
         private IEnumerator EventRoutine()
