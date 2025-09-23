@@ -86,8 +86,37 @@ namespace WH30K.Gameplay
         {
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
+            var planetRoot = BuildPlanet(seed);
+            if (orbitCamera != null && planetRoot != null)
+            {
+                orbitCamera.SetTarget(planetRoot, planet.Radius);
+            }
 
+            resourceSystem.ResetForNewGame(definition);
+            environmentState.ResetForNewGame(definition);
 
+            const int landAttempts = 128;
+            var random = new System.Random(seed ^ 0x51C0FFEE);
+            if (!planet.TryFindLandPoint(landAttempts, random, out var surfacePosition, out var surfaceNormal))
+            {
+                surfacePosition = planet.transform.position + Vector3.up * planet.Radius;
+                surfaceNormal = (surfacePosition - planet.transform.position).sqrMagnitude > 0.001f
+                    ? (surfacePosition - planet.transform.position).normalized
+                    : Vector3.up;
+            }
+
+            settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState);
+            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
+
+            if (menu != null)
+            {
+                menu.SetSeed(seed);
+                menu.SetDifficulty(difficulty);
+                menu.ShowNewGamePanel(false);
+                menu.ShowHud(true);
+                menu.ShowEventPanel(false);
+                menu.AppendEventLog($"Initiated expedition under '{definition.displayName}' conditions.");
+            }
         }
 
         public void SaveToFile()
@@ -109,7 +138,7 @@ namespace WH30K.Gameplay
 
             var json = JsonUtility.ToJson(save, true);
             File.WriteAllText(SavePath, json);
-            menu.AppendEventLog("State saved to disk.");
+            menu?.AppendEventLog("State saved to disk.");
         }
 
         public void LoadFromFile()
@@ -117,7 +146,7 @@ namespace WH30K.Gameplay
             if (!File.Exists(SavePath))
             {
                 Debug.LogWarning($"Save file not found at {SavePath}");
-                menu.AppendEventLog("No save file found.");
+                menu?.AppendEventLog("No save file found.");
                 return;
             }
 
@@ -131,6 +160,27 @@ namespace WH30K.Gameplay
 
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
 
+            var definition = GameSettings.GetDefinition(save.difficulty);
+            var planetRoot = BuildPlanet(save.seed);
+            if (orbitCamera != null && planetRoot != null)
+            {
+                orbitCamera.SetTarget(planetRoot, planet.Radius);
+            }
+
+            resourceSystem.LoadFromSnapshot(save.resources, definition);
+            environmentState.LoadFromSnapshot(save.environment, definition);
+            settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
+            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, save.seed);
+
+            if (menu != null)
+            {
+                menu.SetSeed(save.seed);
+                menu.SetDifficulty(save.difficulty);
+                menu.ShowNewGamePanel(false);
+                menu.ShowHud(true);
+                menu.ShowEventPanel(false);
+                menu.AppendEventLog("State loaded from disk.");
+            }
         }
 
         private Transform BuildPlanet(int seed)
