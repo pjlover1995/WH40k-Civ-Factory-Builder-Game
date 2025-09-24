@@ -4,6 +4,7 @@ using UnityEngine;
 using WH30K.CameraSystem;
 using WH30K.Game;
 using WH30K.Planet;
+using WH30K.Gameplay.Construction;
 using WH30K.Sim.Environment;
 using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
@@ -20,6 +21,7 @@ namespace WH30K.Gameplay
     [RequireComponent(typeof(EnvironmentState))]
     [RequireComponent(typeof(ColonyEventSystem))]
     [RequireComponent(typeof(Settlement))]
+    [RequireComponent(typeof(BuildingPlacementController))]
     public class PlanetBootstrap : MonoBehaviour
     {
         [Header("Planet")]
@@ -50,6 +52,7 @@ namespace WH30K.Gameplay
         private ColonyEventSystem colonyEventSystem;
         private Settlement settlement;
         private SimpleOrbitCamera orbitCamera;
+        private BuildingPlacementController buildingPlacement;
 
 #if UNITY_EDITOR
         private Transform debugMarkerRoot;
@@ -87,6 +90,7 @@ namespace WH30K.Gameplay
             orbitCamera = UnityEngine.Camera.main != null
                 ? UnityEngine.Camera.main.GetComponent<SimpleOrbitCamera>()
                 : null;
+            buildingPlacement = GetComponent<BuildingPlacementController>();
 
             LoadTerrainMaterial();
         }
@@ -126,6 +130,8 @@ namespace WH30K.Gameplay
             {
                 orbitCamera.SetTarget(planetRoot, planet.Radius);
             }
+
+            buildingPlacement?.AttachToPlanet(planet);
 
             resourceSystem.ResetForNewGame(definition);
             environmentState.ResetForNewGame(definition);
@@ -214,6 +220,8 @@ namespace WH30K.Gameplay
             {
                 orbitCamera.SetTarget(planetRoot, planet.Radius);
             }
+
+            buildingPlacement?.AttachToPlanet(planet);
 
             resourceSystem.LoadFromSnapshot(save.resources, definition);
             environmentState.LoadFromSnapshot(save.environment, definition);
