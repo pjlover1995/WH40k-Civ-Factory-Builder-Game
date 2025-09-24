@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+#if UNITY_EDITOR
+using System.Globalization;
+#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -24,6 +27,9 @@ namespace WH30K.UI
         private const float PanelWidth = 320f;
         private const float PanelHeight = 210f;
         private const float HudPanelWidth = 260f;
+#if UNITY_EDITOR
+        private const float DebugPanelWidth = 260f;
+#endif
 
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
@@ -58,6 +64,19 @@ namespace WH30K.UI
         private Action eventChoiceBHandler;
 
         private Font defaultFont;
+
+#if UNITY_EDITOR
+        private GameObject debugPanel;
+        private Button debugMarkersToggleButton;
+        private Text debugMarkersToggleLabel;
+        private InputField debugMarkerCountInput;
+        private InputField debugMarkerScaleInput;
+        private Button debugMarkersRespawnButton;
+        private Button debugMarkersClearButton;
+        private Button debugAdvanceTickButton;
+        private Button debugAddStockpileButton;
+        private Button debugTriggerEventButton;
+#endif
 
         private void Awake()
         {
@@ -108,6 +127,9 @@ namespace WH30K.UI
             BuildNewGamePanel(canvas.transform);
             BuildHudPanel(canvas.transform);
             BuildEventPanel(canvas.transform);
+#if UNITY_EDITOR
+            BuildDebugPanel(canvas.transform);
+#endif
         }
 
         private void ConfigureDefaultValues()
@@ -119,6 +141,9 @@ namespace WH30K.UI
             ShowNewGamePanel(true);
             ShowHud(false);
             ShowEventPanel(false);
+#if UNITY_EDITOR
+            UpdateDebugPanelState();
+#endif
         }
 
         private void BuildNewGamePanel(Transform parent)
@@ -237,12 +262,13 @@ namespace WH30K.UI
             return text;
         }
 
-        private InputField CreateInputField(string name, Transform parent, Vector2 anchoredPosition)
+        private InputField CreateInputField(string name, Transform parent, Vector2 anchoredPosition, float width = PanelWidth - 40f,
+            InputField.ContentType contentType = InputField.ContentType.IntegerNumber, string placeholderText = "Random")
         {
             var inputGO = new GameObject(name, typeof(RectTransform), typeof(Image));
             inputGO.transform.SetParent(parent, false);
             var rect = inputGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(PanelWidth - 40f, 32f);
+            rect.sizeDelta = new Vector2(width, 32f);
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
             rect.anchoredPosition = anchoredPosition;
 
@@ -276,12 +302,12 @@ namespace WH30K.UI
             placeholder.fontSize = 14;
             placeholder.color = new Color(1f, 1f, 1f, 0.35f);
             placeholder.alignment = TextAnchor.MiddleLeft;
-            placeholder.text = "Random";
+            placeholder.text = placeholderText;
 
             var inputField = inputGO.AddComponent<InputField>();
             inputField.textComponent = text;
             inputField.placeholder = placeholder;
-            inputField.contentType = InputField.ContentType.IntegerNumber;
+            inputField.contentType = contentType;
             return inputField;
         }
 
@@ -378,6 +404,9 @@ namespace WH30K.UI
         public void ShowHud(bool visible)
         {
             hudPanel.SetActive(visible);
+#if UNITY_EDITOR
+            UpdateDebugPanelState();
+#endif
         }
 
         public void ShowEventPanel(bool visible)
@@ -460,5 +489,234 @@ namespace WH30K.UI
 
             ShowEventPanel(true);
         }
+
+#if UNITY_EDITOR
+        private void BuildDebugPanel(Transform parent)
+        {
+            debugPanel = CreatePanel("DebugPanel", parent, new Vector2(DebugPanelWidth, 320f),
+                new Vector2(10f, -PanelHeight - 30f), TextAnchor.UpperLeft);
+
+            CreateLabel("DebugTitle", debugPanel.transform, "Debug Tools", 18, TextAnchor.UpperLeft,
+                new Vector2(0f, -12f), DebugPanelWidth - 20f);
+
+            debugMarkersToggleButton = CreateButton("ToggleMarkers", debugPanel.transform, new Vector2(0f, -46f),
+                "Debug Markers", out debugMarkersToggleLabel, DebugPanelWidth - 40f);
+            debugMarkersToggleButton.onClick.AddListener(ToggleDebugMarkers);
+
+            debugMarkerCountInput = CreateInputField("MarkerCount", debugPanel.transform, new Vector2(0f, -86f),
+                DebugPanelWidth - 40f, InputField.ContentType.IntegerNumber, "Marker Count");
+            debugMarkerCountInput.onEndEdit.AddListener(OnDebugMarkerCountChanged);
+
+            debugMarkerScaleInput = CreateInputField("MarkerScale", debugPanel.transform, new Vector2(0f, -126f),
+                DebugPanelWidth - 40f, InputField.ContentType.DecimalNumber, "Marker Scale");
+            debugMarkerScaleInput.onEndEdit.AddListener(OnDebugMarkerScaleChanged);
+
+            debugMarkersRespawnButton = CreateButton("RespawnMarkers", debugPanel.transform, new Vector2(0f, -166f),
+                "Respawn Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
+            debugMarkersRespawnButton.onClick.AddListener(OnDebugMarkersRespawnClicked);
+
+            debugMarkersClearButton = CreateButton("ClearMarkers", debugPanel.transform,
+                new Vector2((DebugPanelWidth * 0.5f) + 5f, -166f), "Clear Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
+            debugMarkersClearButton.onClick.AddListener(OnDebugMarkersClearClicked);
+
+            debugAdvanceTickButton = CreateButton("AdvanceTick", debugPanel.transform, new Vector2(0f, -206f),
+                "Advance Settlement Tick", out _, DebugPanelWidth - 40f);
+            debugAdvanceTickButton.onClick.AddListener(OnDebugAdvanceTickClicked);
+
+            debugAddStockpileButton = CreateButton("AddStockpile", debugPanel.transform, new Vector2(0f, -246f),
+                "Inject +100 Stockpile", out _, DebugPanelWidth - 40f);
+            debugAddStockpileButton.onClick.AddListener(OnDebugAddStockpileClicked);
+
+            debugTriggerEventButton = CreateButton("TriggerEvent", debugPanel.transform, new Vector2(0f, -286f),
+                "Trigger Event", out _, DebugPanelWidth - 40f);
+            debugTriggerEventButton.onClick.AddListener(OnDebugTriggerEventClicked);
+
+            UpdateDebugPanelState();
+        }
+
+        private void UpdateDebugPanelState()
+        {
+            if (debugPanel == null)
+            {
+                return;
+            }
+
+            var hasActiveGame = GameSettings.HasActiveGame;
+            var markersEnabled = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
+
+            if (debugMarkersToggleLabel != null)
+            {
+                var label = markersEnabled ? "Debug Markers: On" : "Debug Markers: Off";
+                if (debugMarkersToggleLabel.text != label)
+                {
+                    debugMarkersToggleLabel.text = label;
+                }
+            }
+
+            if (bootstrap != null)
+            {
+                var countText = bootstrap.DebugMarkerCount.ToString(CultureInfo.InvariantCulture);
+                if (debugMarkerCountInput != null && debugMarkerCountInput.text != countText)
+                {
+                    debugMarkerCountInput.text = countText;
+                }
+
+                var scaleText = bootstrap.DebugMarkerScale.ToString("0.##", CultureInfo.InvariantCulture);
+                if (debugMarkerScaleInput != null && debugMarkerScaleInput.text != scaleText)
+                {
+                    debugMarkerScaleInput.text = scaleText;
+                }
+            }
+
+            if (debugMarkersToggleButton != null)
+            {
+                debugMarkersToggleButton.interactable = hasActiveGame && bootstrap != null;
+            }
+
+            if (debugMarkerCountInput != null)
+            {
+                debugMarkerCountInput.interactable = hasActiveGame && bootstrap != null;
+            }
+
+            if (debugMarkerScaleInput != null)
+            {
+                debugMarkerScaleInput.interactable = hasActiveGame && bootstrap != null;
+            }
+
+            if (debugMarkersRespawnButton != null)
+            {
+                debugMarkersRespawnButton.interactable = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
+            }
+
+            if (debugMarkersClearButton != null)
+            {
+                var hasMarkers = hasActiveGame && bootstrap != null && bootstrap.HasDebugMarkers;
+                debugMarkersClearButton.interactable = hasMarkers;
+            }
+
+            if (debugAdvanceTickButton != null)
+            {
+                debugAdvanceTickButton.interactable = hasActiveGame && settlement != null && settlement.HasActiveSimulation;
+            }
+
+            if (debugAddStockpileButton != null)
+            {
+                debugAddStockpileButton.interactable = hasActiveGame && resourceSystem != null;
+            }
+
+            if (debugTriggerEventButton != null)
+            {
+                debugTriggerEventButton.interactable = hasActiveGame && colonyEventSystem != null && colonyEventSystem.HasActiveSession;
+            }
+        }
+
+        private void ToggleDebugMarkers()
+        {
+            if (!GameSettings.HasActiveGame || bootstrap == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            bootstrap.DebugMarkersEnabled = !bootstrap.DebugMarkersEnabled;
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugMarkerCountChanged(string value)
+        {
+            if (!GameSettings.HasActiveGame || bootstrap == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
+            {
+                bootstrap.DebugMarkerCount = count;
+            }
+
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugMarkerScaleChanged(string value)
+        {
+            if (!GameSettings.HasActiveGame || bootstrap == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale))
+            {
+                bootstrap.DebugMarkerScale = scale;
+            }
+
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugMarkersRespawnClicked()
+        {
+            if (!GameSettings.HasActiveGame || bootstrap == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            bootstrap.DebugMarkersEnabled = true;
+            bootstrap.DebugRespawnMarkers();
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugMarkersClearClicked()
+        {
+            if (!GameSettings.HasActiveGame || bootstrap == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            bootstrap.DebugClearMarkers();
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugAdvanceTickClicked()
+        {
+            if (!GameSettings.HasActiveGame || settlement == null || !settlement.HasActiveSimulation)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            settlement.DebugRunImmediateTick();
+            AppendEventLog("[DEBUG] Advanced settlement tick.");
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugAddStockpileClicked()
+        {
+            if (!GameSettings.HasActiveGame || resourceSystem == null)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            resourceSystem.ModifyStockpile(100f);
+            AppendEventLog("[DEBUG] Injected +100 stockpile.");
+            UpdateDebugPanelState();
+        }
+
+        private void OnDebugTriggerEventClicked()
+        {
+            if (!GameSettings.HasActiveGame || colonyEventSystem == null || !colonyEventSystem.HasActiveSession)
+            {
+                UpdateDebugPanelState();
+                return;
+            }
+
+            colonyEventSystem.TriggerDebugEventNow();
+            AppendEventLog("[DEBUG] Manually triggered event.");
+            UpdateDebugPanelState();
+        }
+#endif
     }
 }

@@ -66,6 +66,8 @@ namespace WH30K.Sim.Settlements
             menu = newMenu;
         }
 
+        public bool HasActiveSimulation => planet != null && resourceSystem != null && environmentState != null;
+
         public void BeginNewGame(GameSettings.DifficultyDefinition definition, LODPlanet planetInstance,
             Vector3 surfacePosition, Vector3 surfaceNormal, ResourceSystem resources, EnvironmentState environment)
         {
@@ -155,6 +157,18 @@ namespace WH30K.Sim.Settlements
                 menu?.AppendEventLog(message);
             }
         }
+
+#if UNITY_EDITOR
+        public void DebugRunImmediateTick()
+        {
+            if (!HasActiveSimulation)
+            {
+                return;
+            }
+
+            RunTick();
+        }
+#endif
 
         private void RunTick()
         {
