@@ -265,6 +265,17 @@ namespace WH30K.Gameplay
         }
 
 #if UNITY_EDITOR
+        private void DestroyDebugMarkerRoot()
+        {
+            if (debugMarkerRoot == null)
+            {
+                return;
+            }
+
+            Destroy(debugMarkerRoot.gameObject);
+            debugMarkerRoot = null;
+        }
+
         private void SpawnDebugMarkers()
         {
             if (planet == null)
@@ -272,11 +283,7 @@ namespace WH30K.Gameplay
                 return;
             }
 
-            if (debugMarkerRoot != null)
-            {
-                Destroy(debugMarkerRoot.gameObject);
-                debugMarkerRoot = null;
-            }
+            DestroyDebugMarkerRoot();
 
             if (!hasLastSurfacePoint && debugMarkerCount <= 0)
             {
@@ -354,6 +361,101 @@ namespace WH30K.Gameplay
                 renderer.sharedMaterial = debugMarkerMaterial;
             }
         }
+
+        public bool DebugMarkersEnabled
+        {
+            get => spawnDebugMarkers;
+            set
+            {
+                if (spawnDebugMarkers == value)
+                {
+                    return;
+                }
+
+                spawnDebugMarkers = value;
+                if (!spawnDebugMarkers)
+                {
+                    DestroyDebugMarkerRoot();
+                }
+                else if (planet != null)
+                {
+                    SpawnDebugMarkers();
+                }
+            }
+        }
+
+        public int DebugMarkerCount
+        {
+            get => debugMarkerCount;
+            set
+            {
+                var clamped = Mathf.Max(0, value);
+                if (debugMarkerCount == clamped)
+                {
+                    return;
+                }
+
+                debugMarkerCount = clamped;
+                if (spawnDebugMarkers && planet != null)
+                {
+                    SpawnDebugMarkers();
+                }
+            }
+        }
+
+        public float DebugMarkerScale
+        {
+            get => debugMarkerScale;
+            set
+            {
+                var clamped = Mathf.Max(0.01f, value);
+                if (Mathf.Approximately(debugMarkerScale, clamped))
+                {
+                    return;
+                }
+
+                debugMarkerScale = clamped;
+                if (debugMarkerRoot == null)
+                {
+                    return;
+                }
+
+                foreach (Transform child in debugMarkerRoot)
+                {
+                    child.localScale = Vector3.one * debugMarkerScale;
+                }
+            }
+        }
+
+        public Color DebugMarkerColor
+        {
+            get => debugMarkerColor;
+            set
+            {
+                debugMarkerColor = value;
+                if (debugMarkerMaterial != null)
+                {
+                    debugMarkerMaterial.color = debugMarkerColor;
+                }
+            }
+        }
+
+        public void DebugRespawnMarkers()
+        {
+            if (planet == null)
+            {
+                return;
+            }
+
+            SpawnDebugMarkers();
+        }
+
+        public void DebugClearMarkers()
+        {
+            DestroyDebugMarkerRoot();
+        }
+
+        public bool HasDebugMarkers => debugMarkerRoot != null && debugMarkerRoot.childCount > 0;
 #endif
 
 

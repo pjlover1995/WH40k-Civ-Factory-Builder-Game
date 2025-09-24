@@ -23,6 +23,8 @@ namespace WH30K.Sim.Events
         private Coroutine eventCoroutine;
         private System.Random rng;
 
+        public bool HasActiveSession => rng != null;
+
         public void ConfigureMenu(NewGameMenu newMenu)
         {
             menu = newMenu;
@@ -102,5 +104,23 @@ namespace WH30K.Sim.Events
             });
             menu?.AppendEventLog("Ordered furnaces into overdrive to meet production quotas.");
         }
+
+#if UNITY_EDITOR
+        public void TriggerDebugEventNow()
+        {
+            if (!HasActiveSession)
+            {
+                return;
+            }
+
+            if (eventCoroutine != null)
+            {
+                StopCoroutine(eventCoroutine);
+                eventCoroutine = null;
+            }
+
+            TriggerIndustrialPolicyEvent();
+        }
+#endif
     }
 }
