@@ -40,7 +40,7 @@ namespace WH30K.Sim.Events
             environmentState = environment;
             settlement = settlementInstance;
             rng = new System.Random(seed ^ EventSeedSalt);
-            eventCoroutine = StartCoroutine(EventRoutine());
+            QueueNextEvent();
         }
 
         public void EndSession()
@@ -89,6 +89,7 @@ namespace WH30K.Sim.Events
                 temperatureDelta = -0.04f
             });
             menu?.AppendEventLog("Mandated safety upgrades across the industrial sector.");
+            QueueNextEvent();
         }
 
         private void OnOverdriveChosen()
@@ -103,6 +104,7 @@ namespace WH30K.Sim.Events
                 temperatureDelta = 0.09f
             });
             menu?.AppendEventLog("Ordered furnaces into overdrive to meet production quotas.");
+            QueueNextEvent();
         }
 
 #if UNITY_EDITOR
@@ -122,5 +124,15 @@ namespace WH30K.Sim.Events
             TriggerIndustrialPolicyEvent();
         }
 #endif
+
+        private void QueueNextEvent()
+        {
+            if (rng == null || eventCoroutine != null)
+            {
+                return;
+            }
+
+            eventCoroutine = StartCoroutine(EventRoutine());
+        }
     }
 }
