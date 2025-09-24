@@ -221,18 +221,22 @@ namespace WH30K.UI
                 case TextAnchor.UpperLeft:
                     rect.anchorMin = new Vector2(0f, 1f);
                     rect.anchorMax = new Vector2(0f, 1f);
+                    rect.pivot = new Vector2(0f, 1f);
                     break;
                 case TextAnchor.UpperRight:
                     rect.anchorMin = new Vector2(1f, 1f);
                     rect.anchorMax = new Vector2(1f, 1f);
+                    rect.pivot = new Vector2(1f, 1f);
                     break;
                 case TextAnchor.MiddleCenter:
                     rect.anchorMin = new Vector2(0.5f, 0.5f);
                     rect.anchorMax = new Vector2(0.5f, 0.5f);
+                    rect.pivot = new Vector2(0.5f, 0.5f);
                     break;
                 default:
                     rect.anchorMin = new Vector2(0.5f, 0.5f);
                     rect.anchorMax = new Vector2(0.5f, 0.5f);
+                    rect.pivot = new Vector2(0.5f, 0.5f);
                     break;
             }
 
@@ -249,6 +253,7 @@ namespace WH30K.UI
             var rect = labelGO.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(width, height);
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = anchoredPosition;
 
             var text = labelGO.AddComponent<Text>();
@@ -270,6 +275,7 @@ namespace WH30K.UI
             var rect = inputGO.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(width, 32f);
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = anchoredPosition;
 
             var image = inputGO.GetComponent<Image>();
@@ -319,6 +325,7 @@ namespace WH30K.UI
             var rect = buttonGO.GetComponent<RectTransform>();
             rect.sizeDelta = new Vector2(width, 36f);
             rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
+            rect.pivot = new Vector2(0f, 1f);
             rect.anchoredPosition = anchoredPosition;
 
             var image = buttonGO.GetComponent<Image>();
