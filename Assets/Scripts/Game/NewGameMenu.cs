@@ -9,6 +9,7 @@ using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using WH30K.Game;
 using WH30K.Gameplay;
+using WH30K.Gameplay.Construction;
 using WH30K.Sim.Environment;
 using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
@@ -36,6 +37,7 @@ namespace WH30K.UI
         private EnvironmentState environmentState;
         private ColonyEventSystem colonyEventSystem;
         private Settlement settlement;
+        private BuildingPlacementController buildingPlacement;
 
         private Canvas canvas;
         private GameObject newGamePanel;
@@ -56,6 +58,8 @@ namespace WH30K.UI
         private Text eventChoiceBLabel;
         private Button eventChoiceAButton;
         private Button eventChoiceBButton;
+        private Button buildButton;
+        private Text buildButtonLabel;
 
         private readonly List<string> eventLogEntries = new List<string>();
         private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
@@ -85,6 +89,7 @@ namespace WH30K.UI
             environmentState = GetComponent<EnvironmentState>();
             colonyEventSystem = GetComponent<ColonyEventSystem>();
             settlement = GetComponent<Settlement>();
+            buildingPlacement = GetComponent<BuildingPlacementController>();
 
             EnsureEventSystemExists();
             BuildUI();
@@ -99,6 +104,7 @@ namespace WH30K.UI
             environmentState.ConfigureMenu(this);
             colonyEventSystem.ConfigureMenu(this);
             settlement.ConfigureMenu(this);
+            buildingPlacement?.ConfigureMenu(this);
         }
 
         private void EnsureEventSystemExists()
@@ -179,7 +185,7 @@ namespace WH30K.UI
 
         private void BuildHudPanel(Transform parent)
         {
-            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 260f),
+            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 320f),
                 new Vector2(-10f, -10f), TextAnchor.UpperRight);
 
             resourceText = CreateLabel("ResourceReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
@@ -190,6 +196,10 @@ namespace WH30K.UI
 
             eventLogText = CreateLabel("EventLog", hudPanel.transform, "Log:\n", 12, TextAnchor.UpperLeft,
                 new Vector2(-HudPanelWidth + 10f, -200f), HudPanelWidth - 20f, 120f);
+
+            buildButton = CreateButton("BuildButton", hudPanel.transform, new Vector2(-HudPanelWidth + 10f, -260f),
+                "Place Structure", out buildButtonLabel, HudPanelWidth - 20f);
+            buildButton.onClick.AddListener(OnBuildButtonClicked);
         }
 
         private void BuildEventPanel(Transform parent)
@@ -392,6 +402,57 @@ namespace WH30K.UI
         private void OnLoadClicked()
         {
             bootstrap.LoadFromFile();
+        }
+
+        private void OnBuildButtonClicked()
+        {
+            if (buildingPlacement == null)
+            {
+                return;
+            }
+
+            if (buildingPlacement.IsPlacing)
+            {
+                buildingPlacement.CancelPlacement();
+            }
+            else
+            {
+                buildingPlacement.BeginPlacement();
+            }
+        }
+
+        internal void UpdateBuildButtonState(string displayName, bool placementActive)
+        {
+            if (buildButtonLabel != null)
+            {
+                buildButtonLabel.text = placementActive ? "Cancel Placement" : $"Place: {displayName}";
+            }
+
+            if (buildButton == null)
+            {
+                return;
+            }
+
+            var image = buildButton.GetComponent<Image>();
+            if (image == null)
+            {
+                return;
+            }
+
+            var baseColor = placementActive
+                ? new Color(0.45f, 0.2f, 0.2f, 0.95f)
+                : new Color(0.2f, 0.2f, 0.2f, 0.9f);
+            image.color = baseColor;
+
+            var colors = buildButton.colors;
+            colors.normalColor = baseColor;
+            colors.highlightedColor = placementActive
+                ? new Color(0.55f, 0.3f, 0.3f, 1f)
+                : new Color(0.3f, 0.3f, 0.3f, 0.95f);
+            colors.pressedColor = placementActive
+                ? new Color(0.35f, 0.15f, 0.15f, 1f)
+                : new Color(0.1f, 0.1f, 0.1f, 1f);
+            buildButton.colors = colors;
         }
 
         public void ShowNewGamePanel(bool visible)
