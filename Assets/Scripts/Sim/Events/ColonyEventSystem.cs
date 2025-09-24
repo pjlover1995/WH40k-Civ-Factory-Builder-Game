@@ -89,6 +89,7 @@ namespace WH30K.Sim.Events
                 temperatureDelta = -0.04f
             });
             menu?.AppendEventLog("Mandated safety upgrades across the industrial sector.");
+            ScheduleNextEvent();
         }
 
         private void OnOverdriveChosen()
@@ -103,6 +104,22 @@ namespace WH30K.Sim.Events
                 temperatureDelta = 0.09f
             });
             menu?.AppendEventLog("Ordered furnaces into overdrive to meet production quotas.");
+            ScheduleNextEvent();
+        }
+
+        private void ScheduleNextEvent()
+        {
+            if (rng == null || !isActiveAndEnabled)
+            {
+                return;
+            }
+
+            if (eventCoroutine != null)
+            {
+                StopCoroutine(eventCoroutine);
+            }
+
+            eventCoroutine = StartCoroutine(EventRoutine());
         }
 
 #if UNITY_EDITOR
