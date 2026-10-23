@@ -47,6 +47,35 @@ internal static class Program
                 && !ColonyRules.CanAfford(float.PositiveInfinity, 1f), "invalid amounts cannot create resources");
 
             var baseline = Tick(Core);
+            var time = ColonyCalendar.Advance(new ClockSnapshot { speed = 1 }, 1800, false);
+            Check(ColonyCalendar.Year(time.simulationSeconds) == 2 && ColonyCalendar.Month(time.simulationSeconds) == 1,
+                "thirty real minutes at normal speed advance exactly one game year");
+            time.paused = true;
+            var pausedTime = ColonyCalendar.Advance(time, 30, false);
+            Check(pausedTime.simulationSeconds == time.simulationSeconds && pausedTime.playedSeconds == 1830,
+                "pause stops calendar progression while retaining real play time");
+            time.paused = false; time.speed = 3;
+            var faster = ColonyCalendar.Advance(time, 50, false);
+            Check(ColonyCalendar.Month(faster.simulationSeconds) == 2 && faster.playedSeconds == 1850,
+                "speed affects simulated months without multiplying real play time");
+            Check(ColonyCalendar.Advance(time, 30, true).simulationSeconds == time.simulationSeconds,
+                "pending decisions pause the simulation calendar");
+            Check(!ColonyCalendar.Valid(new ClockSnapshot { simulationSeconds = double.NaN })
+                && !ColonyCalendar.Valid(new ClockSnapshot { speed = 50 }), "corrupt clocks and unsupported speeds are rejected");
+            var factoryFocus = BuildingOperationRules.Economy("Factory", Core[1], new BuildingOperationState { focus = 1 });
+            Check(factoryFocus.outputPerWorker > Core[1].outputPerWorker && factoryFocus.upkeep > Core[1].upkeep,
+                "factory surge trades higher upkeep for higher output");
+            Check(BuildingOperationRules.Impact("Factory", new EnvironmentImpact { co2Delta = 2 }, new BuildingOperationState { focus = 2 }).co2Delta < 2,
+                "clean production reduces ongoing factory emissions");
+            Check(BuildingOperationRules.Impact("Utility", new EnvironmentImpact { co2Delta = -2 }, new BuildingOperationState { focus = 1 }).co2Delta < -2,
+                "deep purification increases actual scrubber cleanup");
+            var offline = BuildingOperationRules.Economy("HabBlock", Core[0], new BuildingOperationState { offline = true });
+            Check(offline.capacity == 0 && offline.jobs == 0 && offline.upkeep == 0,
+                "offline buildings stop capacity, jobs and upkeep");
+            var upgraded = BuildingOperationRules.Economy("HabBlock", Core[0], new BuildingOperationState { level = 1 });
+            Check(upgraded.capacity > Core[0].capacity && upgraded.upkeep > Core[0].upkeep
+                && !BuildingOperationRules.Valid(new BuildingOperationState { level = 3 }),
+                "upgrades increase capacity and reject invalid saved tiers");
             var expanded = new List<BuildingEconomy>(Core)
             {
                 new BuildingEconomy { capacity = 160f, jobs = 60f, outputPerWorker = 1.4f, upkeep = 8f }

@@ -41,7 +41,7 @@ namespace WH30K.Sim.Events
         private void Update()
         {
             if (schedule == null) return;
-            if (schedule.Advance(Time.deltaTime)) TriggerIndustrialPolicyEvent();
+            if (schedule.Advance(ColonyClock.DeltaTime)) TriggerIndustrialPolicyEvent();
             if (schedule.AwaitingChoice) menu?.SetEventChoiceAInteractable(resourceSystem.CanAfford(SafetyCost));
         }
 

@@ -23,6 +23,7 @@ namespace WH30K.Sim.Settlements
         public string[] buildings;
         public float industryModifier;
         public float tickTimer;
+        public BuildingOperationState[] operations;
     }
 
     public struct SettlementReport
@@ -47,7 +48,9 @@ namespace WH30K.Sim.Settlements
 
         private readonly List<SettlementBuilding> buildings = new List<SettlementBuilding>();
         private readonly List<GameObject> buildingVisuals = new List<GameObject>();
-        private readonly List<BuildableStructure> constructedBuildings = new List<BuildableStructure>();
+        private readonly List<ManagedBuilding> constructedBuildings = new List<ManagedBuilding>();
+        private readonly List<ManagedBuilding> coreBuildings = new List<ManagedBuilding>();
+        public IReadOnlyList<ManagedBuilding> CoreBuildings => coreBuildings;
         private readonly List<BuildingEconomy> economy = new List<BuildingEconomy>();
 
         private LODPlanet planet;
@@ -122,6 +125,9 @@ namespace WH30K.Sim.Settlements
             RebuildBuildings(snapshot.buildings != null && snapshot.buildings.Length > 0
                 ? snapshot.buildings
                 : new[] { "HabBlock", "Factory", "Utility" });
+            if (snapshot.operations != null)
+                for (var i = 0; i < coreBuildings.Count && i < snapshot.operations.Length; i++)
+                    coreBuildings[i].Restore(snapshot.operations[i]);
         }
 
         private void Update()
@@ -131,7 +137,7 @@ namespace WH30K.Sim.Settlements
                 return;
             }
 
-            tickTimer += Time.deltaTime;
+            tickTimer += ColonyClock.DeltaTime;
             var steps = 0;
             while (tickTimer >= tickInterval && steps++ < 8)
             {
@@ -143,6 +149,8 @@ namespace WH30K.Sim.Settlements
         public SettlementSnapshot CreateSnapshot()
         {
             var ids = new string[buildings.Count];
+            var operations = new BuildingOperationState[coreBuildings.Count];
+            for (var i = 0; i < operations.Length; i++) operations[i] = coreBuildings[i].State;
             for (var i = 0; i < buildings.Count; i++)
             {
                 ids[i] = buildings[i].Id;
@@ -158,7 +166,8 @@ namespace WH30K.Sim.Settlements
                 normal = storedNormal,
                 buildings = ids,
                 industryModifier = industryModifier,
-                tickTimer = tickTimer
+                tickTimer = tickTimer,
+                operations = operations
             };
         }
 
@@ -192,12 +201,12 @@ namespace WH30K.Sim.Settlements
             population = tick.population;
             workforce = tick.workforce;
             var totalImpact = EnvironmentImpact.Zero;
-            foreach (var building in buildings)
+            foreach (var building in coreBuildings)
             {
-                totalImpact += EnvironmentRules.ApplyPolicy(building.EnvironmentImpact.Scale(tick.utilisation), industryModifier);
+                totalImpact += EnvironmentRules.ApplyPolicy(building.Impact.Scale(tick.utilisation), industryModifier);
             }
             foreach (var building in constructedBuildings)
-                totalImpact += EnvironmentRules.ApplyPolicy(building.IndustryImpact.Scale(tick.utilisation), industryModifier);
+                totalImpact += EnvironmentRules.ApplyPolicy(building.Impact.Scale(tick.utilisation), industryModifier);
             environmentState.ApplyIndustryImpact(totalImpact, tickInterval);
             PublishReport(tick, tickInterval);
         }
@@ -205,12 +214,7 @@ namespace WH30K.Sim.Settlements
         private ColonyTick CalculateEconomy(float seconds)
         {
             economy.Clear();
-            foreach (var building in buildings)
-                economy.Add(new BuildingEconomy
-                {
-                    capacity = building.PopulationCapacity, jobs = building.WorkforceSlots,
-                    outputPerWorker = building.ProductionPerWorker, upkeep = building.UpkeepPerCycle
-                });
+            foreach (var building in coreBuildings) economy.Add(building.Economy);
             foreach (var building in constructedBuildings) economy.Add(building.Economy);
             return ColonyRules.CalculateTick(economy, population, populationGrowthRate, workforceRatio,
                 productionModifier, upkeepModifier, environmentState.Habitability, seconds);
@@ -226,7 +230,7 @@ namespace WH30K.Sim.Settlements
             });
         }
 
-        public void SetConstructedBuildings(IEnumerable<BuildableStructure> definitions)
+        public void SetConstructedBuildings(IEnumerable<ManagedBuilding> definitions)
         {
             constructedBuildings.Clear();
             constructedBuildings.AddRange(definitions);
@@ -303,15 +307,22 @@ namespace WH30K.Sim.Settlements
                 var building = buildings[i];
                 var dimensions = building.Id == "Factory" ? new Vector3(155f, 175f, 135f)
                     : building.Id == "Utility" ? new Vector3(125f, 145f, 115f) : new Vector3(120f, 195f, 120f);
-                var visual = BuildingVisuals.Create(building.Id, building.DisplayName, settlementAnchor, dimensions);
+                var visual = BuildingVisuals.Create(building.Id, building.DisplayName, settlementAnchor, dimensions * BuildingVisuals.WorldScale);
                 var angle = (Mathf.PI * 2f / Mathf.Max(1, count)) * i;
-                var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * buildingSpacing;
+                var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * buildingSpacing * BuildingVisuals.WorldScale;
                 var localDirection = planet.transform.InverseTransformPoint(settlementAnchor.TransformPoint(offset)).normalized;
                 var ground = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(localDirection));
                 var normal = planet.transform.TransformDirection(localDirection);
                 var forward = Vector3.ProjectOnPlane(settlementAnchor.forward, normal).normalized;
                 visual.transform.SetPositionAndRotation(ground, Quaternion.LookRotation(forward, normal));
                 buildingVisuals.Add(visual);
+                var managed = visual.AddComponent<ManagedBuilding>();
+                managed.Configure(building.Id, building.DisplayName, new BuildingEconomy
+                {
+                    capacity = building.PopulationCapacity, jobs = building.WorkforceSlots,
+                    outputPerWorker = building.ProductionPerWorker, upkeep = building.UpkeepPerCycle
+                }, building.EnvironmentImpact, resourceSystem, this);
+                coreBuildings.Add(managed);
             }
             BuildServiceRoads();
         }
@@ -330,9 +341,9 @@ namespace WH30K.Sim.Settlements
                 for (var section = 0; section < 12; section++)
                 {
                     var a = end * (section / 12f); var b = end * ((section + 1) / 12f);
-                    AddRoadStrip(a, b, 26f, 1.2f, roadTriangles, vertices, normals, uv);
+                    AddRoadStrip(a, b, 26f * BuildingVisuals.WorldScale, 0.6f, roadTriangles, vertices, normals, uv);
                     if (section % 2 == 0)
-                        AddRoadStrip(a, Vector3.Lerp(a, b, 0.6f), 1.5f, 1.5f,
+                        AddRoadStrip(a, Vector3.Lerp(a, b, 0.6f), 1.5f * BuildingVisuals.WorldScale, 0.7f,
                             markingTriangles, vertices, normals, uv);
                 }
             }
@@ -376,6 +387,7 @@ namespace WH30K.Sim.Settlements
             }
 
             buildingVisuals.Clear();
+            coreBuildings.Clear();
         }
 
         private void OnDestroy()

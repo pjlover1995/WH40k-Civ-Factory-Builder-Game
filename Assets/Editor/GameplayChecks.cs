@@ -1,5 +1,6 @@
 #if UNITY_EDITOR
 using System;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -11,27 +12,45 @@ using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
 using WH30K.Sim.Settlements;
 using WH30K.CameraSystem;
+using WH30K.Sim;
+using WH30K.UI;
 
 // Runs against the real scene, materials, UI, JsonUtility and placement controller.
-// This deliberately resets the current in-memory colony; it never writes the save file.
+// Checks replace the world temporarily, then restore the active colony without changing its disk save.
 public static class GameplayChecks
 {
     private static int checks;
 
-    [MenuItem("WH30K/Reset Colony and Run Gameplay Checks (Play Mode)")]
+    [MenuItem("WH30K/Run Gameplay Checks (Play Mode) %&g")]
     public static void Run()
     {
         if (!Application.isPlaying)
             throw new InvalidOperationException("Open WH30K_VS01, enter Play Mode, then run these checks.");
         var bootstrap = UnityEngine.Object.FindObjectOfType<PlanetBootstrap>();
         if (bootstrap == null) throw new InvalidOperationException("Open the WH30K_VS01 scene first.");
+        var priorColony = GameSettings.HasActiveGame ? bootstrap.CaptureSaveJson() : null;
+        if (priorColony != null)
+        {
+            var directory = Path.Combine(Directory.GetParent(Application.dataPath).FullName, ".utmp");
+            Directory.CreateDirectory(directory);
+            File.WriteAllText(Path.Combine(directory, "colony-before-gameplay-checks.json"), priorColony);
+        }
+        try { RunChecks(bootstrap); }
+        finally
+        {
+            if (priorColony != null && !bootstrap.TryLoadSaveJson(priorColony))
+                Debug.LogError("Could not restore the review colony. Its JSON backup is in .utmp/colony-before-gameplay-checks.json.");
+        }
+    }
+
+    private static void RunChecks(PlanetBootstrap bootstrap)
+    {
         checks = 0;
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
         var planet = bootstrap.ActivePlanet;
-        Check(Camera.main != null && Camera.main.GetComponent<SimpleOrbitCamera>().IsSettlementView
-            && Camera.main.transform.position.magnitude > planet.Radius
-            && Camera.main.transform.position.magnitude < planet.Radius + 2000f,
-            "camera binds after Awake and focuses the settlement");
+        Check(Camera.main != null && !Camera.main.GetComponent<SimpleOrbitCamera>().IsSurfaceView
+            && Camera.main.transform.position.magnitude > planet.Radius * 2f,
+            "new worlds open in a free planetary view rather than a locked building view");
         Check(Mathf.Abs(Camera.main.projectionMatrix.determinant) > 0.00001f,
             "camera has a valid perspective projection for rendering the world");
         Check(planet.Radius == 12000f && planet.transform.Find("Ocean") != null
@@ -53,6 +72,14 @@ public static class GameplayChecks
         var events = bootstrap.GetComponent<ColonyEventSystem>();
         var settlement = bootstrap.GetComponent<Settlement>();
         var environment = bootstrap.GetComponent<EnvironmentState>();
+        Check(settlement.CoreBuildings[0].transform.localScale.y < 40f,
+            "architecture uses the reduced planetary building scale");
+        var orbit = Camera.main.GetComponent<SimpleOrbitCamera>();
+        orbit.FocusSettlement(settlement.CreateSnapshot().normal);
+        var previousDirection = orbit.NavigationDirection;
+        orbit.Navigate(Vector2.right, 3f);
+        Check(Vector3.Distance(previousDirection, orbit.NavigationDirection) > 0.001f,
+            "surface navigation moves freely away from the colony");
         Check(placement.SelectStructure("Outpost"), "outpost asset is available");
         var before = resources.CreateSnapshot();
         Check(PlaceFirstAvailable(placement), "place an outpost on real terrain");
@@ -115,6 +142,35 @@ public static class GameplayChecks
         Check(bootstrap.ActivePlanet.TerrainVersion == 0 && bootstrap.TryLoadSaveJson(bootstrap.CaptureSaveJson())
             && bootstrap.ActivePlanet.TerrainVersion == 0,
             "old terrain recipe and coastlines survive migration and a second save/load");
+        var selection = bootstrap.GetComponent<BuildingSelection>();
+        var menu = bootstrap.GetComponent<NewGameMenu>();
+        var hab = settlement.CoreBuildings[0];
+        selection.Select(hab);
+        Check(menu.InspectedBuilding == hab && GameObject.Find("BuildingInspector") != null,
+            "selecting a building opens its own operational menu");
+        var originalCapacity = hab.Economy.capacity;
+        GameObject.Find("BuildingFocus1").GetComponent<Button>().onClick.Invoke();
+        Check(hab.State.focus == 1 && hab.Economy.capacity > originalCapacity,
+            "housing focus button changes the actual building capacity");
+        var upgradeBalance = resources.Stockpile;
+        var upgradeCost = hab.UpgradeCost;
+        GameObject.Find("UpgradeBuilding").GetComponent<Button>().onClick.Invoke();
+        Check(hab.State.level == 1 && Mathf.Abs(resources.Stockpile - upgradeBalance + upgradeCost) < 0.01f,
+            "building upgrade button pays exactly once and advances the tier");
+        GameObject.Find("ToggleBuildingOperation").GetComponent<Button>().onClick.Invoke();
+        Check(hab.State.offline && hab.Economy.capacity == 0 && hab.Economy.upkeep == 0,
+            "suspending a building removes its economic effects");
+        GameObject.Find("ToggleBuildingOperation").GetComponent<Button>().onClick.Invoke();
+        Check(!hab.State.offline && hab.Economy.capacity > originalCapacity,
+            "resuming a building restores its focused upgraded capacity");
+        var clock = bootstrap.GetComponent<ColonyClock>();
+        clock.Restore(new ClockSnapshot { simulationSeconds = 1950, playedSeconds = 900, speed = 3, paused = true });
+        Check(bootstrap.TryLoadSaveJson(bootstrap.CaptureSaveJson())
+            && settlement.CoreBuildings[0].State.level == 1 && settlement.CoreBuildings[0].State.focus == 1
+            && clock.Snapshot.simulationSeconds == 1950 && clock.Snapshot.playedSeconds == 900
+            && clock.Speed == 3 && clock.Paused,
+            "building settings, calendar, real play time, speed and pause survive save/load");
+        clock.SetSpeed(1);
         Debug.Log($"WH30K gameplay checks: {checks} passed. Inspect camera, layout and terrain visually as well.");
     }
 

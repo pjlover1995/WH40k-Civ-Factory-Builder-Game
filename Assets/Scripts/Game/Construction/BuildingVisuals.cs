@@ -7,6 +7,7 @@ namespace WH30K.Gameplay.Construction
     /// <summary>Shared, batched gothic-industrial architecture for the core, construction and its preview.</summary>
     public static class BuildingVisuals
     {
+        public const float WorldScale = 0.2f;
         private static readonly Dictionary<string, Mesh> Meshes = new Dictionary<string, Mesh>();
         private static Material[] materials;
         private const int Stone = 0, Iron = 1, Roof = 2, Brass = 3, Amber = 4, Cyan = 5, Dark = 6;

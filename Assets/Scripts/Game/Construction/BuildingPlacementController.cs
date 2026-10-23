@@ -17,7 +17,7 @@ namespace WH30K.Gameplay.Construction
     public class BuildingPlacementController : MonoBehaviour
     {
         [Header("Grid")]
-        [SerializeField] private int cellsPerFace = 96;
+        [SerializeField] private int cellsPerFace = 256;
         [SerializeField] private float gridElevationOffset = 6f;
 
         [Header("Preview Colours")]
@@ -145,7 +145,8 @@ namespace WH30K.Gameplay.Construction
             foreach (var entry in placedStructures.Values)
                 snapshots.Add(new PlacedStructureSnapshot
                 {
-                    id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y
+                    id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y,
+                    operation = entry.Instance.GetComponent<ManagedBuilding>().State
                 });
             return snapshots.ToArray();
         }
@@ -165,15 +166,15 @@ namespace WH30K.Gameplay.Construction
                 {
                     var definition = Array.Find(availableStructures, item => item.Id == snapshot.id);
                     var cell = new PlanetGridCell(snapshot.face, snapshot.x, snapshot.y);
-                    SpawnStructure(grid.CalculateFrame(cell), definition);
+                    SpawnStructure(grid.CalculateFrame(cell), definition).Restore(snapshot.operation);
                 }
             RefreshEconomy();
         }
 
         private void RefreshEconomy()
         {
-            var definitions = new List<BuildableStructure>();
-            foreach (var entry in placedStructures.Values) definitions.Add(entry.Definition);
+            var definitions = new List<ManagedBuilding>();
+            foreach (var entry in placedStructures.Values) definitions.Add(entry.Instance.GetComponent<ManagedBuilding>());
             settlement?.SetConstructedBuildings(definitions);
         }
 
@@ -378,7 +379,7 @@ namespace WH30K.Gameplay.Construction
             return true;
         }
 
-        private void SpawnStructure(CellFrame frame, BuildableStructure definition)
+        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition)
         {
             var dimensions = definition.Dimensions;
             var instance = BuildingVisuals.Create(definition.Id, definition.DisplayName,
@@ -395,7 +396,11 @@ namespace WH30K.Gameplay.Construction
             instance.transform.SetPositionAndRotation(frame.Center, rotation);
             instance.transform.localScale = dimensions;
 
+            var managed = instance.AddComponent<ManagedBuilding>();
+            managed.Configure(definition.Id, definition.DisplayName, definition.Economy, definition.IndustryImpact, resources, settlement);
+
             placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, definition, instance);
+            return managed;
         }
 
         private void EnsurePreviewInstance()

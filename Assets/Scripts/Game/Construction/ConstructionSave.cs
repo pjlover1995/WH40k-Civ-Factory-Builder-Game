@@ -10,6 +10,7 @@ namespace WH30K.Gameplay.Construction
         public int face;
         public int x;
         public int y;
+        public WH30K.Sim.BuildingOperationState operation;
     }
 
     public static class ConstructionSave
@@ -33,6 +34,7 @@ namespace WH30K.Gameplay.Construction
             foreach (var structure in structures)
             {
                 if (string.IsNullOrEmpty(structure.id) || !knownIds.Contains(structure.id)
+                    || !WH30K.Sim.BuildingOperationRules.Valid(structure.operation)
                     || structure.face < 0 || structure.face > 5 || structure.x < 0 || structure.x >= resolution
                     || structure.y < 0 || structure.y >= resolution
                     || !occupied.Add($"{structure.face}:{structure.x}:{structure.y}"))

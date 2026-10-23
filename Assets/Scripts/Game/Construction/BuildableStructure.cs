@@ -59,7 +59,7 @@ namespace WH30K.Gameplay.Construction
                 return new Vector3(
                     Mathf.Max(20f, dimensions.x),
                     Mathf.Max(20f, dimensions.y),
-                    Mathf.Max(20f, dimensions.z));
+                    Mathf.Max(20f, dimensions.z)) * BuildingVisuals.WorldScale;
             }
         }
 

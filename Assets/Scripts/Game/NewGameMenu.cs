@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-#if UNITY_EDITOR
-using System.Globalization;
-#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Gameplay.Construction;
+using WH30K.CameraSystem;
+using WH30K.Sim;
 using WH30K.Sim.Environment;
 using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
@@ -17,795 +15,431 @@ using WH30K.Sim.Settlements;
 
 namespace WH30K.UI
 {
-    /// <summary>
-    /// Runtime generated UI that exposes a lightweight "New Game" menu along with HUD readouts.
-    /// Programmatic creation keeps the scene authoring burden low while still enabling designer tweaking
-    /// by editing this single script.
-    /// </summary>
     [RequireComponent(typeof(PlanetBootstrap))]
     public class NewGameMenu : MonoBehaviour
     {
-        private const float PanelWidth = 360f;
-        private const float PanelHeight = 260f;
-        private const float HudPanelWidth = 300f;
-#if UNITY_EDITOR
-        private const float DebugPanelWidth = 260f;
-#endif
-
+        private static readonly Color Gold = new Color(0.80f, 0.65f, 0.38f);
+        private static readonly Color Ivory = new Color(0.88f, 0.90f, 0.87f);
+        private static readonly Color Muted = new Color(0.49f, 0.57f, 0.60f);
+        private static readonly Color Surface = new Color(0.025f, 0.040f, 0.052f, 0.96f);
+        private static readonly Color ButtonBase = new Color(0.065f, 0.092f, 0.108f, 1f);
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
         private ColonyEventSystem colonyEventSystem;
         private Settlement settlement;
         private BuildingPlacementController buildingPlacement;
-
+        private BuildingSelection selection;
+        private ColonyClock clock;
         private Canvas canvas;
-        private GameObject newGamePanel;
+        private Font font;
+        private GameObject newGamePanel, hudPanel, eventPanel, inspector;
         private InputField seedInput;
-        private Button startButton;
-        private Button saveButton;
-        private Button loadButton;
-        private Button difficultyButton;
-        private Text difficultyLabel;
-        private GameObject hudPanel;
-        private Text resourceText;
-        private Text environmentText;
-        private Text eventLogText;
-        private GameObject eventPanel;
-        private Text eventTitleText;
-        private Text eventBodyText;
-        private Text eventChoiceALabel;
-        private Text eventChoiceBLabel;
-        private Button eventChoiceAButton;
-        private Button eventChoiceBButton;
-        private Button buildButton;
-        private Text buildButtonLabel;
-        private Text structureDetails;
-        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf;
-
-        private readonly List<string> eventLogEntries = new List<string>();
+        private Text difficultyLabel, stockpileValue, populationValue, netValue, workforceValue;
+        private Text dateText, clockText, environmentText, eventLogText, buildButtonLabel, structureDetails;
+        private Text eventTitleText, eventBodyText, choiceALabel, choiceBLabel, buildingTitle, buildingStats, focusDescription;
+        private Text upgradeLabel, operationLabel, statusText;
+        private Button saveButton, loadButton, buildButton, upgradeButton, operationButton, pauseButton, colonyMarker;
+        private Button choiceA, choiceB;
+        private readonly Button[] focuses = new Button[3];
+        private readonly Button[] catalog = new Button[4];
+        private readonly Button[] speedButtons = new Button[3];
+        private readonly List<string> log = new List<string>();
+        private readonly string[] catalogIds = { "Outpost", "HabBlock", "Factory", "Utility" };
+        private readonly string[] catalogLabels = { "FRONTIER OUTPOST\n250  /  LOGISTICS", "HAB BLOCK\n180  /  POPULATION", "MACRO FACTORY\n320  /  INDUSTRY", "AIR SCRUBBER\n220  /  ENVIRONMENT" };
+        private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
+        private ManagedBuilding selectedBuilding;
         private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
-
-        private Action eventChoiceAHandler;
-        private Action eventChoiceBHandler;
-
-        private Font defaultFont;
-
+        private Action choiceAHandler, choiceBHandler;
+        private Image habitabilityFill;
+        private float refreshTimer;
 #if UNITY_EDITOR
         private GameObject debugPanel;
-        private Button debugMarkersToggleButton;
-        private Text debugMarkersToggleLabel;
-        private InputField debugMarkerCountInput;
-        private InputField debugMarkerScaleInput;
-        private Button debugMarkersRespawnButton;
-        private Button debugMarkersClearButton;
-        private Button debugAdvanceTickButton;
-        private Button debugAddStockpileButton;
-        private Button debugTriggerEventButton;
 #endif
+        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf;
+        public ManagedBuilding InspectedBuilding => selectedBuilding;
+        private SimpleOrbitCamera Orbit => Camera.main != null ? Camera.main.GetComponent<SimpleOrbitCamera>() : null;
 
         private void Awake()
         {
             bootstrap = GetComponent<PlanetBootstrap>();
-            resourceSystem = GetComponent<ResourceSystem>();
-            environmentState = GetComponent<EnvironmentState>();
-            colonyEventSystem = GetComponent<ColonyEventSystem>();
-            settlement = GetComponent<Settlement>();
+            resourceSystem = GetComponent<ResourceSystem>(); environmentState = GetComponent<EnvironmentState>();
+            colonyEventSystem = GetComponent<ColonyEventSystem>(); settlement = GetComponent<Settlement>();
             buildingPlacement = GetComponent<BuildingPlacementController>();
-
-            EnsureEventSystemExists();
+            clock = GetComponent<ColonyClock>() ?? gameObject.AddComponent<ColonyClock>();
+            selection = GetComponent<BuildingSelection>() ?? gameObject.AddComponent<BuildingSelection>();
+            if (FindObjectOfType<EventSystem>() == null)
+                new GameObject("UnityEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
-            ConfigureDefaultValues();
+            seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString();
+            ShowNewGamePanel(true); ShowHud(false); ShowEventPanel(false);
             ConfigureSystems();
         }
 
         public void ConfigureSystems()
         {
-            bootstrap.ConfigureMenu(this);
-            resourceSystem.ConfigureMenu(this);
-            environmentState.ConfigureMenu(this);
-            colonyEventSystem.ConfigureMenu(this);
-            settlement.ConfigureMenu(this);
-            buildingPlacement?.ConfigureMenu(this);
-        }
-
-        private void EnsureEventSystemExists()
-        {
-            if (FindObjectOfType<EventSystem>() != null)
-            {
-                return;
-            }
-
-            var eventSystemGO = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            eventSystemGO.name = "UnityEventSystem";
+            bootstrap.ConfigureMenu(this); resourceSystem.ConfigureMenu(this);
+            environmentState.ConfigureMenu(this); colonyEventSystem.ConfigureMenu(this);
+            settlement.ConfigureMenu(this); buildingPlacement.ConfigureMenu(this);
         }
 
         private void BuildUI()
         {
-            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-
-            var canvasGO = new GameObject("UI");
-            canvasGO.transform.SetParent(transform, false);
-            canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.pixelPerfect = false;
-            var scaler = canvasGO.AddComponent<CanvasScaler>();
+            var root = new GameObject("UI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            root.transform.SetParent(transform, false);
+            canvas = root.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280f, 800f);
-            scaler.matchWidthOrHeight = 1f;
-            canvasGO.AddComponent<GraphicRaycaster>();
-
-            BuildNewGamePanel(canvas.transform);
-            BuildHudPanel(canvas.transform);
-            BuildEventPanel(canvas.transform);
+            scaler.referenceResolution = new Vector2(1280, 800); scaler.matchWidthOrHeight = 1;
+            hudPanel = new GameObject("HudPanel", typeof(RectTransform)); hudPanel.transform.SetParent(root.transform, false);
+            var hudRect = hudPanel.GetComponent<RectTransform>();
+            hudRect.anchorMin = Vector2.zero; hudRect.anchorMax = Vector2.one;
+            hudRect.offsetMin = hudRect.offsetMax = Vector2.zero;
+            BuildHeader(hudPanel.transform);
+            BuildPlanetPanel(hudPanel.transform);
+            BuildConstruction(hudPanel.transform);
+            BuildInspector(hudPanel.transform);
+            var footer = Panel("NavigationBar", hudPanel.transform, new Vector2(0, 28), Vector2.zero, TextAnchor.LowerCenter);
+            StretchWidth(footer, 0);
+            statusText = Label("NavigationHelp", footer.transform,
+                "WASD MOVE   MMB PAN   RMB ROTATE   WHEEL ZOOM   SHIFT FAST   F COLONY   HOME ORBIT   SPACE PAUSE   |   30 MIN / YEAR AT 1x",
+                10, new Vector2(18, -7), 1220, 20, Muted);
+            colonyMarker = Button("ColonyLocator", hudPanel.transform, Vector2.zero, "COLONY PRIMUS  [F]", out _, 160, 30);
+            var markerRect = colonyMarker.GetComponent<RectTransform>();
+            markerRect.anchorMin = markerRect.anchorMax = new Vector2(0.5f, 0.5f); markerRect.pivot = new Vector2(0.5f, 0.5f);
+            colonyMarker.onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
+            BuildNewGame(root.transform);
+            BuildEvent(root.transform);
 #if UNITY_EDITOR
-            BuildDebugPanel(canvas.transform);
+            BuildDebug(root.transform);
 #endif
         }
 
-        private void ConfigureDefaultValues()
+        private void BuildHeader(Transform parent)
         {
-            var randomSeed = UnityEngine.Random.Range(0, int.MaxValue);
-            seedInput.text = randomSeed.ToString();
-            selectedDifficulty = GameSettings.Difficulty.Standard;
-            UpdateDifficultyButtonLabel();
-            ShowNewGamePanel(true);
-            ShowHud(false);
-            ShowEventPanel(false);
-#if UNITY_EDITOR
-            UpdateDebugPanelState();
-#endif
+            var header = Panel("CommandHeader", parent, new Vector2(0, 98), new Vector2(0, -16), TextAnchor.UpperLeft);
+            StretchWidth(header, 16);
+            Label("IdentityTag", header.transform, "EXPEDITION AUTHORITY  /  M31", 10, new Vector2(18, -17), 205, 18, Gold);
+            Label("Identity", header.transform, "COLONY COMMAND", 19, new Vector2(18, -40), 210, 30, Ivory);
+            Metric(header.transform, "Stockpile", "STOCKPILE", 236, out stockpileValue, 176);
+            Metric(header.transform, "Population", "POPULATION", 426, out populationValue, 135);
+            Metric(header.transform, "Net", "NET OUTPUT / s", 572, out netValue, 140);
+            Metric(header.transform, "Workforce", "WORKFORCE", 722, out workforceValue, 130);
+            var time = Panel("TimeControl", header.transform, new Vector2(326, 82), new Vector2(-10, -8), TextAnchor.UpperRight, false);
+            dateText = Label("CalendarDate", time.transform, "", 17, new Vector2(8, -4), 234, 24, Ivory);
+            clockText = Label("PlayedTime", time.transform, "", 10, new Vector2(8, -30), 238, 18, Muted);
+            pauseButton = Button("PauseSimulation", time.transform, new Vector2(8, -50), "II", out _, 43, 26);
+            pauseButton.onClick.AddListener(() => clock.TogglePause());
+            var speeds = new[] { 1, 3, 10 };
+            for (var i = 0; i < speeds.Length; i++)
+            {
+                var speed = speeds[i];
+                speedButtons[i] = Button("Speed" + speed, time.transform, new Vector2(58 + i * 54, -50), speed + "x", out _, 47, 26);
+                speedButtons[i].onClick.AddListener(() => clock.SetSpeed(speed));
+            }
+            saveButton = Button("SaveButton", time.transform, new Vector2(248, -6), "SAVE", out _, 68, 29);
+            saveButton.onClick.AddListener(() => bootstrap.SaveToFile());
+            loadButton = Button("HudLoadButton", time.transform, new Vector2(248, -46), "LOAD", out _, 68, 29);
+            loadButton.onClick.AddListener(() => bootstrap.LoadFromFile());
         }
 
-        private void BuildNewGamePanel(Transform parent)
+        private void Metric(Transform header, string name, string title, float x, out Text value, float width)
         {
-            newGamePanel = CreatePanel("NewGamePanel", parent, new Vector2(PanelWidth, PanelHeight),
-                new Vector2(10f, -10f), TextAnchor.UpperLeft);
-            CreateLabel("Title", newGamePanel.transform, "New Expedition", 20, TextAnchor.UpperLeft,
-                new Vector2(15f, -12f), PanelWidth - 30f, 30f);
-            CreateLabel("SeedLabel", newGamePanel.transform, "Seed", 14, TextAnchor.UpperLeft,
-                new Vector2(15f, -52f), PanelWidth - 30f, 25f);
-            seedInput = CreateInputField("SeedInput", newGamePanel.transform, new Vector2(15f, -80f));
-            CreateLabel("DifficultyLabel", newGamePanel.transform, "Difficulty", 14, TextAnchor.UpperLeft,
-                new Vector2(15f, -122f), 140f, 25f);
-            difficultyButton = CreateButton("DifficultyButton", newGamePanel.transform, new Vector2(15f, -150f),
-                "Standard", out difficultyLabel, 150f);
-            difficultyButton.onClick.AddListener(CycleDifficulty);
-            loadButton = CreateButton("LoadButton", newGamePanel.transform, new Vector2(185f, -150f),
-                "Load Save", out _, 150f);
-            loadButton.onClick.AddListener(OnLoadClicked);
-            startButton = CreateButton("StartButton", newGamePanel.transform, new Vector2(15f, -205f),
-                "Begin", out _, PanelWidth - 30f);
-            startButton.onClick.AddListener(OnStartClicked);
+            Label(name + "Title", header, title, 10, new Vector2(x, -18), width, 16, Gold);
+            value = Label(name + "Value", header, "0", 23, new Vector2(x, -41), width, 35, Ivory);
         }
 
-        private void BuildHudPanel(Transform parent)
+        private void BuildPlanetPanel(Transform parent)
         {
-            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 750f),
-                new Vector2(-10f, -10f), TextAnchor.UpperRight);
-            resourceText = CreateLabel("ResourceReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(10f, -12f), HudPanelWidth - 20f, 150f);
-            environmentText = CreateLabel("EnvironmentReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(10f, -170f), HudPanelWidth - 20f, 125f);
-            var cycleButton = CreateButton("CycleStructure", hudPanel.transform, new Vector2(10f, -302f),
-                "Next Building Type", out _, HudPanelWidth - 20f);
-            cycleButton.onClick.AddListener(() => buildingPlacement?.CycleStructure());
-            buildButton = CreateButton("BuildButton", hudPanel.transform, new Vector2(10f, -344f),
-                "Place Structure", out buildButtonLabel, HudPanelWidth - 20f);
-            buildButtonLabel.fontSize = 14;
-            buildButton.onClick.AddListener(OnBuildButtonClicked);
-            structureDetails = CreateLabel("StructureDetails", hudPanel.transform, string.Empty, 12, TextAnchor.UpperLeft,
-                new Vector2(10f, -388f), HudPanelWidth - 20f, 75f);
-            saveButton = CreateButton("SaveButton", hudPanel.transform, new Vector2(10f, -470f),
-                "Save (F5)", out _, 130f);
-            saveButton.onClick.AddListener(OnSaveClicked);
-            var hudLoadButton = CreateButton("HudLoadButton", hudPanel.transform, new Vector2(155f, -470f),
-                "Load (F9)", out _, 135f);
-            hudLoadButton.onClick.AddListener(OnLoadClicked);
-            eventLogText = CreateLabel("EventLog", hudPanel.transform, "Log:\n", 12, TextAnchor.UpperLeft,
-                new Vector2(10f, -518f), HudPanelWidth - 20f, 165f);
-            CreateLabel("Controls", hudPanel.transform,
-                "RMB: orbit | Wheel: zoom\nF: settlement | Home: planet\nBuild: LMB place | Esc/RMB cancel",
-                12, TextAnchor.UpperLeft, new Vector2(10f, -688f), HudPanelWidth - 20f, 60f);
+            var panel = Panel("PlanetStatus", parent, new Vector2(232, 236), new Vector2(16, -132), TextAnchor.UpperLeft);
+            Label("PlanetStatusTitle", panel.transform, "PLANETARY CONDITIONS", 11, new Vector2(16, -17), 210, 20, Gold);
+            environmentText = Label("EnvironmentReadout", panel.transform, "", 14, new Vector2(16, -49), 202, 119, Ivory);
+            var track = Panel("HabitabilityTrack", panel.transform, new Vector2(200, 4), new Vector2(16, -176), TextAnchor.UpperLeft, false);
+            track.GetComponent<Image>().color = ButtonBase;
+            var fill = Panel("HabitabilityFill", track.transform, new Vector2(200, 4), Vector2.zero, TextAnchor.UpperLeft, false);
+            habitabilityFill = fill.GetComponent<Image>(); habitabilityFill.color = Gold;
+            Button("ViewColony", panel.transform, new Vector2(16, -198), "COLONY  [F]", out _, 96, 26)
+                .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
+            Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
+                .onClick.AddListener(() => Orbit?.FrameTarget());
+            var journal = Panel("OperationsLog", parent, new Vector2(232, 162), new Vector2(16, -384), TextAnchor.UpperLeft);
+            Label("JournalTitle", journal.transform, "COMMAND JOURNAL", 11, new Vector2(16, -17), 204, 20, Gold);
+            eventLogText = Label("EventLog", journal.transform, "Awaiting expedition orders.", 12, new Vector2(16, -48), 200, 102, Muted);
         }
 
-        private void BuildEventPanel(Transform parent)
+        private void BuildConstruction(Transform parent)
         {
-            eventPanel = CreatePanel("EventPanel", parent, new Vector2(560f, 280f),
-                Vector2.zero, TextAnchor.MiddleCenter);
-            eventTitleText = CreateLabel("EventTitle", eventPanel.transform, string.Empty, 18, TextAnchor.UpperLeft,
-                new Vector2(20f, -15f), 520f, 35f);
-            eventBodyText = CreateLabel("EventBody", eventPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(20f, -60f), 520f, 110f);
-            eventChoiceAButton = CreateButton("ChoiceA", eventPanel.transform, new Vector2(20f, -190f),
-                "Choice A", out eventChoiceALabel, 250f);
-            eventChoiceBButton = CreateButton("ChoiceB", eventPanel.transform, new Vector2(290f, -190f),
-                "Choice B", out eventChoiceBLabel, 250f);
-            eventChoiceAButton.GetComponent<RectTransform>().sizeDelta = new Vector2(250f, 70f);
-            eventChoiceBButton.GetComponent<RectTransform>().sizeDelta = new Vector2(250f, 70f);
-            eventChoiceALabel.fontSize = eventChoiceBLabel.fontSize = 14;
-            eventChoiceAButton.onClick.AddListener(() => eventChoiceAHandler?.Invoke());
-            eventChoiceBButton.onClick.AddListener(() => eventChoiceBHandler?.Invoke());
+            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 134), new Vector2(0, 44), TextAnchor.LowerCenter);
+            Label("ConstructionTitle", deck.transform, "CONSTRUCTION AUTHORITY", 10, new Vector2(16, -11), 300, 18, Gold);
+            for (var i = 0; i < 4; i++)
+            {
+                var id = catalogIds[i];
+                catalog[i] = Button("BuildCard" + id, deck.transform, new Vector2(16 + i * 171, -36),
+                    catalogLabels[i], out var label, 161, 80);
+                label.fontSize = 14; label.lineSpacing = 1.4f;
+                catalog[i].onClick.AddListener(() => { selection.Select(null); buildingPlacement.SelectStructure(id); });
+            }
+            structureDetails = Label("StructureDetails", deck.transform, "", 11, new Vector2(710, -33), 272, 44, Muted);
+            buildButton = Button("BuildButton", deck.transform, new Vector2(710, -87), "DEPLOY STRUCTURE", out buildButtonLabel, 272, 29);
+            buildButton.onClick.AddListener(() =>
+            {
+                selection.Select(null);
+                if (buildingPlacement.IsPlacing) buildingPlacement.CancelPlacement();
+                else buildingPlacement.BeginPlacement();
+            });
+        }
+
+        private void BuildInspector(Transform parent)
+        {
+            inspector = Panel("BuildingInspector", parent, new Vector2(294, 490), new Vector2(-16, -132), TextAnchor.UpperRight);
+            Label("InspectorTag", inspector.transform, "STRUCTURE DIRECTORATE", 10, new Vector2(18, -16), 230, 20, Gold);
+            Button("CloseInspector", inspector.transform, new Vector2(252, -12), "X", out _, 26, 26)
+                .onClick.AddListener(() => selection.Select(null));
+            buildingTitle = Label("SelectedBuildingTitle", inspector.transform, "", 22, new Vector2(18, -47), 260, 57, Ivory);
+            buildingStats = Label("SelectedBuildingStats", inspector.transform, "", 13, new Vector2(18, -110), 258, 104, Ivory);
+            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -221), 258, 20, Gold);
+            for (var i = 0; i < 3; i++)
+            {
+                var focus = i;
+                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -247 - i * 42), "", out _, 258, 34);
+                focuses[i].onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.SetFocus(focus); RefreshBuilding(); });
+            }
+            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -379), 258, 48, Muted);
+            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -437), "", out upgradeLabel, 124, 34);
+            upgradeButton.onClick.AddListener(() =>
+            {
+                if (selectedBuilding != null && selectedBuilding.Upgrade()) AppendEventLog(selectedBuilding.DisplayName + " upgraded.");
+                RefreshBuilding();
+            });
+            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -437), "", out operationLabel, 124, 34);
+            operationButton.onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.ToggleOperation(); RefreshBuilding(); });
+            inspector.SetActive(false);
+        }
+
+        private void BuildNewGame(Transform parent)
+        {
+            newGamePanel = Panel("NewGamePanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
+            var backdrop = newGamePanel.GetComponent<RectTransform>();
+            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one;
+            backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
+            newGamePanel.GetComponent<Image>().color = new Color(0.009f, 0.017f, 0.025f, 1);
+            Label("MainIdentity", newGamePanel.transform, "WH30K  /  COLONY COMMAND", 20, new Vector2(34, -32), 600, 36, Ivory);
+            Label("MainSubtitle", newGamePanel.transform, "PLANETARY EXPEDITION AUTHORITY", 11, new Vector2(35, -78), 600, 24, Gold);
+            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(540, 408), Vector2.zero, TextAnchor.MiddleCenter);
+            Label("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY  /  M31", 11, new Vector2(34, -30), 470, 24, Gold);
+            Label("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 27, new Vector2(34, -67), 475, 46, Ivory);
+            Label("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 14, new Vector2(34, -119), 470, 30, Muted);
+            Label("SeedTag", card.transform, "GENERATION SEED", 10, new Vector2(34, -176), 470, 20, Gold);
+            var input = Panel("SeedInput", card.transform, new Vector2(472, 36), new Vector2(34, -203), TextAnchor.UpperLeft, false);
+            input.GetComponent<Image>().color = ButtonBase;
+            seedInput = input.AddComponent<InputField>();
+            var inputText = Label("SeedText", input.transform, "", 15, new Vector2(12, -8), 448, 26, Ivory);
+            seedInput.textComponent = inputText; seedInput.contentType = InputField.ContentType.IntegerNumber;
+            Button("DifficultyButton", card.transform, new Vector2(34, -255), "STANDARD", out difficultyLabel, 472, 36)
+                .onClick.AddListener(() =>
+                {
+                    var definitions = GameSettings.GetAllDefinitions();
+                    var next = ((int)selectedDifficulty + 1) % definitions.Count;
+                    SetDifficulty(definitions[next].difficulty);
+                });
+            Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
+                .onClick.AddListener(() => bootstrap.LoadFromFile());
+            Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44)
+                .onClick.AddListener(() =>
+                {
+                    var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
+                    bootstrap.BeginNewGame(seed, selectedDifficulty);
+                });
+        }
+
+        private void BuildEvent(Transform parent)
+        {
+            eventPanel = new GameObject("EventPanel", typeof(RectTransform), typeof(Image));
+            eventPanel.transform.SetParent(parent, false);
+            var rect = eventPanel.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+            eventPanel.GetComponent<Image>().color = new Color(0.005f, 0.008f, 0.012f, 0.62f);
+            var modal = Panel("DecisionCard", eventPanel.transform, new Vector2(620, 330), Vector2.zero, TextAnchor.MiddleCenter);
+            Label("DecisionTag", modal.transform, "PRIORITY TRANSMISSION  /  DECISION REQUIRED", 11, new Vector2(26, -22), 566, 25, Gold);
+            eventTitleText = Label("EventTitle", modal.transform, "", 26, new Vector2(26, -63), 566, 42, Ivory);
+            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 98, Ivory);
+            choiceA = Button("ChoiceA", modal.transform, new Vector2(26, -239), "", out choiceALabel, 273, 64);
+            choiceB = Button("ChoiceB", modal.transform, new Vector2(321, -239), "", out choiceBLabel, 273, 64);
+            choiceALabel.fontSize = choiceBLabel.fontSize = 13;
+            choiceA.onClick.AddListener(() => choiceAHandler?.Invoke()); choiceB.onClick.AddListener(() => choiceBHandler?.Invoke());
         }
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) OnSaveClicked();
-            if (Input.GetKeyDown(KeyCode.F9)) OnLoadClicked();
-        }
-
-        public void SetEventChoiceAInteractable(bool affordable)
-        {
-            eventChoiceAButton.interactable = affordable;
-        }
-
-        private GameObject CreatePanel(string name, Transform parent, Vector2 size, Vector2 anchoredPosition, TextAnchor anchor)
-        {
-            var panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            var rect = panel.GetComponent<RectTransform>();
-            rect.sizeDelta = size;
-            switch (anchor)
+            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
+            if (!typing)
             {
-                case TextAnchor.UpperLeft:
-                    rect.anchorMin = new Vector2(0f, 1f);
-                    rect.anchorMax = new Vector2(0f, 1f);
-                    rect.pivot = new Vector2(0f, 1f);
-                    break;
-                case TextAnchor.UpperRight:
-                    rect.anchorMin = new Vector2(1f, 1f);
-                    rect.anchorMax = new Vector2(1f, 1f);
-                    rect.pivot = new Vector2(1f, 1f);
-                    break;
-                case TextAnchor.MiddleCenter:
-                    rect.anchorMin = new Vector2(0.5f, 0.5f);
-                    rect.anchorMax = new Vector2(0.5f, 0.5f);
-                    rect.pivot = new Vector2(0.5f, 0.5f);
-                    break;
-                default:
-                    rect.anchorMin = new Vector2(0.5f, 0.5f);
-                    rect.anchorMax = new Vector2(0.5f, 0.5f);
-                    rect.pivot = new Vector2(0.5f, 0.5f);
-                    break;
+                if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) bootstrap.SaveToFile();
+                if (Input.GetKeyDown(KeyCode.F9)) bootstrap.LoadFromFile();
+                if (Input.GetKeyDown(KeyCode.Space) && GameSettings.HasActiveGame) clock.TogglePause();
+#if UNITY_EDITOR
+                if (Input.GetKeyDown(KeyCode.F12)) debugPanel.SetActive(!debugPanel.activeSelf);
+#endif
             }
-
-            rect.anchoredPosition = anchoredPosition;
-            panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
-            return panel;
+            refreshTimer += Time.unscaledDeltaTime;
+            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); }
+            UpdateColonyMarker();
         }
 
-        private Text CreateLabel(string name, Transform parent, string content, int fontSize, TextAnchor alignment,
-            Vector2 anchoredPosition, float width, float height = 60f)
+        private void RefreshClock()
         {
-            var labelGO = new GameObject(name, typeof(RectTransform));
-            labelGO.transform.SetParent(parent, false);
-            var rect = labelGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, height);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var text = labelGO.AddComponent<Text>();
-            text.text = content;
-            text.fontSize = fontSize;
-            text.color = Color.white;
-            text.font = defaultFont;
-            text.alignment = alignment;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            return text;
+            var snapshot = clock.Snapshot;
+            dateText.text = $"{ColonyCalendar.Day(snapshot.simulationSeconds):00} {months[ColonyCalendar.Month(snapshot.simulationSeconds) - 1]}  /  YEAR {ColonyCalendar.Year(snapshot.simulationSeconds):000}";
+            var played = TimeSpan.FromSeconds(snapshot.playedSeconds);
+            var mode = clock.DecisionPending ? "DECISION PENDING" : clock.Paused ? "PAUSED" : clock.Speed + "x SPEED";
+            clockText.text = $"{mode}   |   PLAYED {(int)played.TotalHours:00}:{played.Minutes:00}:{played.Seconds:00}";
+            Tone(pauseButton, clock.Paused);
+            var speeds = new[] { 1, 3, 10 };
+            for (var i = 0; i < speeds.Length; i++) Tone(speedButtons[i], !clock.Paused && clock.Speed == speeds[i]);
         }
 
-        private InputField CreateInputField(string name, Transform parent, Vector2 anchoredPosition, float width = PanelWidth - 40f,
-            InputField.ContentType contentType = InputField.ContentType.IntegerNumber, string placeholderText = "Random")
+        private void UpdateColonyMarker()
         {
-            var inputGO = new GameObject(name, typeof(RectTransform), typeof(Image));
-            inputGO.transform.SetParent(parent, false);
-            var rect = inputGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, 32f);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var image = inputGO.GetComponent<Image>();
-            image.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
-
-            var textGO = new GameObject("Text", typeof(RectTransform));
-            textGO.transform.SetParent(inputGO.transform, false);
-            var textRect = textGO.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(10f, 6f);
-            textRect.offsetMax = new Vector2(-10f, -6f);
-
-            var text = textGO.AddComponent<Text>();
-            text.font = defaultFont;
-            text.fontSize = 14;
-            text.color = Color.white;
-            text.alignment = TextAnchor.MiddleLeft;
-
-            var placeholderGO = new GameObject("Placeholder", typeof(RectTransform));
-            placeholderGO.transform.SetParent(inputGO.transform, false);
-            var placeholderRect = placeholderGO.GetComponent<RectTransform>();
-            placeholderRect.anchorMin = Vector2.zero;
-            placeholderRect.anchorMax = Vector2.one;
-            placeholderRect.offsetMin = new Vector2(10f, 6f);
-            placeholderRect.offsetMax = new Vector2(-10f, -6f);
-
-            var placeholder = placeholderGO.AddComponent<Text>();
-            placeholder.font = defaultFont;
-            placeholder.fontSize = 14;
-            placeholder.color = new Color(1f, 1f, 1f, 0.35f);
-            placeholder.alignment = TextAnchor.MiddleLeft;
-            placeholder.text = placeholderText;
-
-            var inputField = inputGO.AddComponent<InputField>();
-            inputField.textComponent = text;
-            inputField.placeholder = placeholder;
-            inputField.contentType = contentType;
-            return inputField;
+            if (colonyMarker == null || !GameSettings.HasActiveGame || bootstrap.ActivePlanet == null || Orbit == null)
+            { if (colonyMarker != null) colonyMarker.gameObject.SetActive(false); return; }
+            var world = Orbit.ColonyWorldPosition;
+            var camera = Camera.main;
+            var screen = camera.WorldToScreenPoint(world);
+            var normal = (world - bootstrap.ActivePlanet.transform.position).normalized;
+            var visible = screen.z > 0 && Vector3.Dot(normal, camera.transform.position - world) > 0
+                && Vector3.Distance(camera.transform.position, world) > 1200;
+            colonyMarker.gameObject.SetActive(visible);
+            if (visible && RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), screen, null, out var local))
+                colonyMarker.GetComponent<RectTransform>().anchoredPosition = local;
         }
 
-        private Button CreateButton(string name, Transform parent, Vector2 anchoredPosition, string label,
-            out Text labelText, float width)
+        public void ShowBuilding(ManagedBuilding building)
         {
-            var buttonGO = new GameObject(name, typeof(RectTransform), typeof(Image));
-            buttonGO.transform.SetParent(parent, false);
-            var rect = buttonGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, 36f);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var image = buttonGO.GetComponent<Image>();
-            image.color = new Color(0.2f, 0.2f, 0.2f, 0.9f);
-
-            var button = buttonGO.AddComponent<Button>();
-            var colors = button.colors;
-            colors.normalColor = image.color;
-            colors.highlightedColor = new Color(0.3f, 0.3f, 0.3f, 0.95f);
-            colors.pressedColor = new Color(0.1f, 0.1f, 0.1f, 1f);
-            button.colors = colors;
-
-            var textGO = new GameObject("Label", typeof(RectTransform));
-            textGO.transform.SetParent(buttonGO.transform, false);
-            var textRect = textGO.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
-
-            labelText = textGO.AddComponent<Text>();
-            labelText.font = defaultFont;
-            labelText.fontSize = 16;
-            labelText.color = Color.white;
-            labelText.alignment = TextAnchor.MiddleCenter;
-            labelText.text = label;
-
-            return button;
+            selectedBuilding = building; inspector.SetActive(building != null); RefreshBuilding();
         }
-
-        private void CycleDifficulty()
+        private void RefreshBuilding()
         {
-            var order = GameSettings.GetAllDefinitions();
-            var index = 0;
-            for (var i = 0; i < order.Count; i++)
+            if (selectedBuilding == null) { inspector.SetActive(false); return; }
+            inspector.SetActive(true);
+            var state = selectedBuilding.State; var e = selectedBuilding.Economy; var impact = selectedBuilding.Impact;
+            buildingTitle.text = selectedBuilding.DisplayName;
+            buildingStats.text = $"TIER {state.level + 1}   /   {(state.offline ? "OFFLINE" : "OPERATIONAL")}\nHousing {e.capacity:0}     Jobs {e.jobs:0}\nOutput / worker  {e.outputPerWorker:0.00}\nUpkeep  {e.upkeep:0.0} / s\nCO2 impact  {impact.co2Delta:+0.00;-0.00;0} / s at full staffing";
+            for (var i = 0; i < 3; i++)
             {
-                if (order[i].difficulty == selectedDifficulty)
-                {
-                    index = i;
-                    break;
-                }
+                focuses[i].GetComponentInChildren<Text>().text = BuildingOperationRules.FocusName(selectedBuilding.Id, i);
+                Tone(focuses[i], state.focus == i);
             }
-
-            index = (index + 1) % order.Count;
-            selectedDifficulty = order[index].difficulty;
-            UpdateDifficultyButtonLabel();
-        }
-
-        private void UpdateDifficultyButtonLabel()
-        {
-            var definition = GameSettings.GetDefinition(selectedDifficulty);
-            difficultyLabel.text = definition.displayName;
-        }
-
-        private void OnStartClicked()
-        {
-            var seed = UnityEngine.Random.Range(0, int.MaxValue);
-            if (!string.IsNullOrWhiteSpace(seedInput.text) && int.TryParse(seedInput.text, out var parsedSeed))
-            {
-                seed = parsedSeed;
-            }
-
-            bootstrap.BeginNewGame(seed, selectedDifficulty);
-        }
-
-        private void OnSaveClicked()
-        {
-            bootstrap.SaveToFile();
-        }
-
-        private void OnLoadClicked()
-        {
-            bootstrap.LoadFromFile();
-        }
-
-        private void OnBuildButtonClicked()
-        {
-            if (buildingPlacement == null)
-            {
-                return;
-            }
-
-            if (buildingPlacement.IsPlacing)
-            {
-                buildingPlacement.CancelPlacement();
-            }
-            else
-            {
-                buildingPlacement.BeginPlacement();
-            }
+            focusDescription.text = BuildingOperationRules.FocusDescription(selectedBuilding.Id, state.focus);
+            upgradeButton.interactable = selectedBuilding.CanUpgrade;
+            upgradeLabel.text = state.level >= 2 ? "MAXIMUM TIER" : $"UPGRADE  {selectedBuilding.UpgradeCost:0}";
+            operationLabel.text = state.offline ? "RESUME" : "SUSPEND";
         }
 
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
         {
-            if (structureDetails != null && buildingPlacement != null)
-                structureDetails.text = buildingPlacement.ActiveStructureDetails;
-            if (buildButtonLabel != null)
-            {
-                buildButtonLabel.text = placementActive ? "Cancel Placement" : $"Place: {displayName}";
-            }
-
-            if (buildButton == null)
-            {
-                return;
-            }
-
-            var image = buildButton.GetComponent<Image>();
-            if (image == null)
-            {
-                return;
-            }
-
-            var baseColor = placementActive
-                ? new Color(0.45f, 0.2f, 0.2f, 0.95f)
-                : new Color(0.2f, 0.2f, 0.2f, 0.9f);
-            image.color = baseColor;
-
-            var colors = buildButton.colors;
-            colors.normalColor = baseColor;
-            colors.highlightedColor = placementActive
-                ? new Color(0.55f, 0.3f, 0.3f, 1f)
-                : new Color(0.3f, 0.3f, 0.3f, 0.95f);
-            colors.pressedColor = placementActive
-                ? new Color(0.35f, 0.15f, 0.15f, 1f)
-                : new Color(0.1f, 0.1f, 0.1f, 1f);
-            buildButton.colors = colors;
+            if (buildButtonLabel != null) buildButtonLabel.text = placementActive ? "CANCEL DEPLOYMENT  [ESC]" : "DEPLOY STRUCTURE";
+            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails.Split('\n')[0];
+            Tone(buildButton, placementActive);
+            for (var i = 0; i < catalog.Length; i++)
+                if (catalog[i] != null) Tone(catalog[i], buildingPlacement != null && displayName.StartsWith(catalogLabels[i].Split('\n')[0], StringComparison.OrdinalIgnoreCase));
         }
-
-        public void ShowNewGamePanel(bool visible)
-        {
-            newGamePanel.SetActive(visible);
-            saveButton.interactable = GameSettings.HasActiveGame;
-            loadButton.interactable = true;
-        }
-
-        public void ShowHud(bool visible)
-        {
-            hudPanel.SetActive(visible);
-#if UNITY_EDITOR
-            UpdateDebugPanelState();
-#endif
-        }
-
-        public void ShowEventPanel(bool visible)
-        {
-            eventPanel.SetActive(visible);
-        }
-
-
+        public void ShowNewGamePanel(bool visible) { newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; }
+        public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) selection.Select(null); }
+        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible; }
+        public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
+        public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
         {
-            selectedDifficulty = difficulty;
-            UpdateDifficultyButtonLabel();
+            selectedDifficulty = difficulty; difficultyLabel.text = "CONDITIONS  /  " + GameSettings.GetDefinition(difficulty).displayName.ToUpperInvariant();
         }
-
-        public void SetSeed(int seed)
+        public void UpdateResourceReadout(ResourceSnapshot state)
         {
-            seedInput.text = seed.ToString();
+            stockpileValue.text = state.Stockpile.ToString("N0"); populationValue.text = state.Population.ToString("N0");
+            netValue.text = state.NetProduction.ToString("+0.0;-0.0;0.0"); netValue.color = state.NetProduction >= 0 ? new Color(0.52f, 0.77f, 0.66f) : new Color(0.9f, 0.43f, 0.35f);
+            workforceValue.text = state.Workforce.ToString("N0");
         }
-
-        public void UpdateResourceReadout(ResourceSnapshot snapshot)
+        public void UpdateEnvironmentReadout(EnvironmentSnapshot state)
         {
-            var builder = new StringBuilder();
-            builder.AppendLine("Resources");
-            builder.AppendLine($"Population: {snapshot.Population:0}");
-            builder.AppendLine($"Workforce: {snapshot.Workforce:0}");
-            builder.AppendLine($"Production: {snapshot.ProductionPerCycle:0.0}");
-            builder.AppendLine($"Upkeep: {snapshot.UpkeepPerCycle:0.0}");
-            builder.AppendLine($"Net: {snapshot.NetProduction:0.0}");
-            builder.Append($"Stockpile: {snapshot.Stockpile:0.0}");
-            resourceText.text = builder.ToString();
+            environmentText.text = $"Habitability   {environmentState.Habitability:P0}\n\nCO2   {state.Co2:0.0} ppm\nOxygen   {state.O2:0.0}%\nWater pollution   {state.WaterPollution:0.0}\nTemperature   {state.GlobalTemperatureOffset:+0.00;-0.00;0.00} C";
+            habitabilityFill.GetComponent<RectTransform>().sizeDelta = new Vector2(200 * environmentState.Habitability, 4);
         }
-
-        public void UpdateEnvironmentReadout(EnvironmentSnapshot snapshot)
+        public void AppendEventLog(string entry)
         {
-            var builder = new StringBuilder();
-            builder.AppendLine("Environment");
-            builder.AppendLine($"CO₂ Level: {snapshot.Co2:0.0}");
-            builder.AppendLine($"O₂ Level: {snapshot.O2:0.0}");
-            builder.AppendLine($"Water Pollution: {snapshot.WaterPollution:0.0}");
-            builder.AppendLine($"Δ Global Temp: {snapshot.GlobalTemperatureOffset:0.00}°C");
-            builder.Append($"Habitability: {environmentState.Habitability:P0} (housing/output)");
-            environmentText.text = builder.ToString();
+            log.Add(entry); while (log.Count > 2) log.RemoveAt(0);
+            eventLogText.text = string.Join("\n\n", log);
         }
-
-        public void AppendEventLog(string logEntry)
-        {
-            eventLogEntries.Add(logEntry);
-            while (eventLogEntries.Count > 3)
-            {
-                eventLogEntries.RemoveAt(0);
-            }
-
-            var builder = new StringBuilder();
-            builder.AppendLine("Log:");
-            foreach (var entry in eventLogEntries)
-            {
-                builder.AppendLine(entry);
-            }
-
-            eventLogText.text = builder.ToString();
-        }
-
         public void PromptEvent(string title, string body, string optionAText, Action optionA, string optionBText, Action optionB)
         {
-            eventTitleText.text = title;
-            eventBodyText.text = body;
-            eventChoiceALabel.text = optionAText;
-            eventChoiceBLabel.text = optionBText;
-
-            eventChoiceAHandler = () =>
-            {
-                ShowEventPanel(false);
-                optionA?.Invoke();
-            };
-
-            eventChoiceBHandler = () =>
-            {
-                ShowEventPanel(false);
-                optionB?.Invoke();
-            };
-
+            eventTitleText.text = title; eventBodyText.text = body; choiceALabel.text = optionAText; choiceBLabel.text = optionBText;
+            choiceAHandler = () => { ShowEventPanel(false); optionA?.Invoke(); };
+            choiceBHandler = () => { ShowEventPanel(false); optionB?.Invoke(); };
             ShowEventPanel(true);
         }
 
+        private GameObject Panel(string name, Transform parent, Vector2 size, Vector2 position, TextAnchor anchor, bool border = true)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image)); go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>(); rect.sizeDelta = size;
+            var pivot = anchor == TextAnchor.UpperRight ? new Vector2(1, 1)
+                : anchor == TextAnchor.UpperLeft ? new Vector2(0, 1)
+                : anchor == TextAnchor.LowerCenter ? new Vector2(0.5f, 0) : new Vector2(0.5f, 0.5f);
+            rect.anchorMin = rect.anchorMax = rect.pivot = pivot; rect.anchoredPosition = position;
+            go.GetComponent<Image>().color = Surface;
+            if (border) { var edge = go.AddComponent<Outline>(); edge.effectColor = new Color(0.39f, 0.34f, 0.23f, 0.7f); edge.effectDistance = new Vector2(1, -1); }
+            return go;
+        }
+        private void StretchWidth(GameObject panel, float inset)
+        {
+            var rect = panel.GetComponent<RectTransform>();
+            var y = rect.anchorMin.y; rect.anchorMin = new Vector2(0, y); rect.anchorMax = new Vector2(1, y);
+            rect.pivot = new Vector2(0.5f, rect.pivot.y); rect.sizeDelta = new Vector2(-inset * 2, rect.sizeDelta.y);
+            rect.anchoredPosition = new Vector2(0, rect.anchoredPosition.y);
+        }
+        private Text Label(string name, Transform parent, string content, int size, Vector2 position, float width, float height, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text)); go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+            rect.sizeDelta = new Vector2(width, height); rect.anchoredPosition = position;
+            var text = go.GetComponent<Text>(); text.font = font; text.fontSize = size; text.color = color; text.text = content;
+            text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate; text.supportRichText = true;
+            return text;
+        }
+        private Button Button(string name, Transform parent, Vector2 position, string content, out Text label, float width, float height = 34)
+        {
+            var go = Panel(name, parent, new Vector2(width, height), position, TextAnchor.UpperLeft);
+            go.GetComponent<Image>().color = Color.white;
+            var button = go.AddComponent<Button>();
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            var colors = button.colors; colors.normalColor = ButtonBase;
+            colors.highlightedColor = new Color(0.16f, 0.20f, 0.21f); colors.pressedColor = new Color(0.26f, 0.23f, 0.16f);
+            colors.disabledColor = new Color(0.035f, 0.045f, 0.05f); colors.fadeDuration = 0.12f;
+            button.colors = colors;
+            label = Label("Label", go.transform, content, 14, Vector2.zero, width, height, Ivory);
+            label.alignment = TextAnchor.MiddleCenter;
+            return button;
+        }
+        private void Tone(Button button, bool selected)
+        {
+            if (button == null) return;
+            var colors = button.colors; colors.normalColor = selected ? new Color(0.24f, 0.20f, 0.12f) : ButtonBase;
+            button.colors = colors;
+            var edge = button.GetComponent<Outline>(); if (edge != null) edge.effectColor = selected ? Gold : new Color(0.2f, 0.27f, 0.29f, 0.65f);
+        }
 #if UNITY_EDITOR
-        private void BuildDebugPanel(Transform parent)
+        private void BuildDebug(Transform parent)
         {
-            debugPanel = CreatePanel("DebugPanel", parent, new Vector2(DebugPanelWidth, 320f),
-                new Vector2(10f, -PanelHeight - 30f), TextAnchor.UpperLeft);
-
-            CreateLabel("DebugTitle", debugPanel.transform, "Debug Tools", 18, TextAnchor.UpperLeft,
-                new Vector2(0f, -12f), DebugPanelWidth - 20f);
-
-            debugMarkersToggleButton = CreateButton("ToggleMarkers", debugPanel.transform, new Vector2(0f, -46f),
-                "Debug Markers", out debugMarkersToggleLabel, DebugPanelWidth - 40f);
-            debugMarkersToggleButton.onClick.AddListener(ToggleDebugMarkers);
-
-            debugMarkerCountInput = CreateInputField("MarkerCount", debugPanel.transform, new Vector2(0f, -86f),
-                DebugPanelWidth - 40f, InputField.ContentType.IntegerNumber, "Marker Count");
-            debugMarkerCountInput.onEndEdit.AddListener(OnDebugMarkerCountChanged);
-
-            debugMarkerScaleInput = CreateInputField("MarkerScale", debugPanel.transform, new Vector2(0f, -126f),
-                DebugPanelWidth - 40f, InputField.ContentType.DecimalNumber, "Marker Scale");
-            debugMarkerScaleInput.onEndEdit.AddListener(OnDebugMarkerScaleChanged);
-
-            debugMarkersRespawnButton = CreateButton("RespawnMarkers", debugPanel.transform, new Vector2(0f, -166f),
-                "Respawn Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
-            debugMarkersRespawnButton.onClick.AddListener(OnDebugMarkersRespawnClicked);
-
-            debugMarkersClearButton = CreateButton("ClearMarkers", debugPanel.transform,
-                new Vector2((DebugPanelWidth * 0.5f) + 5f, -166f), "Clear Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
-            debugMarkersClearButton.onClick.AddListener(OnDebugMarkersClearClicked);
-
-            debugAdvanceTickButton = CreateButton("AdvanceTick", debugPanel.transform, new Vector2(0f, -206f),
-                "Advance Settlement Tick", out _, DebugPanelWidth - 40f);
-            debugAdvanceTickButton.onClick.AddListener(OnDebugAdvanceTickClicked);
-
-            debugAddStockpileButton = CreateButton("AddStockpile", debugPanel.transform, new Vector2(0f, -246f),
-                "Inject +100 Stockpile", out _, DebugPanelWidth - 40f);
-            debugAddStockpileButton.onClick.AddListener(OnDebugAddStockpileClicked);
-
-            debugTriggerEventButton = CreateButton("TriggerEvent", debugPanel.transform, new Vector2(0f, -286f),
-                "Trigger Event", out _, DebugPanelWidth - 40f);
-            debugTriggerEventButton.onClick.AddListener(OnDebugTriggerEventClicked);
-
-            UpdateDebugPanelState();
-        }
-
-        private void UpdateDebugPanelState()
-        {
-            if (debugPanel == null)
-            {
-                return;
-            }
-
-            var hasActiveGame = GameSettings.HasActiveGame;
-            var markersEnabled = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
-
-            if (debugMarkersToggleLabel != null)
-            {
-                var label = markersEnabled ? "Debug Markers: On" : "Debug Markers: Off";
-                if (debugMarkersToggleLabel.text != label)
-                {
-                    debugMarkersToggleLabel.text = label;
-                }
-            }
-
-            if (bootstrap != null)
-            {
-                var countText = bootstrap.DebugMarkerCount.ToString(CultureInfo.InvariantCulture);
-                if (debugMarkerCountInput != null && debugMarkerCountInput.text != countText)
-                {
-                    debugMarkerCountInput.text = countText;
-                }
-
-                var scaleText = bootstrap.DebugMarkerScale.ToString("0.##", CultureInfo.InvariantCulture);
-                if (debugMarkerScaleInput != null && debugMarkerScaleInput.text != scaleText)
-                {
-                    debugMarkerScaleInput.text = scaleText;
-                }
-            }
-
-            if (debugMarkersToggleButton != null)
-            {
-                debugMarkersToggleButton.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkerCountInput != null)
-            {
-                debugMarkerCountInput.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkerScaleInput != null)
-            {
-                debugMarkerScaleInput.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkersRespawnButton != null)
-            {
-                debugMarkersRespawnButton.interactable = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
-            }
-
-            if (debugMarkersClearButton != null)
-            {
-                var hasMarkers = hasActiveGame && bootstrap != null && bootstrap.HasDebugMarkers;
-                debugMarkersClearButton.interactable = hasMarkers;
-            }
-
-            if (debugAdvanceTickButton != null)
-            {
-                debugAdvanceTickButton.interactable = hasActiveGame && settlement != null && settlement.HasActiveSimulation;
-            }
-
-            if (debugAddStockpileButton != null)
-            {
-                debugAddStockpileButton.interactable = hasActiveGame && resourceSystem != null;
-            }
-
-            if (debugTriggerEventButton != null)
-            {
-                debugTriggerEventButton.interactable = hasActiveGame && colonyEventSystem != null && colonyEventSystem.HasActiveSession;
-            }
-        }
-
-        private void ToggleDebugMarkers()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugMarkersEnabled = !bootstrap.DebugMarkersEnabled;
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkerCountChanged(string value)
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
-            {
-                bootstrap.DebugMarkerCount = count;
-            }
-
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkerScaleChanged(string value)
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale))
-            {
-                bootstrap.DebugMarkerScale = scale;
-            }
-
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkersRespawnClicked()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugMarkersEnabled = true;
-            bootstrap.DebugRespawnMarkers();
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkersClearClicked()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugClearMarkers();
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugAdvanceTickClicked()
-        {
-            if (!GameSettings.HasActiveGame || settlement == null || !settlement.HasActiveSimulation)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            settlement.DebugRunImmediateTick();
-            AppendEventLog("[DEBUG] Advanced settlement tick.");
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugAddStockpileClicked()
-        {
-            if (!GameSettings.HasActiveGame || resourceSystem == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            resourceSystem.ModifyStockpile(100f);
-            AppendEventLog("[DEBUG] Injected +100 stockpile.");
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugTriggerEventClicked()
-        {
-            if (!GameSettings.HasActiveGame || colonyEventSystem == null || !colonyEventSystem.HasActiveSession)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            colonyEventSystem.TriggerDebugEventNow();
-            AppendEventLog("[DEBUG] Manually triggered event.");
-            UpdateDebugPanelState();
+            debugPanel = Panel("DebugPanel", parent, new Vector2(232, 206), new Vector2(16, -132), TextAnchor.UpperLeft);
+            Label("DebugTitle", debugPanel.transform, "DEVELOPER TOOLS  [F12]", 11, new Vector2(16, -16), 206, 20, Gold);
+            Button("AdvanceTick", debugPanel.transform, new Vector2(16, -52), "ADVANCE SETTLEMENT TICK", out _, 200)
+                .onClick.AddListener(() => settlement.DebugRunImmediateTick());
+            Button("AddStockpile", debugPanel.transform, new Vector2(16, -96), "+100 STOCKPILE", out _, 200)
+                .onClick.AddListener(() => resourceSystem.ModifyStockpile(100));
+            Button("TriggerEvent", debugPanel.transform, new Vector2(16, -140), "TRIGGER POLICY EVENT", out _, 200)
+                .onClick.AddListener(() => colonyEventSystem.TriggerDebugEventNow());
+            debugPanel.SetActive(false);
         }
 #endif
     }

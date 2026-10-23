@@ -27,6 +27,16 @@ Workers are distributed proportionally across jobs. Housing permits population g
 
 Habitability begins to fall above 600 CO2, below 19.5 oxygen, above 10 water pollution, or beyond a two-degree temperature offset. It is bounded between 25% and 100% and affects population targets, staffing, and production. Safety choices reduce future harmful emissions as well as cleaning existing damage; overdrive raises future emissions. Cleanup benefits are not multiplied by industrial policy.
 
+## Command interface, navigation and time
+
+The command HUD separates resources and time in the header, planetary conditions/journal on the left, construction cards below, and a contextual building inspector on the right. Developer controls are hidden behind F12 in the editor. The camera opens in free orbit, supports WASD navigation, middle-drag surface panning and right-drag rotation, and can cross from orbital to local views by zooming. F is an optional colony shortcut; selecting a building never recenters the camera.
+
+Architecture dimensions are multiplied by 0.2 relative to the first visual pass (a core hab block is now 39 units tall on the 12,000-unit-radius world). New construction uses a 256-cell-per-face grid; older saves retain their stored resolution. Core spacing and causeways use the same smaller scale.
+
+The shared simulation clock advances one year per 1,800 real seconds at 1x, with twelve 150-second months and thirty days per month. Pause and 1x/3x/10x affect calendar, settlement and event progression together. Real play time counts unscaled time while a colony is active, including planning pauses. Decisions pause simulated time without locking camera/UI interaction. Version-4 saves include both elapsed times, speed/pause and each building's tier/focus/offline state; older saves default to balanced active buildings and a fresh clock.
+
+Every core and player-built structure has its own operations state. Focus is free to change. Hab blocks offer high-density housing or civil administration; factories offer surge or clean production; utilities offer deep purification or economy cycles; outposts offer logistics or residential support. Focus tradeoffs appear in the inspector and alter simulation values. Upgrades cost 150 and 300 stockpile, adding 25% capacity/jobs and 15% upkeep per tier, with a maximum of tier III. Upgrades also scale environmental effects. Suspension removes the building's capacity, jobs, output, upkeep and environmental effects until resumed.
+
 ## Limits and next priorities
 
 - There is one recurring narrative event and one aggregate stockpile.

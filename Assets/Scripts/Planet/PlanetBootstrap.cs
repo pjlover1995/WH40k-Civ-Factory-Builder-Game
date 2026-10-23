@@ -10,6 +10,7 @@ using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
 using WH30K.Sim.Settlements;
 using WH30K.UI;
+using WH30K.Sim;
 
 namespace WH30K.Gameplay
 {
@@ -53,6 +54,7 @@ namespace WH30K.Gameplay
         private Settlement settlement;
         private SimpleOrbitCamera orbitCamera;
         private BuildingPlacementController buildingPlacement;
+        private ColonyClock clock;
         public LODPlanet ActivePlanet => planet;
 
 #if UNITY_EDITOR
@@ -82,6 +84,7 @@ namespace WH30K.Gameplay
         private void Awake()
         {
             EnforcePatchResolutionCap();
+            clock = GetComponent<ColonyClock>() ?? gameObject.AddComponent<ColonyClock>();
 
             menu = GetComponent<NewGameMenu>();
             resourceSystem = GetComponent<ResourceSystem>();
@@ -126,6 +129,7 @@ namespace WH30K.Gameplay
         {
             ResolveOrbitCamera();
             colonyEventSystem.EndSession();
+            clock.Begin();
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
             var planetRoot = BuildPlanet(seed);
@@ -157,7 +161,7 @@ namespace WH30K.Gameplay
 
             settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState);
             planet.GetComponent<PlanetPresentation>().LightLandingSite(surfaceNormal);
-            orbitCamera?.FocusSettlement(surfaceNormal);
+            orbitCamera?.SetColonyLocation(surfaceNormal);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
 
 #if UNITY_EDITOR
@@ -183,8 +187,9 @@ namespace WH30K.Gameplay
             if (!GameSettings.HasActiveGame) throw new InvalidOperationException("No active game to save.");
             return JsonUtility.ToJson(new GameSaveData
             {
-                version = 3,
+                version = 4,
                 terrainVersion = planet.TerrainVersion,
+                clock = clock.Snapshot,
                 seed = GameSettings.CurrentSeed,
                 difficulty = GameSettings.CurrentDifficulty,
                 environment = environmentState.CreateSnapshot(),
@@ -264,9 +269,10 @@ namespace WH30K.Gameplay
             settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
             var loadedNormal = settlement.CreateSnapshot().normal;
             planet.GetComponent<PlanetPresentation>().LightLandingSite(loadedNormal);
-            orbitCamera?.FocusSettlement(loadedNormal);
+            orbitCamera?.SetColonyLocation(loadedNormal);
             buildingPlacement.RestoreSnapshot(save.structures);
             settlement.RefreshReadout();
+            clock.Restore(save.clock);
 
             if (menu != null)
             {
@@ -283,8 +289,9 @@ namespace WH30K.Gameplay
         private bool ValidateSave(GameSaveData save, out string error)
         {
             error = "Unsupported or incomplete save.";
-            if (save == null || save.version < 0 || save.version > 3
+            if (save == null || save.version < 0 || save.version > 4
                 || save.terrainVersion < 0 || save.terrainVersion > 1
+                || !ColonyCalendar.Valid(save.clock)
                 || !Enum.IsDefined(typeof(GameSettings.Difficulty), save.difficulty)) return false;
             var colony = save.settlement;
             var resources = save.resources;
@@ -313,6 +320,11 @@ namespace WH30K.Gameplay
                 if (colony.buildings.Length > 4096) return false;
                 foreach (var id in colony.buildings)
                     if (id != "HabBlock" && id != "Factory" && id != "Utility") return false;
+            }
+            if (colony.operations != null)
+            {
+                if (colony.operations.Length != (colony.buildings != null && colony.buildings.Length > 0 ? colony.buildings.Length : 3)) return false;
+                foreach (var operation in colony.operations) if (!BuildingOperationRules.Valid(operation)) return false;
             }
             return buildingPlacement.ValidateSnapshot(save.structures,
                 save.gridResolution == 0 ? 96 : save.gridResolution, out error);
@@ -559,6 +571,7 @@ namespace WH30K.Gameplay
         {
             public int version;
             public int terrainVersion;
+            public ClockSnapshot clock;
             public int seed;
             public GameSettings.Difficulty difficulty;
             public EnvironmentSnapshot environment;
