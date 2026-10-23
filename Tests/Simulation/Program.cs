@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Globalization;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using WH30K.Gameplay.Construction;
@@ -134,6 +136,16 @@ internal static class Program
                 "ten-minute simulation grows and continues decisions across a load");
 
             var root = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
+            var prototype = File.ReadAllText(Path.Combine(root, "Assets/Scenes/Prototype/WH30K_VS01.unity"));
+            Check(prototype.Contains("m_projectionMatrixMode: 1"), "prototype camera uses a computed perspective projection");
+            var rotations = Regex.Matches(prototype,
+                @"m_LocalRotation: \{x: ([^,]+), y: ([^,]+), z: ([^,]+), w: ([^}]+)\}");
+            Check(rotations.Count > 0 && rotations.Cast<Match>().All(match =>
+            {
+                var lengthSquared = Enumerable.Range(1, 4).Select(index =>
+                    double.Parse(match.Groups[index].Value, CultureInfo.InvariantCulture)).Sum(value => value * value);
+                return Math.Abs(lengthSquared - 1d) < 0.00001d;
+            }), "prototype scene rotations are normalized for Unity");
             var sources = Directory.GetFiles(Path.Combine(root, "Assets"), "*.cs", SearchOption.AllDirectories);
             foreach (var editor in new[] { false, true })
             {

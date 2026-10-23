@@ -123,6 +123,7 @@ namespace WH30K.Gameplay
 
         public void BeginNewGame(int seed, GameSettings.Difficulty difficulty)
         {
+            ResolveOrbitCamera();
             colonyEventSystem.EndSession();
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
@@ -248,6 +249,7 @@ namespace WH30K.Gameplay
             }
 
             // Validate the whole document before replacing the running session.
+            ResolveOrbitCamera();
             colonyEventSystem.EndSession();
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
             var definition = GameSettings.GetDefinition(save.difficulty);
@@ -308,6 +310,13 @@ namespace WH30K.Gameplay
             }
             return buildingPlacement.ValidateSnapshot(save.structures,
                 save.gridResolution == 0 ? 96 : save.gridResolution, out error);
+        }
+
+        private void ResolveOrbitCamera()
+        {
+            // The scene camera may not be enabled yet when GameRoot.Awake runs.
+            var mainCamera = UnityEngine.Camera.main;
+            orbitCamera = mainCamera != null ? mainCamera.GetComponent<SimpleOrbitCamera>() : null;
         }
 
         private Transform BuildPlanet(int seed)

@@ -24,6 +24,7 @@ namespace WH30K.CameraSystem
 
         public void SetTarget(Transform newTarget, float approximateRadius)
         {
+            GetComponent<UnityEngine.Camera>().ResetProjectionMatrix();
             target = newTarget;
             minDistance = approximateRadius + 600f;
             defaultDistance = Mathf.Clamp(approximateRadius * 2.2f, minDistance, maxDistance);

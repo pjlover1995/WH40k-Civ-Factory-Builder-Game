@@ -26,6 +26,10 @@ public static class GameplayChecks
         if (bootstrap == null) throw new InvalidOperationException("Open the WH30K_VS01 scene first.");
         checks = 0;
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
+        Check(Camera.main != null && Camera.main.transform.position.magnitude < 4000f,
+            "camera binds after Awake and focuses the settlement");
+        Check(Mathf.Abs(Camera.main.projectionMatrix.determinant) > 0.00001f,
+            "camera has a valid perspective projection for rendering the world");
         var placement = bootstrap.GetComponent<BuildingPlacementController>();
         var resources = bootstrap.GetComponent<ResourceSystem>();
         var events = bootstrap.GetComponent<ColonyEventSystem>();

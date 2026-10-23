@@ -15,7 +15,7 @@ The executable links the actual production files `ColonyRules`, `EnvironmentRule
 
 1. Open the project with Unity 2022.3.2f1. Confirm there are no compiler errors or missing scripts.
 2. Open `Assets/Scenes/Prototype/WH30K_VS01.unity` and enter Play Mode.
-3. Select **WH30K > Reset Colony and Run Gameplay Checks (Play Mode)**. Expect 18 passing scene checks in the Console. The check intentionally replaces the current in-memory colony and does not write a save.
+3. Select **WH30K > Reset Colony and Run Gameplay Checks (Play Mode)**. Expect 20 passing scene checks in the Console. The check intentionally replaces the current in-memory colony and does not write a save.
 
 ## Visual and disk acceptance checks
 
@@ -29,3 +29,12 @@ The executable links the actual production files `ColonyRules`, `EnvironmentRule
 8. Build and launch a standalone player. Verify the scene, procedural material, HUD, save/load, and building assets work without the editor-only debug panel.
 
 Record Unity version, seed, difficulty, check output, screenshots, and any observed performance issues when completing these checks.
+
+## Review run — 2026-10-23
+
+- Unity 2022.3.2f1 on Windows, built-in renderer (DX11); seed 1234, Standard difficulty.
+- Unity compiled the editor and gameplay assemblies successfully. All 20 real-scene gameplay checks passed in Play Mode; the Console showed no warnings or errors after the scene reload.
+- All 29 executable checks passed, including editor/player syntax parsing; `git diff --check` passed.
+- Visually confirmed settlement and planet framing, rendered terrain/buildings, readable HUD and event choices, and growing population/stockpile. F5 saved to disk and F9 restored the saved stockpile and colony in the running editor.
+- Corrected the scene's non-normalized camera rotation and explicit empty projection, and resolved the scene camera again when starting or loading a colony to avoid Awake-order dependence.
+- The full visual/disk checklist above, both exact target resolutions, a ten-minute engine performance run, and a standalone player build still need acceptance testing. Terrain and buildings retain the prototype's procedural visuals and placeholder shapes.
