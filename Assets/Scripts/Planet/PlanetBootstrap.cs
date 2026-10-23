@@ -25,7 +25,7 @@ namespace WH30K.Gameplay
     public class PlanetBootstrap : MonoBehaviour
     {
         [Header("Planet")]
-        [SerializeField] private float planetRadius = 3000f;
+        [SerializeField] private float planetRadius = 12000f;
         [SerializeField] private int basePatchResolution = 32;
         [SerializeField] private int maximumDepth = 6;
         [SerializeField] private int maxPatchResolution = 1024;
@@ -53,6 +53,7 @@ namespace WH30K.Gameplay
         private Settlement settlement;
         private SimpleOrbitCamera orbitCamera;
         private BuildingPlacementController buildingPlacement;
+        public LODPlanet ActivePlanet => planet;
 
 #if UNITY_EDITOR
         private Transform debugMarkerRoot;
@@ -155,6 +156,7 @@ namespace WH30K.Gameplay
 #endif
 
             settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState);
+            planet.GetComponent<PlanetPresentation>().LightLandingSite(surfaceNormal);
             orbitCamera?.FocusSettlement(surfaceNormal);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
 
@@ -181,7 +183,8 @@ namespace WH30K.Gameplay
             if (!GameSettings.HasActiveGame) throw new InvalidOperationException("No active game to save.");
             return JsonUtility.ToJson(new GameSaveData
             {
-                version = 2,
+                version = 3,
+                terrainVersion = planet.TerrainVersion,
                 seed = GameSettings.CurrentSeed,
                 difficulty = GameSettings.CurrentDifficulty,
                 environment = environmentState.CreateSnapshot(),
@@ -253,13 +256,15 @@ namespace WH30K.Gameplay
             colonyEventSystem.EndSession();
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
             var definition = GameSettings.GetDefinition(save.difficulty);
-            var planetRoot = BuildPlanet(save.seed);
+            var planetRoot = BuildPlanet(save.seed, save.version < 3 ? 0 : save.terrainVersion);
             if (orbitCamera != null) orbitCamera.SetTarget(planetRoot, planet.Radius);
             buildingPlacement.AttachToPlanet(planet, save.gridResolution == 0 ? 96 : save.gridResolution);
             resourceSystem.LoadFromSnapshot(save.resources, definition);
             environmentState.LoadFromSnapshot(save.environment, definition);
             settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
-            orbitCamera?.FocusSettlement(save.settlement.normal);
+            var loadedNormal = settlement.CreateSnapshot().normal;
+            planet.GetComponent<PlanetPresentation>().LightLandingSite(loadedNormal);
+            orbitCamera?.FocusSettlement(loadedNormal);
             buildingPlacement.RestoreSnapshot(save.structures);
             settlement.RefreshReadout();
 
@@ -278,7 +283,8 @@ namespace WH30K.Gameplay
         private bool ValidateSave(GameSaveData save, out string error)
         {
             error = "Unsupported or incomplete save.";
-            if (save == null || save.version < 0 || save.version > 2
+            if (save == null || save.version < 0 || save.version > 3
+                || save.terrainVersion < 0 || save.terrainVersion > 1
                 || !Enum.IsDefined(typeof(GameSettings.Difficulty), save.difficulty)) return false;
             var colony = save.settlement;
             var resources = save.resources;
@@ -319,7 +325,7 @@ namespace WH30K.Gameplay
             orbitCamera = mainCamera != null ? mainCamera.GetComponent<SimpleOrbitCamera>() : null;
         }
 
-        private Transform BuildPlanet(int seed)
+        private Transform BuildPlanet(int seed, int terrainVersion = 1)
         {
             if (planet != null)
             {
@@ -331,7 +337,8 @@ namespace WH30K.Gameplay
             planet = planetGO.AddComponent<LODPlanet>();
             planet.ApplyConfiguration(planetRadius, basePatchResolution, maximumDepth, splitDistance, splitFalloff,
                 lodUpdateInterval, maxPatchResolution, targetTriangleArea);
-            planet.BuildPlanet(seed, terrainMaterialInstance);
+            planet.BuildPlanet(seed, terrainMaterialInstance, terrainVersion);
+            planetGO.AddComponent<PlanetPresentation>().Configure(planet);
             planet.SetCamera(UnityEngine.Camera.main);
             return planetGO.transform;
         }
@@ -551,6 +558,7 @@ namespace WH30K.Gameplay
         private class GameSaveData
         {
             public int version;
+            public int terrainVersion;
             public int seed;
             public GameSettings.Difficulty difficulty;
             public EnvironmentSnapshot environment;

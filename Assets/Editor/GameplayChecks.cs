@@ -10,6 +10,7 @@ using WH30K.Sim.Environment;
 using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
 using WH30K.Sim.Settlements;
+using WH30K.CameraSystem;
 
 // Runs against the real scene, materials, UI, JsonUtility and placement controller.
 // This deliberately resets the current in-memory colony; it never writes the save file.
@@ -26,10 +27,27 @@ public static class GameplayChecks
         if (bootstrap == null) throw new InvalidOperationException("Open the WH30K_VS01 scene first.");
         checks = 0;
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
-        Check(Camera.main != null && Camera.main.transform.position.magnitude < 4000f,
+        var planet = bootstrap.ActivePlanet;
+        Check(Camera.main != null && Camera.main.GetComponent<SimpleOrbitCamera>().IsSettlementView
+            && Camera.main.transform.position.magnitude > planet.Radius
+            && Camera.main.transform.position.magnitude < planet.Radius + 2000f,
             "camera binds after Awake and focuses the settlement");
         Check(Mathf.Abs(Camera.main.projectionMatrix.determinant) > 0.00001f,
             "camera has a valid perspective projection for rendering the world");
+        Check(planet.Radius == 12000f && planet.transform.Find("Ocean") != null
+            && planet.transform.Find("Cloud layer") != null && planet.transform.Find("Atmospheric scattering") != null,
+            "larger planet includes ocean, clouds and atmosphere");
+        foreach (var id in new[] { "HabBlock", "Factory", "Utility", "Outpost" })
+        {
+            var visual = BuildingVisuals.Create(id, "VisualCheck", bootstrap.transform, Vector3.one);
+            var mesh = visual.GetComponent<MeshFilter>().sharedMesh;
+            Check(mesh.vertexCount > 500 && mesh.vertexCount < 20000 && mesh.subMeshCount == 7
+                && mesh.bounds.size.x <= 1.001f && mesh.bounds.size.z <= 1.001f
+                && mesh.bounds.max.y <= 1.01f && mesh.bounds.min.y >= -0.05f,
+                id + " detailed mesh stays inside its placement footprint and geometry budget (vertices="
+                    + mesh.vertexCount + ", bounds=" + mesh.bounds + ")");
+            UnityEngine.Object.Destroy(visual);
+        }
         var placement = bootstrap.GetComponent<BuildingPlacementController>();
         var resources = bootstrap.GetComponent<ResourceSystem>();
         var events = bootstrap.GetComponent<ColonyEventSystem>();
@@ -52,6 +70,7 @@ public static class GameplayChecks
         events.TriggerDebugEventNow();
         var json = bootstrap.CaptureSaveJson();
         Check(bootstrap.TryLoadSaveJson(json), "complete game loads from JsonUtility JSON");
+        Check(bootstrap.ActivePlanet.TerrainVersion == 1, "new saves retain the new terrain recipe");
         var loaded = placement.CreateSnapshot();
         Check(loaded.Length == 1 && loaded[0].id == built.id && loaded[0].face == built.face
             && loaded[0].x == built.x && loaded[0].y == built.y, "building identity and occupied cell restored");
@@ -83,8 +102,19 @@ public static class GameplayChecks
             environment = environment.CreateSnapshot()
         };
         legacy.settlement.industryModifier = 0f;
+        // Recorded from the original 3,000-unit seed-1234 world, before the terrain update.
+        legacy.settlement.normal = new Vector3(-0.895445645f, 0.301881015f, 0.327177197f);
+        legacy.settlement.position = legacy.settlement.normal.normalized * 3000f;
         Check(bootstrap.TryLoadSaveJson(JsonUtility.ToJson(legacy)) && placement.CreateSnapshot().Length == 0,
             "original prototype save format remains loadable");
+        Check(Mathf.Abs(settlement.CreateSnapshot().position.magnitude
+            - bootstrap.ActivePlanet.EvaluateSurfacePoint(legacy.settlement.normal).magnitude) < 0.1f,
+            "old-radius settlement save is reprojected onto the larger terrain");
+        Check(settlement.CreateSnapshot().position.magnitude >= bootstrap.ActivePlanet.SeaLevel,
+            "a recorded original colony site remains on land after migration");
+        Check(bootstrap.ActivePlanet.TerrainVersion == 0 && bootstrap.TryLoadSaveJson(bootstrap.CaptureSaveJson())
+            && bootstrap.ActivePlanet.TerrainVersion == 0,
+            "old terrain recipe and coastlines survive migration and a second save/load");
         Debug.Log($"WH30K gameplay checks: {checks} passed. Inspect camera, layout and terrain visually as well.");
     }
 

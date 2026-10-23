@@ -172,10 +172,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: adb3bb49a9a445a19492c33cd8777468, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  planetRadius: 3000
+  planetRadius: 12000
   basePatchResolution: 48
-  maximumDepth: 5
-  splitDistance: 2400
+  maximumDepth: 6
+  splitDistance: 4800
   splitFalloff: 1.8
   lodUpdateInterval: 0.25
   terrainMaterialResource: WH30K/PlanetTerrain

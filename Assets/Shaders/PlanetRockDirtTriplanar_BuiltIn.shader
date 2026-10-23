@@ -2,154 +2,79 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
 {
     Properties
     {
-        _RockColor ("Rock Color", Color) = (0.45, 0.43, 0.4, 1)
-        _DirtColor ("Dirt Color", Color) = (0.36, 0.25, 0.15, 1)
-        _GrassColor ("Grass Color", Color) = (0.28, 0.46, 0.24, 1)
-        _DesertColor ("Desert Color", Color) = (0.86, 0.74, 0.5, 1)
-        _SnowColor ("Snow Color", Color) = (0.92, 0.95, 0.98, 1)
-        _OceanShallowColor ("Shallow Ocean Color", Color) = (0.12, 0.4, 0.55, 1)
-        _OceanDeepColor ("Deep Ocean Color", Color) = (0.02, 0.08, 0.2, 1)
-        _TextureScale ("Noise Scale", Float) = 500.0
-        _NoiseIntensity ("Noise Intensity", Range(0, 1)) = 0.35
-        _BlendSharpness ("Blend Sharpness", Range(1, 8)) = 4
-        _BiomeNoiseScale ("Biome Noise Scale", Float) = 850.0
-        _BiomeContrast ("Biome Contrast", Range(0.5, 2.5)) = 1.2
-        _CoastBlend ("Coastline Blend Distance", Float) = 120.0
-        _SnowLine ("Snow Line Height", Float) = 600.0
-        _PlanetRadius ("Planet Radius", Float) = 3000.0
-        _SeaLevel ("Sea Level", Float) = 2880.0
+        _RockColor ("Rock", Color) = (0.31,0.30,0.26,1)
+        _DirtColor ("Soil", Color) = (0.26,0.23,0.17,1)
+        _GrassColor ("Temperate land", Color) = (0.18,0.27,0.15,1)
+        _DesertColor ("Arid land", Color) = (0.57,0.43,0.25,1)
+        _SnowColor ("Ice", Color) = (0.81,0.87,0.90,1)
+        _PlanetRadius ("Radius", Float) = 12000
+        _SeaLevel ("Sea level", Float) = 11980
+        _PlanetCenter ("Center", Vector) = (0,0,0,0)
     }
     SubShader
     {
-        Tags { "RenderType" = "Opaque" }
-        LOD 300
-
+        Tags { "RenderType"="Opaque" }
         Pass
         {
-            Tags { "LightMode" = "ForwardBase" }
+            Tags { "LightMode"="ForwardBase" }
             CGPROGRAM
+            #pragma target 3.0
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile_fwdbase
             #include "UnityCG.cginc"
-
-            fixed4 _RockColor;
-            fixed4 _DirtColor;
-            fixed4 _GrassColor;
-            fixed4 _DesertColor;
-            fixed4 _SnowColor;
-            fixed4 _OceanShallowColor;
-            fixed4 _OceanDeepColor;
-            float _TextureScale;
-            float _NoiseIntensity;
-            float _BlendSharpness;
-            float _BiomeNoiseScale;
-            float _BiomeContrast;
-            float _CoastBlend;
-            float _SnowLine;
-            float _PlanetRadius;
-            float _SeaLevel;
-
-            struct appdata
-            {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-            };
-
-            struct v2f
-            {
-                float4 pos : SV_POSITION;
-                float3 worldPos : TEXCOORD0;
-                float3 worldNormal : TEXCOORD1;
-            };
-
+            #include "Lighting.cginc"
+            #include "AutoLight.cginc"
+            float4 _RockColor, _DirtColor, _GrassColor, _DesertColor, _SnowColor;
+            float _PlanetRadius, _SeaLevel;
+            float3 _PlanetCenter;
+            struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; };
+            struct v2f { float4 pos:SV_POSITION; float3 worldPos:TEXCOORD0; float3 normal:TEXCOORD1; SHADOW_COORDS(2) };
             v2f vert(appdata v)
             {
-                v2f o;
-                o.pos = UnityObjectToClipPos(v.vertex);
-                o.worldPos = mul(unity_ObjectToWorld, v.vertex).xyz;
-                o.worldNormal = UnityObjectToWorldNormal(v.normal);
-                return o;
+                v2f o; o.pos=UnityObjectToClipPos(v.vertex);
+                o.worldPos=mul(unity_ObjectToWorld,v.vertex).xyz;
+                o.normal=UnityObjectToWorldNormal(v.normal); TRANSFER_SHADOW(o); return o;
             }
-
-            float Hash21(float2 p)
+            float hash(float3 p) { p=frac(p*0.1031); p+=dot(p,p.yzx+33.33); return frac((p.x+p.y)*p.z); }
+            float noise(float3 p)
             {
-                float3 p3 = frac(float3(p.xyx) * 0.1031);
-                p3 += dot(p3, p3.yzx + 33.33);
-                return frac((p3.x + p3.y) * p3.z);
+                float3 c=floor(p), f=frac(p); f=f*f*(3-2*f);
+                return lerp(lerp(lerp(hash(c),hash(c+float3(1,0,0)),f.x),
+                    lerp(hash(c+float3(0,1,0)),hash(c+float3(1,1,0)),f.x),f.y),
+                    lerp(lerp(hash(c+float3(0,0,1)),hash(c+float3(1,0,1)),f.x),
+                    lerp(hash(c+float3(0,1,1)),hash(c+1),f.x),f.y),f.z);
             }
-
-            float SampleTriplanarNoise(float3 worldPos, float3 blendWeights, float scale)
+            float fbm(float3 p) { return noise(p)*0.57+noise(p*2.07+17)*0.28+noise(p*4.13+41)*0.15; }
+            fixed4 frag(v2f i):SV_Target
             {
-                float safeScale = max(0.0001, scale);
-                float3 scaledPos = worldPos / safeScale;
-                float xSample = Hash21(scaledPos.yz);
-                float ySample = Hash21(scaledPos.xz);
-                float zSample = Hash21(scaledPos.xy);
-                return dot(float3(xSample, ySample, zSample), blendWeights);
-            }
-
-            float NoiseVariation(float noiseValue)
-            {
-                float centered = (noiseValue - 0.5) * 2.0;
-                return 1.0 + centered * _NoiseIntensity;
-            }
-
-            fixed4 frag(v2f i) : SV_Target
-            {
-                float3 worldPos = i.worldPos;
-                float3 normal = normalize(i.worldNormal);
-                float3 blend = pow(abs(normal), _BlendSharpness);
-                blend = blend / (blend.x + blend.y + blend.z + 1e-5);
-
-                float rockNoise = SampleTriplanarNoise(worldPos + 173.0, blend, _TextureScale * 0.75);
-                float dirtNoise = SampleTriplanarNoise(worldPos, blend, _TextureScale);
-                float biomeNoise = SampleTriplanarNoise(worldPos + 823.0, blend, max(_BiomeNoiseScale, 0.001));
-
-                float3 rock = _RockColor.rgb * NoiseVariation(rockNoise);
-                float3 dirt = _DirtColor.rgb * NoiseVariation(dirtNoise);
-
-                float altitude = length(worldPos);
-                float surfaceHeight = altitude - _SeaLevel;
-                float radiusScale = max(0.1, _PlanetRadius / 3000.0);
-                float coastWidth = max(1.0, _CoastBlend * radiusScale);
-                float landMask = saturate(smoothstep(-coastWidth, coastWidth, surfaceHeight));
-
-                float3 sphereNormal = normalize(worldPos);
-                float latAbs = abs(sphereNormal.y);
-                float temperature = 1.0 - latAbs;
-                temperature = pow(saturate(temperature), _BiomeContrast);
-                temperature *= saturate(1.0 - max(0.0, surfaceHeight) / (_SnowLine + 1200.0));
-
-                float moisture = saturate(biomeNoise * 1.35 - 0.2);
-                float desertFactor = saturate((1.0 - moisture) * temperature);
-
-                float snowHeight = _SnowLine;
-                float altitudeSnow = max(0.0, surfaceHeight) - max(0.0, (1.0 - temperature) * 180.0);
-                float snowFactor = saturate(smoothstep(snowHeight - 120.0, snowHeight + 80.0, altitudeSnow));
-                snowFactor = max(snowFactor, saturate(pow(1.0 - temperature, 2.0)));
-
-                float grassFactor = saturate(1.0 - desertFactor);
-                grassFactor *= 1.0 - snowFactor;
-
-                float weightSum = desertFactor + grassFactor + snowFactor + 1e-3;
-                float3 biomeColor = (desertFactor * _DesertColor.rgb + grassFactor * _GrassColor.rgb + snowFactor * _SnowColor.rgb) / weightSum;
-
-                float slope = saturate(1.0 - abs(normal.y));
-                float3 soilColor = lerp(dirt, rock, saturate(pow(slope, 1.3) + snowFactor * 0.25));
-                float biomeBlend = saturate(1.0 - slope * 0.7);
-                float3 landColor = lerp(soilColor, biomeColor, biomeBlend);
-                landColor = lerp(landColor, _SnowColor.rgb, snowFactor * 0.25);
-
-                float waterDepth = saturate(-surfaceHeight / (coastWidth * 2.0));
-                float3 oceanColor = lerp(_OceanShallowColor.rgb, _OceanDeepColor.rgb, waterDepth * waterDepth);
-                float shoreFoam = exp(-abs(surfaceHeight) / (25.0 * radiusScale)) * (1.0 - landMask);
-                oceanColor = lerp(oceanColor, float3(0.9, 0.95, 1.0), shoreFoam * 0.3);
-
-                float3 albedo = lerp(oceanColor, landColor, landMask);
-
-                return fixed4(saturate(albedo), 1.0);
+                float3 p=i.worldPos-_PlanetCenter, radial=normalize(p), n=normalize(i.normal);
+                float height=length(p)-_SeaLevel;
+                float climate=fbm(radial*5.3+23);
+                float latitude=abs(radial.y);
+                float arid=smoothstep(0.46,0.68,climate)*(1-smoothstep(0.5,0.8,latitude));
+                float3 vegetation=lerp(_GrassColor.rgb*0.68,_GrassColor.rgb*1.25,fbm(radial*34));
+                float3 albedo=lerp(vegetation,_DesertColor.rgb,arid);
+                float slope=saturate((1-dot(n,radial))*12);
+                albedo=lerp(albedo,lerp(_DirtColor.rgb,_RockColor.rgb,0.7),saturate(slope+smoothstep(80,145,height)*0.7));
+                albedo=lerp(albedo,float3(0.49,0.45,0.31),(1-smoothstep(0,9,height))*0.7);
+                float snow=smoothstep(0.78,0.94,latitude+(climate-0.5)*0.1);
+                snow=max(snow,smoothstep(120,190,height)*smoothstep(0.3,0.8,latitude));
+                albedo=lerp(albedo,_SnowColor.rgb,snow);
+                float detailFade=1-smoothstep(1200,7500,distance(_WorldSpaceCameraPos,i.worldPos));
+                albedo*=lerp(0.94,lerp(0.80,1.10,fbm(p*0.028)),detailFade);
+                float3 lightDir=normalize(_WorldSpaceLightPos0.xyz);
+                float diffuse=saturate(dot(n,lightDir));
+                float shadow=SHADOW_ATTENUATION(i);
+                float3 lit=albedo*(float3(0.075,0.095,0.11)+_LightColor0.rgb*diffuse*shadow);
+                float3 view=normalize(_WorldSpaceCameraPos-i.worldPos);
+                float rim=pow(1-saturate(dot(radial,view)),4)*saturate(dot(radial,lightDir)+0.35);
+                lit+=float3(0.13,0.26,0.39)*rim*0.55;
+                lit=lerp(lit,float3(0.16,0.23,0.28),saturate(distance(_WorldSpaceCameraPos,i.worldPos)/18000)*0.12);
+                return float4(lit,1);
             }
             ENDCG
         }
     }
+    Fallback "Diffuse"
 }

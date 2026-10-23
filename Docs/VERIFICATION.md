@@ -15,7 +15,7 @@ The executable links the actual production files `ColonyRules`, `EnvironmentRule
 
 1. Open the project with Unity 2022.3.2f1. Confirm there are no compiler errors or missing scripts.
 2. Open `Assets/Scenes/Prototype/WH30K_VS01.unity` and enter Play Mode.
-3. Select **WH30K > Reset Colony and Run Gameplay Checks (Play Mode)**. Expect 20 passing scene checks in the Console. The check intentionally replaces the current in-memory colony and does not write a save.
+3. Select **WH30K > Reset Colony and Run Gameplay Checks (Play Mode)**. Expect 29 passing scene checks in the Console. The check intentionally replaces the current in-memory colony and does not write a save.
 
 ## Visual and disk acceptance checks
 
@@ -27,6 +27,7 @@ The executable links the actual production files `ColonyRules`, `EnvironmentRule
 6. Resolve the restored event. The next event eventually appears. Continue for ten minutes, monitoring frame time and resource/environment changes.
 7. Exit/re-enter Play Mode and load the disk save. Verify the same structures and policies return. Confirm a second save creates the `.bak` file and a malformed save is rejected without replacing an active colony.
 8. Build and launch a standalone player. Verify the scene, procedural material, HUD, save/load, and building assets work without the editor-only debug panel.
+9. Press Home: inspect the planet silhouette, day/night lighting, oceans, ice, cloud cover and atmospheric rim. Press F: inspect each building's distinct architecture, foundation, shadows and service causeways. Zoom/orbit near the surface and across LOD boundaries; verify the camera stays above ground, no cracks appear and repeated loads do not accumulate visible shells or causeways.
 
 Record Unity version, seed, difficulty, check output, screenshots, and any observed performance issues when completing these checks.
 
@@ -37,4 +38,12 @@ Record Unity version, seed, difficulty, check output, screenshots, and any obser
 - All 29 executable checks passed, including editor/player syntax parsing; `git diff --check` passed.
 - Visually confirmed settlement and planet framing, rendered terrain/buildings, readable HUD and event choices, and growing population/stockpile. F5 saved to disk and F9 restored the saved stockpile and colony in the running editor.
 - Corrected the scene's non-normalized camera rotation and explicit empty projection, and resolved the scene camera again when starting or loading a colony to avoid Awake-order dependence.
-- The full visual/disk checklist above, both exact target resolutions, a ten-minute engine performance run, and a standalone player build still need acceptance testing. Terrain and buildings retain the prototype's procedural visuals and placeholder shapes.
+- This first camera-repair run preceded the visual pass below. The full visual/disk checklist, both exact target resolutions, a ten-minute engine performance run, and a standalone player build still need acceptance testing.
+
+## Gothic architecture and planet visual pass — 2026-10-23
+
+- Expanded the radius from 3,000 to 12,000 units. Replaced cube visuals with four batched gothic industrial models and matching construction previews; added a spherical ocean, cloud/atmosphere shells, coherent terrain shading and an orbital sky.
+- The expanded 26 scene checks passed in Unity 2022.3.2f1 (DX11), seed 1234, Standard. These include per-building mesh budgets and footprint bounds, camera framing, planet layers, gameplay/persistence and migration of a settlement saved at the old radius.
+- After the compatibility pass, all 29 scene checks and all 29 executable checks passed. Version-3 saves record the terrain recipe; older saves preserve their original coastlines at the larger radius. A recorded original colony site remains land, and its terrain recipe survives a second save/load. Also loaded the existing version-2 disk save and visually confirmed all core buildings were on land with the new architecture, causeways and lighting. No warnings or errors remained in the Unity Console.
+- Visually inspected the orbital and oblique colony views with seeds 1234 and 1376271481. New architecture, shadows, coastlines, ocean highlights, clouds, ice, atmosphere and stars rendered successfully. Art remains procedural, with no high-resolution imported model/texture pack.
+- Standalone shader inclusion/performance and the full long-session acceptance checklist remain unverified.

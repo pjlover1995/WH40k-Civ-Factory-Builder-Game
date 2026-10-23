@@ -49,13 +49,14 @@ namespace WH30K.Sim.Settlements
         private readonly List<GameObject> buildingVisuals = new List<GameObject>();
         private readonly List<BuildableStructure> constructedBuildings = new List<BuildableStructure>();
         private readonly List<BuildingEconomy> economy = new List<BuildingEconomy>();
-        private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
 
         private LODPlanet planet;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
         private NewGameMenu menu;
         private Transform settlementAnchor;
+        private GameObject serviceRoads;
+        private Mesh serviceRoadMesh;
         private GameSettings.DifficultyDefinition currentDifficulty;
 
         private float population;
@@ -112,8 +113,9 @@ namespace WH30K.Sim.Settlements
             population = snapshot.population;
             workforce = snapshot.workforce;
             tickTimer = Mathf.Clamp(snapshot.tickTimer, 0f, tickInterval);
-            storedPosition = snapshot.position;
             storedNormal = snapshot.normal.sqrMagnitude > 0.01f ? snapshot.normal.normalized : snapshot.position.normalized;
+            // Saves made before a radius/terrain upgrade must still sit on the current surface.
+            storedPosition = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(storedNormal));
 
             ClearVisuals();
             EnsureAnchor(storedPosition, storedNormal);
@@ -243,7 +245,8 @@ namespace WH30K.Sim.Settlements
         {
             var radius = new Vector2(dimensions.x, dimensions.z).magnitude * 0.5f;
             foreach (var visual in buildingVisuals)
-                if (visual != null && Vector3.Distance(center, visual.transform.position) < radius + 120f)
+                if (visual != null && Vector3.Distance(center, visual.transform.position) < radius
+                    + new Vector2(visual.transform.localScale.x, visual.transform.localScale.z).magnitude * 0.5f)
                     return true;
             return false;
         }
@@ -298,26 +301,72 @@ namespace WH30K.Sim.Settlements
             for (var i = 0; i < count; i++)
             {
                 var building = buildings[i];
-                var visual = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                visual.name = building.DisplayName;
-                visual.transform.SetParent(settlementAnchor, false);
-                visual.transform.localScale = new Vector3(120f, 160f, 120f);
+                var dimensions = building.Id == "Factory" ? new Vector3(155f, 175f, 135f)
+                    : building.Id == "Utility" ? new Vector3(125f, 145f, 115f) : new Vector3(120f, 195f, 120f);
+                var visual = BuildingVisuals.Create(building.Id, building.DisplayName, settlementAnchor, dimensions);
                 var angle = (Mathf.PI * 2f / Mathf.Max(1, count)) * i;
                 var offset = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * buildingSpacing;
-                visual.transform.localPosition = offset + Vector3.up * 80f;
-                var collider = visual.GetComponent<Collider>();
-                if (collider != null)
-                {
-                    Destroy(collider);
-                }
-                var renderer = visual.GetComponent<MeshRenderer>();
-                renderer.sharedMaterial = GetMaterial(building.DisplayColor);
+                var localDirection = planet.transform.InverseTransformPoint(settlementAnchor.TransformPoint(offset)).normalized;
+                var ground = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(localDirection));
+                var normal = planet.transform.TransformDirection(localDirection);
+                var forward = Vector3.ProjectOnPlane(settlementAnchor.forward, normal).normalized;
+                visual.transform.SetPositionAndRotation(ground, Quaternion.LookRotation(forward, normal));
                 buildingVisuals.Add(visual);
             }
+            BuildServiceRoads();
+        }
+
+        private void BuildServiceRoads()
+        {
+            var vertices = new List<Vector3>();
+            var normals = new List<Vector3>();
+            var uv = new List<Vector2>();
+            var roadTriangles = new List<int>();
+            var markingTriangles = new List<int>();
+            foreach (var visual in buildingVisuals)
+            {
+                var end = settlementAnchor.InverseTransformPoint(visual.transform.position);
+                end.y = 0;
+                for (var section = 0; section < 12; section++)
+                {
+                    var a = end * (section / 12f); var b = end * ((section + 1) / 12f);
+                    AddRoadStrip(a, b, 26f, 1.2f, roadTriangles, vertices, normals, uv);
+                    if (section % 2 == 0)
+                        AddRoadStrip(a, Vector3.Lerp(a, b, 0.6f), 1.5f, 1.5f,
+                            markingTriangles, vertices, normals, uv);
+                }
+            }
+            serviceRoadMesh = new Mesh { name = "Surface-conforming service causeways" };
+            serviceRoadMesh.SetVertices(vertices); serviceRoadMesh.SetNormals(normals); serviceRoadMesh.SetUVs(0, uv);
+            serviceRoadMesh.subMeshCount = 2;
+            serviceRoadMesh.SetTriangles(roadTriangles, 0); serviceRoadMesh.SetTriangles(markingTriangles, 1);
+            serviceRoadMesh.RecalculateBounds();
+            serviceRoads = new GameObject("Core service causeways", typeof(MeshFilter), typeof(MeshRenderer));
+            serviceRoads.transform.SetParent(planet.transform, false);
+            serviceRoads.GetComponent<MeshFilter>().sharedMesh = serviceRoadMesh;
+            serviceRoads.GetComponent<MeshRenderer>().sharedMaterials = BuildingVisuals.ServiceRoadMaterials;
+            serviceRoads.GetComponent<MeshRenderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        private void AddRoadStrip(Vector3 a, Vector3 b, float width, float elevation, List<int> triangles,
+            List<Vector3> vertices, List<Vector3> normals, List<Vector2> uv)
+        {
+            var side = Vector3.Cross(Vector3.up, (b - a).normalized) * width * 0.5f;
+            var start = vertices.Count;
+            foreach (var p in new[] { a - side, b - side, b + side, a + side })
+            {
+                var direction = planet.transform.InverseTransformPoint(settlementAnchor.TransformPoint(p)).normalized;
+                vertices.Add(planet.EvaluateSurfacePoint(direction) + direction * elevation);
+                normals.Add(direction);
+            }
+            uv.AddRange(new[] { Vector2.zero, Vector2.up, Vector2.one, Vector2.right });
+            triangles.AddRange(new[] { start, start + 1, start + 2, start, start + 2, start + 3 });
         }
 
         private void ClearVisuals()
         {
+            if (serviceRoads != null) Destroy(serviceRoads);
+            if (serviceRoadMesh != null) Destroy(serviceRoadMesh);
             foreach (var visual in buildingVisuals)
             {
                 if (visual != null)
@@ -327,6 +376,11 @@ namespace WH30K.Sim.Settlements
             }
 
             buildingVisuals.Clear();
+        }
+
+        private void OnDestroy()
+        {
+            if (serviceRoadMesh != null) Destroy(serviceRoadMesh);
         }
 
         private void EnsureAnchor(Vector3 position, Vector3 normal)
@@ -349,15 +403,5 @@ namespace WH30K.Sim.Settlements
             settlementAnchor.rotation = Quaternion.FromToRotation(Vector3.up, normal.normalized);
         }
 
-        private static Material GetMaterial(Color color)
-        {
-            if (!MaterialCache.TryGetValue(color, out var material) || material == null)
-            {
-                material = new Material(Shader.Find("Standard")) { color = color };
-                MaterialCache[color] = material;
-            }
-
-            return material;
-        }
     }
 }

@@ -27,7 +27,6 @@ namespace WH30K.Gameplay.Construction
         [SerializeField] private Color blockedGridColor = new Color(1f, 0.4f, 0.4f, 0.35f);
 
         private readonly Dictionary<PlanetGridCell, PlacedStructure> placedStructures = new Dictionary<PlanetGridCell, PlacedStructure>();
-        private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
 
         private LODPlanet planet;
         private PlanetGrid grid;
@@ -134,6 +133,7 @@ namespace WH30K.Gameplay.Construction
             var definition = Array.Find(availableStructures, item => item.Id == id);
             if (definition == null) return false;
             CancelPlacement();
+            ClearPreviewInstance();
             activeStructure = definition;
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
             return true;
@@ -346,7 +346,6 @@ namespace WH30K.Gameplay.Construction
             }
 
             var dimensions = activeStructure.Dimensions;
-            var offset = frame.Normal * (dimensions.y * 0.5f);
             var forward = frame.Forward.sqrMagnitude > 0.001f
                 ? frame.Forward
                 : Vector3.ProjectOnPlane(mainCamera.transform.forward, frame.Normal).normalized;
@@ -360,7 +359,7 @@ namespace WH30K.Gameplay.Construction
             }
 
             var rotation = Quaternion.LookRotation(forward.normalized, frame.Normal);
-            previewInstance.transform.SetPositionAndRotation(frame.Center + offset, rotation);
+            previewInstance.transform.SetPositionAndRotation(frame.Center, rotation);
             previewInstance.transform.localScale = dimensions;
             var validColor = activeStructure != null ? activeStructure.PreviewColor : validPreviewColor;
             previewRenderer.sharedMaterial.color = placementValid ? validColor : invalidPreviewColor;
@@ -381,17 +380,9 @@ namespace WH30K.Gameplay.Construction
 
         private void SpawnStructure(CellFrame frame, BuildableStructure definition)
         {
-            var instance = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            instance.name = definition.DisplayName;
-            instance.transform.SetParent(structureRoot != null ? structureRoot : planet.transform, false);
-            var collider = instance.GetComponent<Collider>();
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
-
             var dimensions = definition.Dimensions;
-            var offset = frame.Normal * (dimensions.y * 0.5f);
+            var instance = BuildingVisuals.Create(definition.Id, definition.DisplayName,
+                structureRoot != null ? structureRoot : planet.transform, dimensions);
             var forward = frame.Forward.sqrMagnitude > 0.001f
                 ? frame.Forward
                 : Vector3.Cross(frame.Normal, Vector3.right);
@@ -401,11 +392,8 @@ namespace WH30K.Gameplay.Construction
             }
 
             var rotation = Quaternion.LookRotation(forward.normalized, frame.Normal);
-            instance.transform.SetPositionAndRotation(frame.Center + offset, rotation);
+            instance.transform.SetPositionAndRotation(frame.Center, rotation);
             instance.transform.localScale = dimensions;
-
-            var renderer = instance.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = GetMaterial(definition.StructureColor);
 
             placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, definition, instance);
         }
@@ -429,17 +417,10 @@ namespace WH30K.Gameplay.Construction
                 name = "BuildingPreviewMaterial"
             };
 
-            previewInstance = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            previewInstance.name = "BuildingPreview";
-            previewInstance.transform.SetParent(planet.transform, false);
-            var collider = previewInstance.GetComponent<Collider>();
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
+            previewInstance = BuildingVisuals.Create(activeStructure.Id, "BuildingPreview", planet.transform,
+                activeStructure.Dimensions, previewMaterial);
 
             previewRenderer = previewInstance.GetComponent<MeshRenderer>();
-            previewRenderer.sharedMaterial = previewMaterial;
             previewInstance.SetActive(false);
         }
 
@@ -511,17 +492,6 @@ namespace WH30K.Gameplay.Construction
                     name = "GridBlockedMaterial"
                 };
             }
-        }
-
-        private static Material GetMaterial(Color color)
-        {
-            if (!MaterialCache.TryGetValue(color, out var material) || material == null)
-            {
-                material = new Material(Shader.Find("Standard")) { color = color };
-                MaterialCache[color] = material;
-            }
-
-            return material;
         }
 
         private struct PlacedStructure

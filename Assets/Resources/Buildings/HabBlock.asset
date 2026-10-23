@@ -20,6 +20,6 @@ MonoBehaviour:
   productionPerWorker: 0.15
   upkeepPerCycle: 8
   environmentImpact: {co2Delta: 0.02, o2Delta: -0.0005, waterDelta: 0.001, temperatureDelta: 0.00001}
-  dimensions: {x: 40, y: 60, z: 40}
+  dimensions: {x: 100, y: 175, z: 100}
   previewColor: {r: 0.45, g: 0.95, b: 0.45, a: 0.6}
   structureColor: {r: 0.8, g: 0.85, b: 1, a: 1}
