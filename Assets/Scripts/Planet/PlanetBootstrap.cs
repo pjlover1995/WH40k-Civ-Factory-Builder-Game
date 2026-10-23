@@ -123,6 +123,7 @@ namespace WH30K.Gameplay
 
         public void BeginNewGame(int seed, GameSettings.Difficulty difficulty)
         {
+            colonyEventSystem.EndSession();
             var definition = GameSettings.GetDefinition(difficulty);
             GameSettings.StartNewGame(seed, difficulty);
             var planetRoot = BuildPlanet(seed);
@@ -153,6 +154,7 @@ namespace WH30K.Gameplay
 #endif
 
             settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState);
+            orbitCamera?.FocusSettlement(surfaceNormal);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
 
 #if UNITY_EDITOR
@@ -173,60 +175,91 @@ namespace WH30K.Gameplay
             }
         }
 
-        public void SaveToFile()
+        public string CaptureSaveJson()
         {
-            if (!GameSettings.HasActiveGame)
+            if (!GameSettings.HasActiveGame) throw new InvalidOperationException("No active game to save.");
+            return JsonUtility.ToJson(new GameSaveData
             {
-                Debug.LogWarning("Cannot save without an active game.");
-                return;
-            }
-
-            var save = new GameSaveData
-            {
+                version = 2,
                 seed = GameSettings.CurrentSeed,
                 difficulty = GameSettings.CurrentDifficulty,
                 environment = environmentState.CreateSnapshot(),
                 resources = resourceSystem.CreateSnapshot(),
-                settlement = settlement.CreateSnapshot()
-            };
+                settlement = settlement.CreateSnapshot(),
+                gridResolution = buildingPlacement.GridResolution,
+                structures = buildingPlacement.CreateSnapshot(),
+                events = colonyEventSystem.CreateSnapshot()
+            }, true);
+        }
 
-            var json = JsonUtility.ToJson(save, true);
-            File.WriteAllText(SavePath, json);
-            menu?.AppendEventLog("State saved to disk.");
+        public void SaveToFile()
+        {
+            if (!GameSettings.HasActiveGame) return;
+            try
+            {
+                var path = SavePath;
+                var temporaryPath = path + ".tmp";
+                File.WriteAllText(temporaryPath, CaptureSaveJson());
+                if (File.Exists(path)) File.Replace(temporaryPath, path, path + ".bak");
+                else File.Move(temporaryPath, path);
+                menu?.AppendEventLog("Game saved, including buildings and pending decisions.");
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"Save failed: {exception.Message}");
+                menu?.AppendEventLog("Could not save. Check the save folder is writable.");
+            }
         }
 
         public void LoadFromFile()
         {
-            if (!File.Exists(SavePath))
+            try
             {
-                Debug.LogWarning($"Save file not found at {SavePath}");
-                menu?.AppendEventLog("No save file found.");
-                return;
+                if (!File.Exists(SavePath))
+                {
+                    menu?.AppendEventLog("No save file found.");
+                    return;
+                }
+                TryLoadSaveJson(File.ReadAllText(SavePath));
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"Load failed: {exception.Message}");
+                menu?.AppendEventLog("Could not read the save file.");
+            }
+        }
+
+        public bool TryLoadSaveJson(string json)
+        {
+            GameSaveData save;
+            try
+            {
+                save = JsonUtility.FromJson<GameSaveData>(json);
+                if (!ValidateSave(save, out var error))
+                {
+                    menu?.AppendEventLog($"Load rejected: {error}");
+                    return false;
+                }
+            }
+            catch (ArgumentException)
+            {
+                menu?.AppendEventLog("Load rejected: invalid save JSON.");
+                return false;
             }
 
-            var json = File.ReadAllText(SavePath);
-            var save = JsonUtility.FromJson<GameSaveData>(json);
-            if (save == null)
-            {
-                Debug.LogError("Failed to parse save file.");
-                return;
-            }
-
+            // Validate the whole document before replacing the running session.
+            colonyEventSystem.EndSession();
             GameSettings.ApplyLoadedState(save.seed, save.difficulty);
-
             var definition = GameSettings.GetDefinition(save.difficulty);
             var planetRoot = BuildPlanet(save.seed);
-            if (orbitCamera != null && planetRoot != null)
-            {
-                orbitCamera.SetTarget(planetRoot, planet.Radius);
-            }
-
-            buildingPlacement?.AttachToPlanet(planet);
-
+            if (orbitCamera != null) orbitCamera.SetTarget(planetRoot, planet.Radius);
+            buildingPlacement.AttachToPlanet(planet, save.gridResolution == 0 ? 96 : save.gridResolution);
             resourceSystem.LoadFromSnapshot(save.resources, definition);
             environmentState.LoadFromSnapshot(save.environment, definition);
             settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
-            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, save.seed);
+            orbitCamera?.FocusSettlement(save.settlement.normal);
+            buildingPlacement.RestoreSnapshot(save.structures);
+            settlement.RefreshReadout();
 
             if (menu != null)
             {
@@ -234,9 +267,47 @@ namespace WH30K.Gameplay
                 menu.SetDifficulty(save.difficulty);
                 menu.ShowNewGamePanel(false);
                 menu.ShowHud(true);
-                menu.ShowEventPanel(false);
-                menu.AppendEventLog("State loaded from disk.");
+                menu.AppendEventLog("Game loaded. Buildings and economic effects restored.");
             }
+            colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, save.seed, save.events);
+            return true;
+        }
+
+        private bool ValidateSave(GameSaveData save, out string error)
+        {
+            error = "Unsupported or incomplete save.";
+            if (save == null || save.version < 0 || save.version > 2
+                || !Enum.IsDefined(typeof(GameSettings.Difficulty), save.difficulty)) return false;
+            var colony = save.settlement;
+            var resources = save.resources;
+            var environment = save.environment;
+            var values = new[]
+            {
+                colony.population, colony.workforce, colony.productionModifier, colony.upkeepModifier,
+                colony.industryModifier, colony.tickTimer, colony.position.x, colony.position.y, colony.position.z,
+                colony.normal.x, colony.normal.y, colony.normal.z,
+                resources.Population, resources.Workforce, resources.Stockpile, resources.ProductionPerCycle,
+                resources.UpkeepPerCycle, resources.NetProduction,
+                environment.Co2, environment.O2, environment.WaterPollution, environment.GlobalTemperatureOffset
+            };
+            foreach (var value in values)
+                if (!WH30K.Sim.ColonyRules.IsFinite(value)) return false;
+            if (colony.population <= 0f || colony.population > 10000000f || colony.workforce < 0f
+                || colony.position.sqrMagnitude < 1f || colony.productionModifier < 0.25f
+                || colony.productionModifier > 3f || colony.upkeepModifier < 0.1f || colony.upkeepModifier > 3f
+                || colony.industryModifier < 0f || colony.industryModifier > 3f
+                || colony.tickTimer < 0f || colony.tickTimer > 60f
+                || resources.Stockpile < 0f || resources.Population < 0f || resources.Workforce < 0f
+                || environment.Co2 < 0f || environment.O2 < 0f || environment.WaterPollution < 0f
+                || !EventSchedule.IsValid(save.events)) return false;
+            if (colony.buildings != null)
+            {
+                if (colony.buildings.Length > 4096) return false;
+                foreach (var id in colony.buildings)
+                    if (id != "HabBlock" && id != "Factory" && id != "Utility") return false;
+            }
+            return buildingPlacement.ValidateSnapshot(save.structures,
+                save.gridResolution == 0 ? 96 : save.gridResolution, out error);
         }
 
         private Transform BuildPlanet(int seed)
@@ -470,11 +541,15 @@ namespace WH30K.Gameplay
         [Serializable]
         private class GameSaveData
         {
+            public int version;
             public int seed;
             public GameSettings.Difficulty difficulty;
             public EnvironmentSnapshot environment;
             public ResourceSnapshot resources;
             public SettlementSnapshot settlement;
+            public int gridResolution;
+            public PlacedStructureSnapshot[] structures;
+            public EventSnapshot events;
         }
     }
 }

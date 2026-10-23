@@ -118,7 +118,7 @@ namespace WH30K.Planet
         private LODPatch CreateChild(Vector2 childUvMin, Vector2 childUvMax, int childDepth, string suffix)
         {
             var go = new GameObject($"{name}_{suffix}");
-            go.transform.SetParent(transform.parent, false);
+            go.transform.SetParent(transform, false);
             var patch = go.AddComponent<LODPatch>();
             patch.Initialize(planet, localUp, childUvMin, childUvMax, childDepth);
             return patch;
@@ -206,7 +206,7 @@ namespace WH30K.Planet
         {
             if (!centerDirty)
             {
-                return cachedCenter;
+                return transform.TransformPoint(cachedCenter);
             }
 
             var midX = (uvMin.x + uvMax.x) * 0.5f;
@@ -215,7 +215,7 @@ namespace WH30K.Planet
             var pointOnSphere = pointOnCube.normalized;
             cachedCenter = planet.EvaluateSurfacePoint(pointOnSphere);
             centerDirty = false;
-            return cachedCenter;
+            return transform.TransformPoint(cachedCenter);
         }
 
         private void OnDestroy()

@@ -20,10 +20,12 @@ namespace WH30K.CameraSystem
         private float yaw;
         private float pitch;
         private bool hasTarget;
+        private Vector3 settlementDirection;
 
         public void SetTarget(Transform newTarget, float approximateRadius)
         {
             target = newTarget;
+            minDistance = approximateRadius + 600f;
             defaultDistance = Mathf.Clamp(approximateRadius * 2.2f, minDistance, maxDistance);
             distance = defaultDistance;
             yaw = 135f;
@@ -56,10 +58,11 @@ namespace WH30K.CameraSystem
                 distance = Mathf.Clamp(distance, minDistance, maxDistance);
             }
 
-            if (Input.GetKeyDown(KeyCode.Home) || Input.GetKeyDown(KeyCode.F))
+            if (Input.GetKeyDown(KeyCode.Home))
             {
                 FrameTarget();
             }
+            if (Input.GetKeyDown(KeyCode.F)) FocusSettlement(settlementDirection);
 
             UpdateCameraTransform();
         }
@@ -87,6 +90,16 @@ namespace WH30K.CameraSystem
             distance = defaultDistance;
             yaw = 135f;
             pitch = 25f;
+            UpdateCameraTransform();
+        }
+
+        public void FocusSettlement(Vector3 direction)
+        {
+            if (target == null || direction.sqrMagnitude < 0.01f) return;
+            settlementDirection = direction.normalized;
+            yaw = Mathf.Atan2(-settlementDirection.x, -settlementDirection.z) * Mathf.Rad2Deg;
+            pitch = Mathf.Asin(settlementDirection.y) * Mathf.Rad2Deg;
+            distance = minDistance + 100f;
             UpdateCameraTransform();
         }
     }

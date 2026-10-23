@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59ef5f4d9a44a3e9d0fc35283a6b2cb, type: 3}
+  m_Name: HabBlock
+  m_EditorClassIdentifier:
+  id: HabBlock
+  displayName: Hab Block
+  constructionCost: 180
+  populationCapacity: 320
+  workforceSlots: 40
+  productionPerWorker: 0.15
+  upkeepPerCycle: 8
+  environmentImpact: {co2Delta: 0.02, o2Delta: -0.0005, waterDelta: 0.001, temperatureDelta: 0.00001}
+  dimensions: {x: 40, y: 60, z: 40}
+  previewColor: {r: 0.45, g: 0.95, b: 0.45, a: 0.6}
+  structureColor: {r: 0.8, g: 0.85, b: 1, a: 1}

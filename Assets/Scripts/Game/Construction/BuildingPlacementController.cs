@@ -1,8 +1,12 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using WH30K.Gameplay;
 using WH30K.Planet;
 using WH30K.UI;
+using WH30K.Sim.Resources;
+using WH30K.Sim.Settlements;
 
 namespace WH30K.Gameplay.Construction
 {
@@ -38,14 +42,32 @@ namespace WH30K.Gameplay.Construction
         private Transform structureRoot;
         private NewGameMenu menu;
         private Camera mainCamera;
+        private ResourceSystem resources;
+        private Settlement settlement;
 
         private bool isPlacing;
 
         public bool IsPlacing => isPlacing;
-        public string ActiveStructureName => activeStructure != null ? activeStructure.DisplayName : "Structure";
+        public string ActiveStructureName => activeStructure != null
+            ? $"{activeStructure.DisplayName} ({activeStructure.ConstructionCost:0})" : "Structure";
+        public int GridResolution => grid != null ? grid.CellsPerFace : cellsPerFace;
+        public string ActiveStructureDetails
+        {
+            get
+            {
+                if (activeStructure == null) return string.Empty;
+                var economy = activeStructure.Economy;
+                return $"Housing +{economy.capacity:0} | Jobs +{economy.jobs:0}\n" +
+                       $"Output/worker {economy.outputPerWorker:0.0} | Upkeep {economy.upkeep:0}\n" +
+                       $"CO2/s at full staffing: {activeStructure.IndustryImpact.co2Delta:+0.00;-0.00;0}";
+            }
+        }
 
         private void Awake()
         {
+            cellsPerFace = Mathf.Clamp(cellsPerFace, 8, 256);
+            resources = GetComponent<ResourceSystem>();
+            settlement = GetComponent<Settlement>();
             availableStructures = Resources.LoadAll<BuildableStructure>("Buildings");
             if (availableStructures == null || availableStructures.Length == 0)
             {
@@ -55,8 +77,10 @@ namespace WH30K.Gameplay.Construction
                 availableStructures = new[] { fallback };
             }
 
-            activeStructure = availableStructures[0];
+            Array.Sort(availableStructures, (a, b) => string.CompareOrdinal(a.Id, b.Id));
+            activeStructure = Array.Find(availableStructures, definition => definition.Id == "Outpost") ?? availableStructures[0];
             mainCamera = Camera.main;
+            menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
 
         private void OnDisable()
@@ -70,14 +94,16 @@ namespace WH30K.Gameplay.Construction
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
 
-        public void AttachToPlanet(LODPlanet newPlanet)
+        public void AttachToPlanet(LODPlanet newPlanet, int resolution = 0)
         {
+            if (resolution != 0) cellsPerFace = Mathf.Clamp(resolution, 8, 256);
             planet = newPlanet;
             grid = planet != null ? new PlanetGrid(planet, Mathf.Max(8, cellsPerFace)) : null;
             RebuildVisualizer();
             RebuildStructureRoot();
             ClearPreviewInstance();
             placedStructures.Clear();
+            RefreshEconomy();
             isPlacing = false;
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
@@ -93,7 +119,62 @@ namespace WH30K.Gameplay.Construction
             }
 
             placedStructures.Clear();
+            RefreshEconomy();
             CancelPlacement();
+        }
+
+        public void CycleStructure()
+        {
+            var index = Array.IndexOf(availableStructures, activeStructure);
+            SelectStructure(availableStructures[(index + 1) % availableStructures.Length].Id);
+        }
+
+        public bool SelectStructure(string id)
+        {
+            var definition = Array.Find(availableStructures, item => item.Id == id);
+            if (definition == null) return false;
+            CancelPlacement();
+            activeStructure = definition;
+            menu?.UpdateBuildButtonState(ActiveStructureName, false);
+            return true;
+        }
+
+        public PlacedStructureSnapshot[] CreateSnapshot()
+        {
+            var snapshots = new List<PlacedStructureSnapshot>();
+            foreach (var entry in placedStructures.Values)
+                snapshots.Add(new PlacedStructureSnapshot
+                {
+                    id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y
+                });
+            return snapshots.ToArray();
+        }
+
+        public bool ValidateSnapshot(PlacedStructureSnapshot[] snapshots, int resolution, out string error)
+        {
+            var ids = new HashSet<string>();
+            foreach (var definition in availableStructures) ids.Add(definition.Id);
+            return ConstructionSave.Validate(snapshots, resolution, ids, out error);
+        }
+
+        public void RestoreSnapshot(PlacedStructureSnapshot[] snapshots)
+        {
+            ResetPlacement();
+            if (snapshots != null)
+                foreach (var snapshot in snapshots)
+                {
+                    var definition = Array.Find(availableStructures, item => item.Id == snapshot.id);
+                    var cell = new PlanetGridCell(snapshot.face, snapshot.x, snapshot.y);
+                    SpawnStructure(grid.CalculateFrame(cell), definition);
+                }
+            RefreshEconomy();
+        }
+
+        private void RefreshEconomy()
+        {
+            var definitions = new List<BuildableStructure>();
+            foreach (var entry in placedStructures.Values) definitions.Add(entry.Definition);
+            settlement?.SetConstructedBuildings(definitions);
         }
 
         public void BeginPlacement()
@@ -133,6 +214,20 @@ namespace WH30K.Gameplay.Construction
                 return;
             }
 
+            // Cancel works even when the pointer is off the planet or over a panel.
+            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+            {
+                CancelPlacement();
+                return;
+            }
+            if ((EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                || (menu != null && menu.HasOpenEvent))
+            {
+                if (previewInstance != null) previewInstance.SetActive(false);
+                visualizer?.Hide();
+                return;
+            }
+
             if (mainCamera == null)
             {
                 mainCamera = Camera.main;
@@ -159,7 +254,7 @@ namespace WH30K.Gameplay.Construction
 
             if (placementValid && Input.GetMouseButtonDown(0))
             {
-                PlaceStructure(frame);
+                TryPlaceCell(frame.Cell);
             }
             else if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
             {
@@ -186,7 +281,7 @@ namespace WH30K.Gameplay.Construction
         {
             direction = Vector3.zero;
             var center = planet.transform.position;
-            var adjustedRadius = planet.Radius + 1200f;
+            var adjustedRadius = planet.Radius + 700f;
             var oc = ray.origin - center;
             var a = Vector3.Dot(ray.direction, ray.direction);
             var b = 2f * Vector3.Dot(oc, ray.direction);
@@ -198,19 +293,30 @@ namespace WH30K.Gameplay.Construction
             }
 
             var sqrt = Mathf.Sqrt(discriminant);
-            var t = (-b - sqrt) / (2f * a);
-            if (t < 0f)
+            var start = Mathf.Max(0f, (-b - sqrt) / (2f * a));
+            var end = (-b + sqrt) / (2f * a);
+            if (end <= start) return false;
+            var previous = start;
+            // Intersect the generated height field, rather than an oversized imaginary sphere.
+            for (var i = 1; i <= 128; i++)
             {
-                t = (-b + sqrt) / (2f * a);
-                if (t < 0f)
+                var t = Mathf.Lerp(start, end, i / 128f);
+                var local = planet.transform.InverseTransformPoint(ray.GetPoint(t));
+                if (local.magnitude <= planet.EvaluateSurfacePoint(local.normalized).magnitude)
                 {
-                    return false;
+                    for (var j = 0; j < 14; j++)
+                    {
+                        var mid = (previous + t) * 0.5f;
+                        local = planet.transform.InverseTransformPoint(ray.GetPoint(mid));
+                        if (local.magnitude <= planet.EvaluateSurfacePoint(local.normalized).magnitude) t = mid;
+                        else previous = mid;
+                    }
+                    direction = (ray.GetPoint(t) - center).normalized;
+                    return true;
                 }
+                previous = t;
             }
-
-            var hitPoint = ray.origin + ray.direction * t;
-            direction = (hitPoint - center).normalized;
-            return true;
+            return false;
         }
 
         private bool ValidatePlacement(CellFrame frame)
@@ -218,8 +324,18 @@ namespace WH30K.Gameplay.Construction
             var localPosition = planet.transform.InverseTransformPoint(frame.Center);
             var aboveSeaLevel = localPosition.magnitude >= planet.SeaLevel;
             var unoccupied = !placedStructures.ContainsKey(frame.Cell);
-            return aboveSeaLevel && unoccupied;
+            if (!aboveSeaLevel || !unoccupied || placedStructures.Count >= 4096 || activeStructure == null || resources == null
+                || !resources.CanAfford(activeStructure.ConstructionCost)
+                || settlement.OverlapsStartingBuildings(frame.Center, activeStructure.Dimensions)) return false;
+            var radius = FootprintRadius(activeStructure);
+            foreach (var entry in placedStructures.Values)
+                if (Vector3.Distance(frame.Center, grid.GetCellCenterWorld(entry.Cell))
+                    < radius + FootprintRadius(entry.Definition)) return false;
+            return true;
         }
+
+        private static float FootprintRadius(BuildableStructure definition)
+            => new Vector2(definition.Dimensions.x, definition.Dimensions.z).magnitude * 0.5f;
 
         private void UpdatePreview(CellFrame frame, bool placementValid)
         {
@@ -251,10 +367,22 @@ namespace WH30K.Gameplay.Construction
             previewInstance.SetActive(true);
         }
 
-        private void PlaceStructure(CellFrame frame)
+        public bool TryPlaceCell(PlanetGridCell cell)
+        {
+            if (grid == null || cell.X < 0 || cell.Y < 0
+                || cell.X >= grid.CellsPerFace || cell.Y >= grid.CellsPerFace) return false;
+            var frame = grid.CalculateFrame(cell);
+            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            SpawnStructure(frame, activeStructure);
+            RefreshEconomy();
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            return true;
+        }
+
+        private void SpawnStructure(CellFrame frame, BuildableStructure definition)
         {
             var instance = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            instance.name = activeStructure.DisplayName;
+            instance.name = definition.DisplayName;
             instance.transform.SetParent(structureRoot != null ? structureRoot : planet.transform, false);
             var collider = instance.GetComponent<Collider>();
             if (collider != null)
@@ -262,7 +390,7 @@ namespace WH30K.Gameplay.Construction
                 Destroy(collider);
             }
 
-            var dimensions = activeStructure.Dimensions;
+            var dimensions = definition.Dimensions;
             var offset = frame.Normal * (dimensions.y * 0.5f);
             var forward = frame.Forward.sqrMagnitude > 0.001f
                 ? frame.Forward
@@ -277,10 +405,9 @@ namespace WH30K.Gameplay.Construction
             instance.transform.localScale = dimensions;
 
             var renderer = instance.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = GetMaterial(activeStructure.StructureColor);
+            renderer.sharedMaterial = GetMaterial(definition.StructureColor);
 
-            placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, activeStructure, instance);
-            menu?.AppendEventLog($"Placed {activeStructure.DisplayName} at {frame.Cell}.");
+            placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, definition, instance);
         }
 
         private void EnsurePreviewInstance()

@@ -7,6 +7,7 @@ using WH30K.Sim.Buildings;
 using WH30K.Sim.Environment;
 using WH30K.Sim.Resources;
 using WH30K.UI;
+using WH30K.Gameplay.Construction;
 
 namespace WH30K.Sim.Settlements
 {
@@ -20,6 +21,8 @@ namespace WH30K.Sim.Settlements
         public Vector3 position;
         public Vector3 normal;
         public string[] buildings;
+        public float industryModifier;
+        public float tickTimer;
     }
 
     public struct SettlementReport
@@ -44,6 +47,8 @@ namespace WH30K.Sim.Settlements
 
         private readonly List<SettlementBuilding> buildings = new List<SettlementBuilding>();
         private readonly List<GameObject> buildingVisuals = new List<GameObject>();
+        private readonly List<BuildableStructure> constructedBuildings = new List<BuildableStructure>();
+        private readonly List<BuildingEconomy> economy = new List<BuildingEconomy>();
         private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
 
         private LODPlanet planet;
@@ -57,6 +62,7 @@ namespace WH30K.Sim.Settlements
         private float workforce;
         private float productionModifier = 1f;
         private float upkeepModifier = 1f;
+        private float industryModifier = 1f;
         private float tickTimer;
         private Vector3 storedPosition;
         private Vector3 storedNormal;
@@ -77,6 +83,8 @@ namespace WH30K.Sim.Settlements
             environmentState = environment;
             productionModifier = definition.resourceYieldMultiplier;
             upkeepModifier = Mathf.Lerp(1f, 1.3f, Mathf.InverseLerp(1f, 1.4f, definition.environmentHarshnessMultiplier));
+            industryModifier = 1f;
+            constructedBuildings.Clear();
             population = Mathf.Max(120f, 160f * definition.resourceYieldMultiplier);
             workforce = population * workforceRatio;
             tickTimer = 0f;
@@ -86,6 +94,7 @@ namespace WH30K.Sim.Settlements
             ClearVisuals();
             EnsureAnchor(surfacePosition, surfaceNormal);
             RebuildBuildings(new[] { "HabBlock", "Factory", "Utility" });
+            RefreshReadout();
             menu?.AppendEventLog("Settlement core deployed on new world.");
         }
 
@@ -98,9 +107,11 @@ namespace WH30K.Sim.Settlements
             environmentState = environment;
             productionModifier = snapshot.productionModifier;
             upkeepModifier = snapshot.upkeepModifier;
+            industryModifier = snapshot.industryModifier > 0f ? snapshot.industryModifier : 1f;
+            constructedBuildings.Clear();
             population = snapshot.population;
             workforce = snapshot.workforce;
-            tickTimer = 0f;
+            tickTimer = Mathf.Clamp(snapshot.tickTimer, 0f, tickInterval);
             storedPosition = snapshot.position;
             storedNormal = snapshot.normal.sqrMagnitude > 0.01f ? snapshot.normal.normalized : snapshot.position.normalized;
 
@@ -119,13 +130,12 @@ namespace WH30K.Sim.Settlements
             }
 
             tickTimer += Time.deltaTime;
-            if (tickTimer < tickInterval)
+            var steps = 0;
+            while (tickTimer >= tickInterval && steps++ < 8)
             {
-                return;
+                tickTimer -= tickInterval;
+                RunTick();
             }
-
-            tickTimer -= tickInterval;
-            RunTick();
         }
 
         public SettlementSnapshot CreateSnapshot()
@@ -144,14 +154,18 @@ namespace WH30K.Sim.Settlements
                 upkeepModifier = upkeepModifier,
                 position = storedPosition,
                 normal = storedNormal,
-                buildings = ids
+                buildings = ids,
+                industryModifier = industryModifier,
+                tickTimer = tickTimer
             };
         }
 
-        public void AdjustPolicy(float productionDelta, float upkeepDelta, string message)
+        public void AdjustPolicy(float productionDelta, float upkeepDelta, string message, float industryDelta = 0f)
         {
             productionModifier = Mathf.Clamp(productionModifier + productionDelta, 0.25f, 3f);
             upkeepModifier = Mathf.Clamp(upkeepModifier + upkeepDelta, 0.1f, 3f);
+            industryModifier = Mathf.Clamp(industryModifier + industryDelta, 0.25f, 3f);
+            RefreshReadout();
             if (!string.IsNullOrEmpty(message))
             {
                 menu?.AppendEventLog(message);
@@ -172,51 +186,66 @@ namespace WH30K.Sim.Settlements
 
         private void RunTick()
         {
-            var capacity = 0f;
-            var workforceCapacity = 0f;
-            foreach (var building in buildings)
-            {
-                capacity += building.PopulationCapacity;
-                workforceCapacity += building.WorkforceSlots;
-            }
-
-            var growthTarget = Mathf.Min(capacity, population + (capacity - population) * populationGrowthRate);
-            population = Mathf.MoveTowards(population, growthTarget, populationGrowthRate * capacity * tickInterval);
-            workforce = Mathf.Min(workforceCapacity, population * workforceRatio);
-
-            var availableWorkers = workforce;
-            var production = 0f;
-            var upkeep = 0f;
+            var tick = CalculateEconomy(tickInterval);
+            population = tick.population;
+            workforce = tick.workforce;
             var totalImpact = EnvironmentImpact.Zero;
-
             foreach (var building in buildings)
             {
-                var assigned = Mathf.Min(building.WorkforceSlots, availableWorkers);
-                availableWorkers -= assigned;
-                production += assigned * building.ProductionPerWorker;
-                upkeep += building.UpkeepPerCycle;
-                if (building.WorkforceSlots > 0f)
-                {
-                    var utilisation = assigned / Mathf.Max(1f, building.WorkforceSlots);
-                    totalImpact += building.EnvironmentImpact.Scale(utilisation);
-                }
+                totalImpact += EnvironmentRules.ApplyPolicy(building.EnvironmentImpact.Scale(tick.utilisation), industryModifier);
             }
+            foreach (var building in constructedBuildings)
+                totalImpact += EnvironmentRules.ApplyPolicy(building.IndustryImpact.Scale(tick.utilisation), industryModifier);
+            environmentState.ApplyIndustryImpact(totalImpact, tickInterval);
+            PublishReport(tick, tickInterval);
+        }
 
-            production *= productionModifier;
-            upkeep *= upkeepModifier;
-            var net = production - upkeep;
+        private ColonyTick CalculateEconomy(float seconds)
+        {
+            economy.Clear();
+            foreach (var building in buildings)
+                economy.Add(new BuildingEconomy
+                {
+                    capacity = building.PopulationCapacity, jobs = building.WorkforceSlots,
+                    outputPerWorker = building.ProductionPerWorker, upkeep = building.UpkeepPerCycle
+                });
+            foreach (var building in constructedBuildings) economy.Add(building.Economy);
+            return ColonyRules.CalculateTick(economy, population, populationGrowthRate, workforceRatio,
+                productionModifier, upkeepModifier, environmentState.Habitability, seconds);
+        }
 
+        private void PublishReport(ColonyTick tick, float seconds)
+        {
             resourceSystem.ApplySettlementReport(new SettlementReport
             {
-                population = population,
-                workforce = workforce,
-                production = production,
-                upkeep = upkeep,
-                net = net,
-                tickInterval = tickInterval
+                population = tick.population, workforce = tick.workforce,
+                production = tick.production, upkeep = tick.upkeep,
+                net = tick.production - tick.upkeep, tickInterval = seconds
             });
+        }
 
-            environmentState.ApplyIndustryImpact(totalImpact, tickInterval);
+        public void SetConstructedBuildings(IEnumerable<BuildableStructure> definitions)
+        {
+            constructedBuildings.Clear();
+            constructedBuildings.AddRange(definitions);
+            RefreshReadout();
+        }
+
+        public void RefreshReadout()
+        {
+            if (!HasActiveSimulation) return;
+            var tick = CalculateEconomy(0f);
+            workforce = tick.workforce;
+            PublishReport(tick, 0f);
+        }
+
+        public bool OverlapsStartingBuildings(Vector3 center, Vector3 dimensions)
+        {
+            var radius = new Vector2(dimensions.x, dimensions.z).magnitude * 0.5f;
+            foreach (var visual in buildingVisuals)
+                if (visual != null && Vector3.Distance(center, visual.transform.position) < radius + 120f)
+                    return true;
+            return false;
         }
 
         private void RebuildBuildings(IEnumerable<string> buildingIds)
@@ -302,6 +331,13 @@ namespace WH30K.Sim.Settlements
 
         private void EnsureAnchor(Vector3 position, Vector3 normal)
         {
+            // A prior planet may already be queued for destruction during new/load.
+            // Create a fresh anchor instead of reparenting part of that doomed hierarchy.
+            if (settlementAnchor != null && settlementAnchor.parent != planet.transform)
+            {
+                Destroy(settlementAnchor.gameObject);
+                settlementAnchor = null;
+            }
             if (settlementAnchor == null)
             {
                 var anchorGO = new GameObject("SettlementAnchor");

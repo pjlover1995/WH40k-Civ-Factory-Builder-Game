@@ -25,9 +25,9 @@ namespace WH30K.UI
     [RequireComponent(typeof(PlanetBootstrap))]
     public class NewGameMenu : MonoBehaviour
     {
-        private const float PanelWidth = 320f;
-        private const float PanelHeight = 210f;
-        private const float HudPanelWidth = 260f;
+        private const float PanelWidth = 360f;
+        private const float PanelHeight = 260f;
+        private const float HudPanelWidth = 300f;
 #if UNITY_EDITOR
         private const float DebugPanelWidth = 260f;
 #endif
@@ -60,6 +60,8 @@ namespace WH30K.UI
         private Button eventChoiceBButton;
         private Button buildButton;
         private Text buildButtonLabel;
+        private Text structureDetails;
+        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf;
 
         private readonly List<string> eventLogEntries = new List<string>();
         private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
@@ -120,14 +122,17 @@ namespace WH30K.UI
 
         private void BuildUI()
         {
-            defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            defaultFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
 
             var canvasGO = new GameObject("UI");
             canvasGO.transform.SetParent(transform, false);
             canvas = canvasGO.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             canvas.pixelPerfect = false;
-            canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            var scaler = canvasGO.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1280f, 800f);
+            scaler.matchWidthOrHeight = 1f;
             canvasGO.AddComponent<GraphicRaycaster>();
 
             BuildNewGamePanel(canvas.transform);
@@ -156,68 +161,82 @@ namespace WH30K.UI
         {
             newGamePanel = CreatePanel("NewGamePanel", parent, new Vector2(PanelWidth, PanelHeight),
                 new Vector2(10f, -10f), TextAnchor.UpperLeft);
-
-            CreateLabel("Title", newGamePanel.transform, "New Game", 20, TextAnchor.UpperLeft,
-                new Vector2(0f, -10f), PanelWidth - 30f);
-
+            CreateLabel("Title", newGamePanel.transform, "New Expedition", 20, TextAnchor.UpperLeft,
+                new Vector2(15f, -12f), PanelWidth - 30f, 30f);
             CreateLabel("SeedLabel", newGamePanel.transform, "Seed", 14, TextAnchor.UpperLeft,
-                new Vector2(0f, -50f), PanelWidth - 30f);
-            seedInput = CreateInputField("SeedInput", newGamePanel.transform, new Vector2(0f, -80f));
-
+                new Vector2(15f, -52f), PanelWidth - 30f, 25f);
+            seedInput = CreateInputField("SeedInput", newGamePanel.transform, new Vector2(15f, -80f));
             CreateLabel("DifficultyLabel", newGamePanel.transform, "Difficulty", 14, TextAnchor.UpperLeft,
-                new Vector2(0f, -120f), PanelWidth - 30f);
-            difficultyButton = CreateButton("DifficultyButton", newGamePanel.transform, new Vector2(0f, -150f),
-                "Standard", out difficultyLabel, PanelWidth - 40f);
+                new Vector2(15f, -122f), 140f, 25f);
+            difficultyButton = CreateButton("DifficultyButton", newGamePanel.transform, new Vector2(15f, -150f),
+                "Standard", out difficultyLabel, 150f);
             difficultyButton.onClick.AddListener(CycleDifficulty);
-
-            startButton = CreateButton("StartButton", newGamePanel.transform, new Vector2(0f, -190f),
-                "Begin", out _, (PanelWidth - 50f) * 0.5f);
-            startButton.onClick.AddListener(OnStartClicked);
-
-            saveButton = CreateButton("SaveButton", newGamePanel.transform,
-                new Vector2((PanelWidth * 0.5f) + 5f, -190f), "Save", out _, (PanelWidth - 50f) * 0.5f);
-            saveButton.onClick.AddListener(OnSaveClicked);
-
-            loadButton = CreateButton("LoadButton", newGamePanel.transform,
-                new Vector2((PanelWidth * 0.5f) + 5f, -150f), "Load", out _, (PanelWidth - 50f) * 0.5f);
+            loadButton = CreateButton("LoadButton", newGamePanel.transform, new Vector2(185f, -150f),
+                "Load Save", out _, 150f);
             loadButton.onClick.AddListener(OnLoadClicked);
+            startButton = CreateButton("StartButton", newGamePanel.transform, new Vector2(15f, -205f),
+                "Begin", out _, PanelWidth - 30f);
+            startButton.onClick.AddListener(OnStartClicked);
         }
 
         private void BuildHudPanel(Transform parent)
         {
-            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 320f),
+            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 750f),
                 new Vector2(-10f, -10f), TextAnchor.UpperRight);
-
             resourceText = CreateLabel("ResourceReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -20f), HudPanelWidth - 20f);
-
+                new Vector2(10f, -12f), HudPanelWidth - 20f, 150f);
             environmentText = CreateLabel("EnvironmentReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -120f), HudPanelWidth - 20f);
-
-            eventLogText = CreateLabel("EventLog", hudPanel.transform, "Log:\n", 12, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -200f), HudPanelWidth - 20f, 120f);
-
-            buildButton = CreateButton("BuildButton", hudPanel.transform, new Vector2(-HudPanelWidth + 10f, -260f),
+                new Vector2(10f, -170f), HudPanelWidth - 20f, 125f);
+            var cycleButton = CreateButton("CycleStructure", hudPanel.transform, new Vector2(10f, -302f),
+                "Next Building Type", out _, HudPanelWidth - 20f);
+            cycleButton.onClick.AddListener(() => buildingPlacement?.CycleStructure());
+            buildButton = CreateButton("BuildButton", hudPanel.transform, new Vector2(10f, -344f),
                 "Place Structure", out buildButtonLabel, HudPanelWidth - 20f);
+            buildButtonLabel.fontSize = 14;
             buildButton.onClick.AddListener(OnBuildButtonClicked);
+            structureDetails = CreateLabel("StructureDetails", hudPanel.transform, string.Empty, 12, TextAnchor.UpperLeft,
+                new Vector2(10f, -388f), HudPanelWidth - 20f, 75f);
+            saveButton = CreateButton("SaveButton", hudPanel.transform, new Vector2(10f, -470f),
+                "Save (F5)", out _, 130f);
+            saveButton.onClick.AddListener(OnSaveClicked);
+            var hudLoadButton = CreateButton("HudLoadButton", hudPanel.transform, new Vector2(155f, -470f),
+                "Load (F9)", out _, 135f);
+            hudLoadButton.onClick.AddListener(OnLoadClicked);
+            eventLogText = CreateLabel("EventLog", hudPanel.transform, "Log:\n", 12, TextAnchor.UpperLeft,
+                new Vector2(10f, -518f), HudPanelWidth - 20f, 165f);
+            CreateLabel("Controls", hudPanel.transform,
+                "RMB: orbit | Wheel: zoom\nF: settlement | Home: planet\nBuild: LMB place | Esc/RMB cancel",
+                12, TextAnchor.UpperLeft, new Vector2(10f, -688f), HudPanelWidth - 20f, 60f);
         }
 
         private void BuildEventPanel(Transform parent)
         {
-            eventPanel = CreatePanel("EventPanel", parent, new Vector2(460f, 200f), new Vector2(0f, 0f), TextAnchor.MiddleCenter);
-
-            eventTitleText = CreateLabel("EventTitle", eventPanel.transform, string.Empty, 18, TextAnchor.UpperCenter,
-                new Vector2(0f, -15f), 420f);
+            eventPanel = CreatePanel("EventPanel", parent, new Vector2(560f, 280f),
+                Vector2.zero, TextAnchor.MiddleCenter);
+            eventTitleText = CreateLabel("EventTitle", eventPanel.transform, string.Empty, 18, TextAnchor.UpperLeft,
+                new Vector2(20f, -15f), 520f, 35f);
             eventBodyText = CreateLabel("EventBody", eventPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-220f, -60f), 420f, 120f);
-
-            eventChoiceAButton = CreateButton("ChoiceA", eventPanel.transform, new Vector2(-140f, -150f),
-                "Choice A", out eventChoiceALabel, 180f);
-            eventChoiceBButton = CreateButton("ChoiceB", eventPanel.transform, new Vector2(140f, -150f),
-                "Choice B", out eventChoiceBLabel, 180f);
-
+                new Vector2(20f, -60f), 520f, 110f);
+            eventChoiceAButton = CreateButton("ChoiceA", eventPanel.transform, new Vector2(20f, -190f),
+                "Choice A", out eventChoiceALabel, 250f);
+            eventChoiceBButton = CreateButton("ChoiceB", eventPanel.transform, new Vector2(290f, -190f),
+                "Choice B", out eventChoiceBLabel, 250f);
+            eventChoiceAButton.GetComponent<RectTransform>().sizeDelta = new Vector2(250f, 70f);
+            eventChoiceBButton.GetComponent<RectTransform>().sizeDelta = new Vector2(250f, 70f);
+            eventChoiceALabel.fontSize = eventChoiceBLabel.fontSize = 14;
             eventChoiceAButton.onClick.AddListener(() => eventChoiceAHandler?.Invoke());
             eventChoiceBButton.onClick.AddListener(() => eventChoiceBHandler?.Invoke());
+        }
+
+        private void Update()
+        {
+            if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) OnSaveClicked();
+            if (Input.GetKeyDown(KeyCode.F9)) OnLoadClicked();
+        }
+
+        public void SetEventChoiceAInteractable(bool affordable)
+        {
+            eventChoiceAButton.interactable = affordable;
         }
 
         private GameObject CreatePanel(string name, Transform parent, Vector2 size, Vector2 anchoredPosition, TextAnchor anchor)
@@ -430,6 +449,8 @@ namespace WH30K.UI
 
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
         {
+            if (structureDetails != null && buildingPlacement != null)
+                structureDetails.text = buildingPlacement.ActiveStructureDetails;
             if (buildButtonLabel != null)
             {
                 buildButtonLabel.text = placementActive ? "Cancel Placement" : $"Place: {displayName}";
@@ -465,7 +486,7 @@ namespace WH30K.UI
         public void ShowNewGamePanel(bool visible)
         {
             newGamePanel.SetActive(visible);
-            saveButton.interactable = !visible;
+            saveButton.interactable = GameSettings.HasActiveGame;
             loadButton.interactable = true;
         }
 
@@ -514,14 +535,15 @@ namespace WH30K.UI
             builder.AppendLine($"CO₂ Level: {snapshot.Co2:0.0}");
             builder.AppendLine($"O₂ Level: {snapshot.O2:0.0}");
             builder.AppendLine($"Water Pollution: {snapshot.WaterPollution:0.0}");
-            builder.Append($"Δ Global Temp: {snapshot.GlobalTemperatureOffset:0.00}°C");
+            builder.AppendLine($"Δ Global Temp: {snapshot.GlobalTemperatureOffset:0.00}°C");
+            builder.Append($"Habitability: {environmentState.Habitability:P0} (housing/output)");
             environmentText.text = builder.ToString();
         }
 
         public void AppendEventLog(string logEntry)
         {
             eventLogEntries.Add(logEntry);
-            while (eventLogEntries.Count > 6)
+            while (eventLogEntries.Count > 3)
             {
                 eventLogEntries.RemoveAt(0);
             }
