@@ -17,6 +17,8 @@ The executable links the actual production files `ColonyRules`, `EnvironmentRule
 2. Open `Assets/Scenes/Prototype/WH30K_VS01.unity` and enter Play Mode.
 3. Select **WH30K > Run Gameplay Checks (Play Mode)**. Expect 37 passing scene checks in the Console. The checks temporarily replace the world, then restore the current colony without changing its disk save. Ctrl+Alt+G also runs this command.
 
+Save with F5 before changing scripts during Play Mode. Unity domain reload clears runtime dictionaries, static settings and event callbacks. **WH30K > Back Up Active Colony (Play Mode)** (Ctrl+Alt+B) writes `.utmp/colony-before-gameplay-checks.json` without replacing the normal disk save. Its recovery path reconstructs missing building lists from scene components and preserves a visible unanswered decision; if the scheduler was lost during reload, its future random sequence restarts from the world seed. Restart Play Mode and load the recovered save before continuing review. Normal save/load preserves the exact scheduler state.
+
 ## Visual and disk acceptance checks
 
 1. Begin a new expedition. The camera shows the planet. At 1280x800 and 1920x1080, all HUD labels, building details, buttons, and event choices fit their panels.
@@ -49,3 +51,11 @@ Record Unity version, seed, difficulty, check output, screenshots, and any obser
 - After the compatibility pass, all 29 scene checks and all 29 executable checks passed. Version-3 saves record the terrain recipe; older saves preserve their original coastlines at the larger radius. A recorded original colony site remains land, and its terrain recipe survives a second save/load. Also loaded the existing version-2 disk save and visually confirmed all core buildings were on land with the new architecture, causeways and lighting. No warnings or errors remained in the Unity Console.
 - Visually inspected the orbital and oblique colony views with seeds 1234 and 1376271481. New architecture, shadows, coastlines, ocean highlights, clouds, ice, atmosphere and stars rendered successfully. Art remains procedural, with no high-resolution imported model/texture pack.
 - Standalone shader inclusion/performance and the full long-session acceptance checklist remain unverified.
+
+## Navigation, command UI and calendar review — 2026-10-23
+
+- Unity 2022.3.2f1 compiled the final gameplay and editor assemblies. All 37 real-scene checks passed, including reduced architecture scale, free camera movement, contextual inspector controls, focus effects, paid upgrades, suspension/resumption and JsonUtility round trips for building operations, calendar, played time, speed and pause. Console warning/error counters were both zero.
+- All 39 executable checks passed, including editor/player parsing of all 32 C# sources. `git diff --check` passed.
+- Clicking a rendered hab block opened its specific inspector without recentering the camera. Its selected high-density focus, tier-II statistics, upgrade cost and suspend control were visible. Orbital and close colony views rendered the new HUD and smaller gothic architecture.
+- Preserved the active review colony after an editor script reload: seed 282164432, Standard, 14 constructed buildings plus the three core structures, stockpile 32,049.38, population 3,169.95 and the pending Industrial Priorities choice. Restarted Play Mode and loaded it from disk. Ran the 37 checks again with this colony active; the command restored it automatically. F5 then saved all 14 constructions, core buildings, clock and pending choice through the game normally.
+- The review colony remains running in Unity with its unanswered choice. The recovery backup is local and excluded from Git. Exact target-resolution acceptance, a ten-minute engine performance run and a standalone player/shader build remain unverified.

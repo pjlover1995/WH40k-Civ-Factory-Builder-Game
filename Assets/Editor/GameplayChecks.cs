@@ -1,6 +1,7 @@
 #if UNITY_EDITOR
 using System;
 using System.IO;
+using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -21,6 +22,74 @@ public static class GameplayChecks
 {
     private static int checks;
 
+    [MenuItem("WH30K/Back Up Active Colony (Play Mode) %&b")]
+    public static void BackUpActiveColony()
+    {
+        if (!Application.isPlaying) throw new InvalidOperationException("Enter Play Mode first.");
+        var bootstrap = UnityEngine.Object.FindObjectOfType<PlanetBootstrap>();
+        var json = CaptureReviewColony(bootstrap);
+        if (json == null) throw new InvalidOperationException("No active colony to back up.");
+        WriteReviewBackup(json);
+        Debug.Log("Review colony backed up to .utmp/colony-before-gameplay-checks.json.");
+    }
+
+    private static string CaptureReviewColony(PlanetBootstrap bootstrap)
+    {
+        if (bootstrap == null || bootstrap.ActivePlanet == null) return null;
+        // Editor script recompilation resets static settings while retaining scene components.
+        if (!GameSettings.HasActiveGame)
+            GameSettings.ApplyLoadedState(bootstrap.ActivePlanet.Seed,
+                bootstrap.GetComponent<EnvironmentState>().Difficulty);
+        var saved = JsonUtility.FromJson<ReviewSave>(bootstrap.CaptureSaveJson());
+        var anchor = bootstrap.ActivePlanet.transform.Find("SettlementAnchor");
+        if (saved.settlement.buildings.Length == 0 && anchor != null)
+        {
+            var core = anchor.GetComponentsInChildren<ManagedBuilding>();
+            saved.settlement.buildings = Array.ConvertAll(core, building => building.Id);
+            saved.settlement.operations = Array.ConvertAll(core, building => building.State);
+        }
+        var placedRoot = bootstrap.ActivePlanet.transform.Find("PlacedStructures");
+        if (saved.structures.Length == 0 && placedRoot != null)
+        {
+            var grid = new PlanetGrid(bootstrap.ActivePlanet, saved.gridResolution);
+            var placed = new List<PlacedStructureSnapshot>();
+            foreach (var building in placedRoot.GetComponentsInChildren<ManagedBuilding>())
+            {
+                var cell = grid.GetCellFromWorld(building.transform.position);
+                placed.Add(new PlacedStructureSnapshot { id = building.Id, face = cell.Face,
+                    x = cell.X, y = cell.Y, operation = building.State });
+            }
+            saved.structures = placed.ToArray();
+        }
+        if (!saved.events.initialized && bootstrap.GetComponent<NewGameMenu>().HasOpenEvent)
+        {
+            var schedule = new EventSchedule(saved.seed, GameSettings.GetDefinition(saved.difficulty).eventFrequencyMultiplier);
+            schedule.TriggerNow(); saved.events = schedule.CreateSnapshot();
+        }
+        return JsonUtility.ToJson(saved, true);
+    }
+
+    // Editor-only recovery DTO: dictionaries and readonly lists do not survive script hot reload.
+    [Serializable]
+    private class ReviewSave
+    {
+        public int version, terrainVersion, seed, gridResolution;
+        public ClockSnapshot clock;
+        public GameSettings.Difficulty difficulty;
+        public EnvironmentSnapshot environment;
+        public ResourceSnapshot resources;
+        public SettlementSnapshot settlement;
+        public PlacedStructureSnapshot[] structures;
+        public EventSnapshot events;
+    }
+
+    private static void WriteReviewBackup(string json)
+    {
+        var directory = Path.Combine(Directory.GetParent(Application.dataPath).FullName, ".utmp");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "colony-before-gameplay-checks.json"), json);
+    }
+
     [MenuItem("WH30K/Run Gameplay Checks (Play Mode) %&g")]
     public static void Run()
     {
@@ -28,13 +97,8 @@ public static class GameplayChecks
             throw new InvalidOperationException("Open WH30K_VS01, enter Play Mode, then run these checks.");
         var bootstrap = UnityEngine.Object.FindObjectOfType<PlanetBootstrap>();
         if (bootstrap == null) throw new InvalidOperationException("Open the WH30K_VS01 scene first.");
-        var priorColony = GameSettings.HasActiveGame ? bootstrap.CaptureSaveJson() : null;
-        if (priorColony != null)
-        {
-            var directory = Path.Combine(Directory.GetParent(Application.dataPath).FullName, ".utmp");
-            Directory.CreateDirectory(directory);
-            File.WriteAllText(Path.Combine(directory, "colony-before-gameplay-checks.json"), priorColony);
-        }
+        var priorColony = CaptureReviewColony(bootstrap);
+        if (priorColony != null) WriteReviewBackup(priorColony);
         try { RunChecks(bootstrap); }
         finally
         {

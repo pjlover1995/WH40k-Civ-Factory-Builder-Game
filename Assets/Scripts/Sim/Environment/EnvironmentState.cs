@@ -20,6 +20,7 @@ namespace WH30K.Sim.Environment
         private float globalTempOffset;
 
         public float Habitability => ColonyRules.Habitability(co2, o2, waterPollution, globalTempOffset);
+        public GameSettings.Difficulty Difficulty => currentDifficulty.difficulty;
 
         public void ConfigureMenu(NewGameMenu newMenu)
         {
