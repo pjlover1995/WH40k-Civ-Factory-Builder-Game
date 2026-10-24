@@ -30,6 +30,20 @@ namespace WH30K.Planet
         public Material TerrainMaterial { get; private set; }
         public int TerrainVersion { get; private set; } = 1;
         public float SeaLevel => radius - (TerrainVersion == 0 ? 120f : 20f);
+        public Func<Vector3, float, float> ExcavationHeight { get; set; }
+        public int SurfaceRevision { get; private set; }
+
+        public void RefreshExcavation(Vector3 direction, float range)
+        {
+            SurfaceRevision++;
+            if (rootPatches == null) return;
+            var center = transform.TransformPoint(direction.normalized * EvaluateBaseHeight(direction.normalized));
+            foreach (var patch in rootPatches) patch?.RefreshSurface(center, range);
+        }
+        public void RebuildExcavatedSurface()
+        {
+            if(rootPatches!=null)foreach(var patch in rootPatches)patch?.RebuildDirtySurface();
+        }
 
         private readonly Vector3[] faceDirections =
         {
@@ -56,6 +70,7 @@ namespace WH30K.Planet
         public void BuildPlanet(int seed, Material material, int terrainVersion = 2)
         {
             Seed = seed;
+            ExcavationHeight = null;
             TerrainVersion = terrainVersion;
             TerrainMaterial = material;
 
@@ -159,7 +174,13 @@ namespace WH30K.Planet
             return Mathf.Clamp(BaseResolution, 8, MaxPatchResolution);
         }
 
-        internal float EvaluateHeight(Vector3 pointOnUnitSphere)
+        internal float EvaluateHeight(Vector3 direction)
+        {
+            var height = EvaluateBaseHeight(direction);
+            return ExcavationHeight != null ? ExcavationHeight(direction, height) : height;
+        }
+
+        public float EvaluateBaseHeight(Vector3 pointOnUnitSphere)
         {
             if (TerrainVersion == 0)
             {

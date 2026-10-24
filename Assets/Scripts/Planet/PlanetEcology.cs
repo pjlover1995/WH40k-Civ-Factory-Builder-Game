@@ -15,6 +15,7 @@ namespace WH30K.Planet
         private readonly List<Mesh> meshes = new List<Mesh>();
         private Material[] materials;
         private int lastBuildingCount;
+        private int lastSurfaceRevision;
         public void Configure(LODPlanet world)
         {
             planet = world;
@@ -33,8 +34,8 @@ namespace WH30K.Planet
             { if (root != null) root.gameObject.SetActive(false); return; }
             if (root != null) root.gameObject.SetActive(true);
             var count = FindObjectsOfType<ManagedBuilding>().Length;
-            if (root == null || Vector3.Distance(lastDirection, direction) * planet.Radius > 170 || count != lastBuildingCount)
-            { lastDirection = direction; lastBuildingCount = count; Generate(direction); }
+            if (root == null || Vector3.Distance(lastDirection, direction) * planet.Radius > 170 || count != lastBuildingCount || lastSurfaceRevision != planet.SurfaceRevision)
+            { lastDirection = direction; lastBuildingCount = count; lastSurfaceRevision = planet.SurfaceRevision; Generate(direction); }
         }
         private void Generate(Vector3 direction)
         {
@@ -52,6 +53,7 @@ namespace WH30K.Planet
                 var east=Vector3.Cross(n,Mathf.Abs(n.y)>.95f?Vector3.right:Vector3.up).normalized;var north=Vector3.Cross(n,east);
                 n=(n+(east*((float)random.NextDouble()-.5f)+north*((float)random.NextDouble()-.5f))*18/planet.Radius).normalized;
                 var position=planet.EvaluateSurfacePoint(n);
+                if(planet.EvaluateBaseHeight(n)-position.magnitude>.5f) continue;
                 if(position.magnitude<planet.SeaLevel+2) continue;
                 var occupied=false; foreach(var building in buildings)
                     if(Vector3.Distance(building.transform.position,transform.TransformPoint(position))<26) {occupied=true;break;}

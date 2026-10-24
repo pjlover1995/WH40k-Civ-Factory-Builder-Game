@@ -11,10 +11,14 @@ namespace WH30K.Sim.Resources
     public sealed class SurfaceDeposit
     {
         public int Id; public MaterialKind Kind; public Vector3 Direction, Position; public float Remaining=2000;
+        public ExcavationState Excavation;
+        internal Mesh pitMesh;
+        internal Transform pit;
+        internal float[] renderedRadii, renderedDepths;
         internal Transform outcrop, marker;
     }
     // Cargo is removed at dispatch and delivered only on arrival. Production never reads remote stock.
-    public sealed class IndustrySystem : MonoBehaviour
+    public sealed partial class IndustrySystem : MonoBehaviour
     {
         private LODPlanet planet;
         private BuildingPlacementController placement;
@@ -40,13 +44,19 @@ namespace WH30K.Sim.Resources
             routeMaterial=new Material(Shader.Find("Sprites/Default"));materials.Add(haulerMaterial);materials.Add(routeMaterial);
             GenerateDeposits(colonyNormal);
             if(saved!=null) foreach(var record in saved.deposits)
-                if(record.id<deposits.Count) deposits[record.id].Remaining=record.remaining;
+                if(record.id<deposits.Count)
+                {
+                    var deposit=deposits[record.id];deposit.Remaining=record.remaining;
+                    if(deposit.Kind!=MaterialKind.Biomass)
+                        deposit.Excavation=saved.geologyVersion==0?MiningRules.Create(planet.Seed,deposit.Id,deposit.Kind,record.remaining):record.excavation;
+                }
             Synchronize();
             if(saved!=null)
             {
                 stocks.Clear();stocks.AddRange(saved.facilities);
                 foreach(var cargo in saved.cargo) AddFlight(cargo);
             }
+            ConfigureExcavation(saved);
             Overlay=0;
         }
         private void GenerateDeposits(Vector3 colony)
@@ -86,6 +96,8 @@ namespace WH30K.Sim.Resources
         private void AddDeposit(MaterialKind kind,Vector3 n)
         {
             var deposit=new SurfaceDeposit {Id=deposits.Count,Kind=kind,Direction=n};deposits.Add(deposit);
+            if(kind!=MaterialKind.Biomass)
+            { deposit.Excavation=MiningRules.Create(planet.Seed,deposit.Id,kind);deposit.Remaining=MiningRules.Remaining(deposit.Excavation); }
             var point=planet.EvaluateSurfacePoint(n);var rotation=Quaternion.FromToRotation(Vector3.up,n);
             deposit.Position=planet.transform.TransformPoint(point);
             var outcrop=new GameObject(IndustryRules.Name(kind)+" outcrop",typeof(MeshFilter),typeof(MeshRenderer));outcrop.transform.SetParent(visualRoot,false);
@@ -120,28 +132,28 @@ namespace WH30K.Sim.Resources
             {
                 var kind=ExtractionKind(building);var deposit=NearestDeposit(building.transform.position,kind);
                 var distance=deposit==null?float.MaxValue:Vector3.Distance(building.transform.position,deposit.Position);
-                text.Append(distance<=250?$"{IndustryRules.Name(kind)}: {deposit.Remaining:0} remaining\n":$"No {IndustryRules.Name(kind).ToLowerInvariant()} within 250 m.\n");
+                text.Append(distance<=250?deposit.Excavation==null?$"{IndustryRules.Name(kind)}: {deposit.Remaining:0} remaining\n":
+                    $"{IndustryRules.Name(kind)}: {deposit.Remaining:0} lots\nAccessible {MiningRules.Remaining(deposit.Excavation,true):0} / limited {deposit.Remaining-MiningRules.Remaining(deposit.Excavation,true):0}\n":$"No {IndustryRules.Name(kind).ToLowerInvariant()} within 250 m.\n");
             }
             else text.Append(building.Id=="Smelter"?"2 ore + 1 biomass -> 1 metal\n":"2 metal + 1 stone + 0.5 crystal -> 1 component\n");
             for(var k=0;k<7;k++) if(stocks[index].quantities[k]>0) text.Append($"{IndustryRules.Name((MaterialKind)k)} {stocks[index].quantities[k]:0.#}  ");
-            text.Append("\nCargo haulers dispatch automatically to consumers.");return text.ToString();
+            text.Append("\nAutomatic cargo to consumers.");return text.ToString();
         }
         private MaterialKind ExtractionKind(ManagedBuilding building) => building.Id=="Quarry"?MaterialKind.Stone:building.Id=="Harvester"?MaterialKind.Biomass:
             building.State.focus==1?MaterialKind.CopperOre:building.State.focus==2?MaterialKind.Crystal:MaterialKind.IronOre;
         private void Synchronize()
         {
             if(placement==null) return;var current=placement.Buildings;
-            if(current.Length==buildings.Length) return;buildings=current;
-            while(stocks.Count<buildings.Length) stocks.Add(new FacilityStock());
-            if(stocks.Count>buildings.Length) stocks.RemoveRange(buildings.Length,stocks.Count-buildings.Length);
+            if(current.Length==buildings.Length) return;
+            RemapBuildings(current);
         }
         private void Update()
         {
-            Simulate(ColonyClock.DeltaTime);if(planet!=null) UpdateSurvey();
+            Simulate(ColonyClock.DeltaTime);if(planet!=null) { UpdateSurvey();PresentMiningDecision(); }
         }
         public void Simulate(float dt)
         {
-            if(planet==null || !ColonyRules.IsFinite(dt) || dt<0) return;Synchronize();
+            if(planet==null || !ColonyRules.IsFinite(dt) || dt<0 || conflict.active) return;Synchronize();
             if(dt>0)
             {
                 var jobs=0f;foreach(var building in settlement.CoreBuildings) jobs+=building.Economy.jobs;foreach(var building in buildings) jobs+=building.Economy.jobs;
@@ -157,15 +169,22 @@ namespace WH30K.Sim.Resources
                         if(IndustryRules.Extractor(building.Id))
                         {
                             var kind=ExtractionKind(building);var deposit=NearestDeposit(building.transform.position,kind);
-                            if(deposit!=null && deposit.Remaining>=1 && stocks[i].quantities[(int)kind]<IndustryRules.StorageLimit
+                            if(deposit!=null && deposit.Remaining>.0001f && stocks[i].quantities[(int)kind]<IndustryRules.StorageLimit
                                 && Vector3.Distance(building.transform.position,deposit.Position)<=250)
-                            {deposit.Remaining--;stocks[i].quantities[(int)kind]++;}
+                            {
+                                var amount=Mathf.Min(1,IndustryRules.StorageLimit-stocks[i].quantities[(int)kind]);
+                                if(deposit.Excavation==null) {amount=Mathf.Min(amount,deposit.Remaining);deposit.Remaining-=amount;stocks[i].quantities[(int)kind]+=amount;}
+                                else stocks[i].quantities[(int)kind]+=Excavate(deposit,i,amount);
+                            }
                         }
                         else IndustryRules.Process(building.Id,stocks[i].quantities);
+                        if(conflict.active){stocks[i].work=Mathf.Min(stocks[i].work,5);break;}
                     }
+                    if(conflict.active)break;
                 }
                 AdvanceCargo(dt);dispatchTimer+=dt;if(dispatchTimer>=1){dispatchTimer%=1;Dispatch();}
             }
+            FlushExcavations();
         }
         private void Dispatch()
         {
@@ -241,20 +260,25 @@ namespace WH30K.Sim.Resources
                 var world=deposit.Position;
                 var distance=Vector3.Distance(world,camera);var visible=Vector3.Dot(world-planet.transform.position,camera-world)>0;
                 deposit.outcrop.gameObject.SetActive(visible&&distance<2000&&deposit.Remaining>0);
+                if(deposit.outcrop.gameObject.activeSelf && deposit.Excavation!=null)
+                    deposit.outcrop.position=planet.transform.TransformPoint(planet.EvaluateSurfacePoint(deposit.Direction)+deposit.Direction*2);
                 var show=visible&&deposit.Remaining>0&&(Overlay==1||Overlay==(int)deposit.Kind+2);deposit.marker.gameObject.SetActive(show);
                 if(show){var scale=Mathf.Clamp(distance*.012f,7,260);deposit.marker.position=world+planet.transform.TransformDirection(deposit.Direction)*(scale+45);
                     deposit.marker.rotation=Quaternion.FromToRotation(Vector3.up,planet.transform.TransformDirection(deposit.Direction));deposit.marker.localScale=new Vector3(scale,scale*2,scale);}
             }
             foreach(var flight in flights)flight.line.enabled=Overlay!=0;
+            UpdateExcavationOutline();
         }
         public IndustrySnapshot Capture()
         {
             Synchronize();var savedStocks=new FacilityStock[stocks.Count];for(var i=0;i<stocks.Count;i++)savedStocks[i]=new FacilityStock{quantities=(float[])stocks[i].quantities.Clone(),work=stocks[i].work};
-            var savedDeposits=new DepositStock[deposits.Count];for(var i=0;i<deposits.Count;i++)savedDeposits[i]=new DepositStock{id=i,remaining=deposits[i].Remaining};
-            return new IndustrySnapshot{facilities=savedStocks,deposits=savedDeposits,cargo=flights.ConvertAll(f=>f.state).ToArray()};
+            var savedDeposits=new DepositStock[deposits.Count];for(var i=0;i<deposits.Count;i++)savedDeposits[i]=new DepositStock{id=i,kind=(int)deposits[i].Kind,remaining=deposits[i].Remaining,
+                excavation=CloneExcavation(deposits[i].Excavation)};
+            return new IndustrySnapshot{facilities=savedStocks,deposits=savedDeposits,cargo=flights.ConvertAll(f=>f.state).ToArray(),geologyVersion=1,
+                conflict=new MiningConflict{active=conflict.active,core=conflict.core,deposit=conflict.deposit,sector=conflict.sector,mine=conflict.mine,building=conflict.building}};
         }
         private void Clear()
-        {if(visualRoot!=null)Destroy(visualRoot.gameObject);foreach(var material in materials)if(material!=null)Destroy(material);materials.Clear();deposits.Clear();stocks.Clear();flights.Clear();buildings=Array.Empty<ManagedBuilding>();dispatchTimer=0;}
+        { ClearExcavation();if(visualRoot!=null)Destroy(visualRoot.gameObject);foreach(var material in materials)if(material!=null)Destroy(material);materials.Clear();deposits.Clear();stocks.Clear();flights.Clear();buildings=Array.Empty<ManagedBuilding>();dispatchTimer=0;}
         private void OnDestroy(){Clear();}
         private sealed class Flight{public CargoStock state;public Transform ship;public LineRenderer line;}
     }

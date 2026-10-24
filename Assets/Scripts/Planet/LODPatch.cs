@@ -23,6 +23,19 @@ namespace WH30K.Planet
         private LODPatch[] children;
         private Vector3 cachedCenter;
         private bool centerDirty = true;
+        private bool surfaceDirty;
+
+        public void RefreshSurface(Vector3 center, float range)
+        {
+            if (Vector3.Distance(center, GetCenterWorld()) > range + planet.Radius * 2.5f / Mathf.Pow(2, depth)) return;
+            surfaceDirty = true;
+            if (children != null) foreach (var child in children) child.RefreshSurface(center, range);
+        }
+        public void RebuildDirtySurface()
+        {
+            if(children!=null)foreach(var child in children)child.RebuildDirtySurface();
+            else if(surfaceDirty){Regenerate();surfaceDirty=false;}
+        }
 
         public void Initialize(LODPlanet parentPlanet, Vector3 faceNormal, Vector2 uvStart, Vector2 uvEnd, int lodDepth)
         {
@@ -148,6 +161,7 @@ namespace WH30K.Planet
 
         private void SetVisible(bool visible)
         {
+            if (visible && surfaceDirty) { Regenerate(); surfaceDirty = false; }
             if (meshRenderer != null)
             {
                 meshRenderer.enabled = visible;

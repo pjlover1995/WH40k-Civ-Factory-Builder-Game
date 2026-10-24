@@ -62,6 +62,24 @@ public static class GameplayChecks
         Debug.Log("Review colony backed up to .utmp/colony-before-gameplay-checks.json.");
     }
 
+    [MenuItem("WH30K/Review Excavation Test World %&m")]
+    public static void ReviewExcavation() => ReviewMiningFixture("excavation-review-fixture.json");
+    [MenuItem("WH30K/Review Mining Decision Test World %&n")]
+    public static void ReviewMiningDecision() => ReviewMiningFixture("excavation-conflict-fixture.json");
+    private static void ReviewMiningFixture(string name)
+    {
+        if(!Application.isPlaying)throw new InvalidOperationException("Enter Play Mode and run gameplay checks first.");
+        var bootstrap=UnityEngine.Object.FindObjectOfType<PlanetBootstrap>();
+        var file=Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp",name);
+        if(!File.Exists(file) || !bootstrap.TryLoadSaveJson(File.ReadAllText(file)))throw new InvalidOperationException("Run gameplay checks to generate this review fixture.");
+        var placement=bootstrap.GetComponent<BuildingPlacementController>();var mine=placement.Buildings[0];
+        var industry=bootstrap.GetComponent<IndustrySystem>();var deposit=industry.DepositFor(mine);
+        industry.ShowExcavationOutline(deposit);industry.SetOverlay(2);
+        Camera.main.GetComponent<SimpleOrbitCamera>().FocusLocation(deposit.Direction);
+        bootstrap.GetComponent<NewGameMenu>().ShowBuilding(mine);
+        bootstrap.GetComponent<NewGameMenu>().AppendEventLog("Temporary mining test world. F9 restores your disk colony; avoid saving over it.");
+    }
+
     private static string CaptureReviewColony(PlanetBootstrap bootstrap)
     {
         if (bootstrap == null || bootstrap.ActivePlanet == null) return null;
@@ -94,7 +112,7 @@ public static class GameplayChecks
             }
             saved.structures = placed.ToArray();
         }
-        if (!saved.events.initialized && bootstrap.GetComponent<NewGameMenu>().HasOpenEvent)
+        if (!saved.events.initialized && bootstrap.GetComponent<NewGameMenu>().HasNarrativeEvent)
         {
             var schedule = new EventSchedule(saved.seed, GameSettings.GetDefinition(saved.difficulty).eventFrequencyMultiplier);
             schedule.TriggerNow(); saved.events = schedule.CreateSnapshot();
@@ -144,6 +162,7 @@ public static class GameplayChecks
     private static void RunChecks(PlanetBootstrap bootstrap)
     {
         checks = 0;
+        var timer=System.Diagnostics.Stopwatch.StartNew();
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
         var planet = bootstrap.ActivePlanet;
         Check(Camera.main != null && !Camera.main.GetComponent<SimpleOrbitCamera>().IsSurfaceView
@@ -194,6 +213,7 @@ public static class GameplayChecks
 
         events.TriggerDebugEventNow();
         var json = bootstrap.CaptureSaveJson();
+        File.WriteAllText(Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp","checks-save-roundtrip.json"),json);
         Check(bootstrap.TryLoadSaveJson(json), "complete game loads from JsonUtility JSON");
         Check(bootstrap.ActivePlanet.TerrainVersion == 2, "new saves retain the varied terrain recipe");
         var loaded = placement.CreateSnapshot();
@@ -270,7 +290,8 @@ public static class GameplayChecks
             "building settings, calendar, real play time, speed and pause survive save/load");
         clock.SetSpeed(1);
         RunIndustryChecks(bootstrap);
-        Debug.Log($"WH30K gameplay checks: {checks} passed. Inspect camera, layout and terrain visually as well.");
+        RunMiningChecks(bootstrap);
+        Debug.Log($"WH30K gameplay checks: {checks} passed in {timer.Elapsed.TotalSeconds:0.0}s. Inspect camera, layout and terrain visually as well.");
     }
 
     private static void RunIndustryChecks(PlanetBootstrap bootstrap)
@@ -308,9 +329,9 @@ public static class GameplayChecks
         Check(PlaceNear(placement,"Smelter",colony,planet.Radius,125),"smelter is available through construction");
         Check(PlaceNear(placement,"Works",colony,planet.Radius,200),"fabrication works is available through construction");
         var beforeMoney=resources.Stockpile;
-        for(var step=0;step<220;step++)industry.Simulate(10);
+        for(var step=0;step<220;step++){if(industry.HasMiningDecision)industry.ResolveMiningConflict(false);industry.Simulate(10);}
         Check(resources.Stockpile>beforeMoney,"extraction, hauler arrivals, smelting and fabrication deliver components to the core factory for credits");
-        var snapshot=industry.Capture();var depleted=false;foreach(var deposit in snapshot.deposits) if(deposit.remaining<2000)depleted=true;
+        var snapshot=industry.Capture();var depleted=false;foreach(var deposit in snapshot.deposits) if(deposit.excavation!=null && Array.Exists(deposit.excavation.removed,v=>v>0))depleted=true;
         Check(depleted,"extraction actually depletes geological deposits");
         var ironMine=placement.Buildings[1];ironMine.ToggleOperation();
         var depositBefore=industry.NearestDeposit(ironMine.transform.position,MaterialKind.IronOre);var remaining=depositBefore.Remaining;
@@ -325,6 +346,116 @@ public static class GameplayChecks
         var loaded=placement.CreateSnapshot()[0];
         Check(loaded.freePlacement && loaded.nx==free.nx && loaded.ny==free.ny && loaded.nz==free.nz,"ocean construction retains its exact free placement after load");
         industry.SetOverlay(1);Camera.main.GetComponent<SimpleOrbitCamera>().FocusSettlement(colony);
+    }
+
+    private static void RunMiningChecks(PlanetBootstrap bootstrap)
+    {
+        bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard);
+        var planet=bootstrap.ActivePlanet;var industry=bootstrap.GetComponent<IndustrySystem>();var placement=bootstrap.GetComponent<BuildingPlacementController>();
+        var resources=bootstrap.GetComponent<ResourceSystem>();var clock=bootstrap.GetComponent<ColonyClock>();var menu=bootstrap.GetComponent<NewGameMenu>();
+        resources.ModifyStockpile(100000);
+        SurfaceDeposit chosen=null;ManagedBuilding mine=null;
+        foreach(var deposit in industry.Deposits)
+        {
+            if(deposit.Kind!=MaterialKind.IronOre)continue;
+            var far=true;foreach(var core in bootstrap.GetComponent<Settlement>().CoreBuildings)
+                if(Vector3.Distance(core.transform.position,deposit.Position)<1000)far=false;
+            if(!far)continue;
+            var right=Vector3.Cross(deposit.Direction,Mathf.Abs(deposit.Direction.y)>.95f?Vector3.right:Vector3.up).normalized;
+            var forward=Vector3.Cross(deposit.Direction,right);var angle=deposit.Excavation.bearing*Mathf.Deg2Rad;
+            var along=right*Mathf.Cos(angle)+forward*Mathf.Sin(angle);
+            placement.SelectStructure("Mine");
+            if(!placement.TryPlaceDirection((deposit.Direction-along*150/planet.Radius).normalized))continue;
+            mine=placement.Buildings[placement.Buildings.Length-1];chosen=deposit;
+            var definition=Array.Find(UnityEngine.Resources.LoadAll<BuildableStructure>("Buildings"),d=>d.Id=="Outpost");
+            var distance=32+new Vector2(definition.Dimensions.x,definition.Dimensions.z).magnitude*.5f+17;
+            placement.SelectStructure("Outpost");
+            Check(placement.TryPlaceDirection((deposit.Direction+along*distance/planet.Radius).normalized),"neighbouring facility can be placed ahead of a future mine cut");
+            break;
+        }
+        Check(chosen!=null && mine!=null,"mining test has an isolated iron ore body and an actual mine");
+        var original=chosen.Remaining;var outpost=placement.Buildings[1];
+        for(var step=0;step<1200 && !industry.HasMiningDecision;step++)industry.Simulate(10);
+        Check(industry.HasMiningDecision && chosen.Remaining<original && placement.Buildings.Length==2,
+            "expanding a working pit detects its neighbour before demolishing or undermining it");
+        var pending=industry.PendingConflict;var before=chosen.Remaining;
+        industry.Simulate(500);
+        Check(clock.Paused && chosen.Remaining==before,"an unanswered mining decision pauses time and all further extraction");
+        Check(IndustryRules.Valid(industry.Capture(),2),"conflict interruption leaves partial work and industrial state valid");
+        var json=bootstrap.CaptureSaveJson();var exact=JsonUtility.ToJson(industry.Capture());
+        File.WriteAllText(Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp","excavation-conflict-fixture.json"),json);
+        Check(bootstrap.TryLoadSaveJson(json) && JsonUtility.ToJson(industry.Capture())==exact && industry.HasMiningDecision,
+            "complete save/load restores exact benches, reserves and the pending expansion decision");
+        planet=bootstrap.ActivePlanet;chosen=(SurfaceDeposit)industry.Deposits[pending.deposit];mine=placement.Buildings[0];
+        Check(industry.ResolveMiningConflict(false) && placement.Buildings.Length==2 && (chosen.Excavation.blocked&1<<pending.sector)!=0,
+            "limiting a direction protects the facility and marks that ore inaccessible");
+        Check(MiningRules.Remaining(chosen.Excavation,true)<chosen.Remaining,"directional limits reduce the accessible geological reserve");
+        var rightAxis=Vector3.Cross(chosen.Direction,Mathf.Abs(chosen.Direction.y)>.95f?Vector3.right:Vector3.up).normalized;
+        var forwardAxis=Vector3.Cross(chosen.Direction,rightAxis);
+        var workedSector=Array.FindIndex(chosen.Excavation.removed,amount=>amount>0);
+        var cutAngle=(chosen.Excavation.bearing+workedSector*45)*Mathf.Deg2Rad;
+        var sample=(chosen.Direction+(rightAxis*Mathf.Cos(cutAngle)+forwardAxis*Mathf.Sin(cutAngle))*20/planet.Radius).normalized;
+        Check(planet.EvaluateSurfacePoint(sample).magnitude<planet.EvaluateBaseHeight(sample)-.5f
+            && planet.transform.Find("Geological survey and cargo/Excavation benches - survey "+chosen.Id)!=null,
+            "excavation lowers the actual heightfield and creates a rendered terraced mine mesh");
+        var limitJson=bootstrap.CaptureSaveJson();Check(bootstrap.TryLoadSaveJson(limitJson)
+            && (industry.Deposits[pending.deposit].Excavation.blocked&1<<pending.sector)!=0,"protected mining directions survive the full persistence path");
+        planet=bootstrap.ActivePlanet;chosen=(SurfaceDeposit)industry.Deposits[pending.deposit];mine=placement.Buildings[0];
+        industry.ToggleSector(mine,pending.sector);
+        for(var step=0;step<100 && !industry.HasMiningDecision;step++)industry.Simulate(10);
+        Check(industry.HasMiningDecision,"reopening a protected direction checks the threatened facility again");
+        // Add an unaffected facility after the threatened index; verify demolition remaps its stocks and cargo.
+        Check(PlaceNear(placement,"Smelter",chosen.Direction,planet.Radius,210),"a later-index facility is available for demolition remapping checks");
+        var saved=industry.Capture();saved.facilities[2].quantities[5]=7;
+        saved.cargo=new[]{new CargoStock{source=0,target=2,kind=0,amount=2,progress=.25f},new CargoStock{source=0,target=1,kind=0,amount=1,progress=.1f}};
+        // Configure is the same restore implementation used by the bootstrap after document validation.
+        industry.Configure(planet,bootstrap.GetComponent<Settlement>().CreateSnapshot().normal,saved);
+        Check(industry.ResolveMiningConflict(true) && placement.Buildings.Length==2 && placement.Buildings[1].Id=="Smelter",
+            "demolition removes only the chosen facility and retains later buildings");
+        var remapped=industry.Capture();
+        Check(remapped.facilities[1].quantities[5]==7 && remapped.cargo.Length==1 && remapped.cargo[0].target==1 && IndustryRules.Valid(remapped,2),
+            "demolition keeps unaffected inventory and cargo, remaps endpoints and removes linked shipments");
+        Check(!industry.ResolveMiningConflict(true),"the same demolition decision cannot execute twice");
+        saved=industry.Capture();var nextSector=MiningRules.NextSector(saved.deposits[pending.deposit].excavation);
+        saved.conflict=new MiningConflict{active=true,core=true,deposit=pending.deposit,sector=nextSector,mine=0,building=0};
+        industry.Configure(planet,bootstrap.GetComponent<Settlement>().CreateSnapshot().normal,saved);
+        bootstrap.GetComponent<ColonyEventSystem>().TriggerDebugEventNow();
+        Check(!menu.CanPresentMiningDecision && menu.HasNarrativeEvent && industry.HasMiningDecision,
+            "narrative and mining decisions remain separate and retain both unanswered choices");
+        Check(!industry.ResolveMiningConflict(true) && industry.HasMiningDecision,"core facilities cannot be demolished by an expansion decision");
+        Check(industry.ResolveMiningConflict(false) && clock.Paused && menu.HasNarrativeEvent,
+            "limiting a core-facing cut preserves the narrative decision and its pause");
+        // Start again from the post-demolition industrial state to make the review fixture independent of the narrative test.
+        saved.conflict=new MiningConflict();industry.Configure(planet,bootstrap.GetComponent<Settlement>().CreateSnapshot().normal,saved);
+        bootstrap.GetComponent<ColonyEventSystem>().EndSession();
+        saved=industry.Capture();var deepBody=saved.deposits[pending.deposit].excavation;
+        for(var s=0;s<8;s++)deepBody.removed[s]=deepBody.capacity[s]*.68f;
+        saved.deposits[pending.deposit].remaining=MiningRules.Remaining(deepBody);
+        industry.Configure(planet,bootstrap.GetComponent<Settlement>().CreateSnapshot().normal,saved);
+        chosen=(SurfaceDeposit)industry.Deposits[pending.deposit];
+        placement.SelectStructure("Utility");
+        Check(placement.TryPlaceDirection(chosen.Direction),"construction can occupy a worked mine floor when no building overlaps");
+        var foundation=placement.Buildings[2].transform.position;
+        Check(foundation.magnitude<planet.EvaluateBaseHeight(chosen.Direction)-4,"a facility in a deep pit uses the excavated ground elevation");
+        var floorSave=bootstrap.CaptureSaveJson();
+        Check(bootstrap.TryLoadSaveJson(floorSave) && Vector3.Distance(placement.Buildings[2].transform.position,foundation)<.01f,
+            "loading retains foundation elevation inside excavated ground");
+        planet=bootstrap.ActivePlanet;
+        var oldSave=JsonUtility.FromJson<ReviewSave>(floorSave);oldSave.version=5;
+        for(var d=0;d<oldSave.industry.deposits.Length;d++)oldSave.industry.deposits[d].remaining=1234.5f+d%100;
+        var migrationTimer=System.Diagnostics.Stopwatch.StartNew();
+        Check(bootstrap.TryLoadSaveJson(JsonUtility.ToJson(oldSave)) && Mathf.Abs(industry.Deposits[0].Remaining-1234.5f)<.001f
+            && IndustryRules.Valid(industry.Capture(),placement.Buildings.Length),"version-five migration preserves finite remaining quantities and creates valid excavation state");
+        Debug.Log($"Bulk excavation migration: {oldSave.industry.deposits.Length} deposits in {migrationTimer.Elapsed.TotalSeconds:0.00}s.");
+        Check(bootstrap.TryLoadSaveJson(floorSave),"the full deep-pit review world restores after a legacy migration check");
+        planet=bootstrap.ActivePlanet;
+        // Retain a reproducible local review fixture without touching the player's normal save.
+        if(!clock.Paused)clock.TogglePause();
+        var directory=Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp");
+        File.WriteAllText(Path.Combine(directory,"excavation-review-fixture.json"),bootstrap.CaptureSaveJson());
+        industry.ShowExcavationOutline(industry.Deposits[pending.deposit]);industry.SetOverlay(2);
+        Camera.main.GetComponent<SimpleOrbitCamera>().FocusLocation(industry.Deposits[pending.deposit].Direction);
+        menu.ShowBuilding(placement.Buildings[0]);
     }
 
     private static bool PlaceNear(BuildingPlacementController placement,string id,Vector3 normal,float radius,float distance=0)

@@ -9,13 +9,13 @@ dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .
 git diff --check
 ```
 
-The executable links the actual production files `ColonyRules`, `EnvironmentRules`, `ConstructionSave`, `EventSchedule`, and `IndustryRules`. It exercises payment boundaries, capacity/output changes, environmental feedback and cleanup, save validation, event RNG/timer persistence, repeated decisions, and ten minutes of simulation. Roslyn also parses every C# source with and without `UNITY_EDITOR`. Parsing does not establish compatibility with Unity's engine APIs.
+The executable links the actual production files `ColonyRules`, `EnvironmentRules`, `ConstructionSave`, `EventSchedule`, `IndustryRules`, and `MiningRules`. It exercises payment boundaries, capacity/output changes, environmental feedback and cleanup, save validation, event RNG/timer persistence, repeated decisions, and ten minutes of simulation. Roslyn also parses every C# source with and without `UNITY_EDITOR`. Parsing does not establish compatibility with Unity's engine APIs.
 
 ## Unity integration checks
 
 1. Open the project with Unity 2022.3.2f1. Confirm there are no compiler errors or missing scripts.
 2. Open `Assets/Scenes/Prototype/WH30K_VS01.unity` and enter Play Mode.
-3. Select **WH30K > Run Gameplay Checks (Play Mode)**. Expect 64 passing scene checks in the Console. The checks temporarily replace the world, then restore the current colony without changing its disk save. Ctrl+Alt+G also runs this command.
+3. Select **WH30K > Run Gameplay Checks (Play Mode)**. Expect 87 passing scene checks in the Console. The checks temporarily replace the world, then restore the current colony without changing its disk save. Ctrl+Alt+G also runs this command.
 
 Save with F5 before changing scripts during Play Mode. Unity domain reload clears runtime dictionaries, static settings and event callbacks. **WH30K > Back Up Active Colony (Play Mode)** (Ctrl+Alt+B) writes `.utmp/colony-before-gameplay-checks.json` without replacing the normal disk save. Its recovery path reconstructs missing building lists from scene components and preserves a visible unanswered decision; if the scheduler was lost during reload, its future random sequence restarts from the world seed. Restart Play Mode and load the recovered save before continuing review. Normal save/load preserves the exact scheduler state.
 
@@ -38,6 +38,13 @@ Save with F5 before changing scripts during Play Mode. Unity domain reload clear
 14. Save with cargo in flight and partly completed production. Reload: local stock, incoming storage reservations, cargo progress and remaining deposits persist. Older version-4 colonies retain buildings, credits and terrain while initializing industry empty.
 15. At 1x, watch a three-minute lighting cycle; pause and change speed to verify lighting, waves and orbital positions follow simulated time. Inspect the moon silhouettes, sun and distant world from orbit. On ocean coasts, zoom in to inspect swells/foam and pan across the local water mesh boundary.
 16. In forests/wetlands, pan beyond the colony: vegetation tiles change without unbounded object growth. Check mineral outcrops and new building models remain distinguishable at colony zoom. Verify all three construction pages and the resource inspector at the target resolutions.
+
+17. Open a mine or quarry's Excavation Plan. Review finite reserves, accessible/protected ore, grade, depth and eight sector controls. Limits and reopened directions must survive save/load; Inspect Cuts shows lettered gold/red outlines.
+18. Work a mineral body: cuts widen, descend into benches and clear vegetation. Biomass must not excavate. Exhausted or fully limited bodies stop producing ore and retain their cuts.
+19. Place a facility ahead of a growing cut. A decision pauses simulation before the safety margin is crossed. Test limiting and demolition in a temporary world; unaffected inventories/cargo must persist. Core facilities require protection.
+20. Save with mining and narrative decisions pending together. Both must retain callbacks and pause state. Build inside a pit, then reload and verify foundation elevation.
+
+After a successful scene check run, **WH30K > Review Excavation Test World** (Ctrl+Alt+M) and **Review Mining Decision Test World** (Ctrl+Alt+N) load local test fixtures without changing the normal disk save. F9 restores the player colony. Avoid F5 in a test world.
 
 Record Unity version, seed, difficulty, check output, screenshots, and any observed performance issues when completing these checks.
 
@@ -67,7 +74,7 @@ Record Unity version, seed, difficulty, check output, screenshots, and any obser
 - The review colony remains running in Unity with its unanswered choice. The recovery backup is local and excluded from Git. Exact target-resolution acceptance, a ten-minute engine performance run and a standalone player/shader build remain unverified.
 
 
-## Geography, orbital bodies and industry � 2026-10-24
+## Geography, orbital bodies and industry — 2026-10-24
 
 - Unity 2022.3.2f1 / DX11 compiled both editor and player assemblies. All **64 scene checks** passed on the final gameplay code, including all nine building mesh budgets, multiple terrain biomes and relief, celestial body creation, ocean/free placement, overlap rejection, resource catchments, extraction/depletion, the full hauler-to-smelter-to-fabrication-to-credit chain, suspended extraction, and exact JsonUtility round trips for inventory, work, depleted deposits and cargo in flight. The final Console warning/error counters were zero.
 - All **52 executable checks** passed, including production recipes, no-consumption-on-missing-input/full-output cases, incoming cargo capacity, invalid transport endpoints, free directions/duplicate placement, deterministic lighting phase, earlier economy/event/calendar checks and editor/player parsing of all 37 C# sources. `git diff --check` passed.
@@ -76,3 +83,14 @@ Record Unity version, seed, difficulty, check output, screenshots, and any obser
 - Built a Windows x64 development player successfully using WH30K > Build Review Player. Output is local in `.utmp/ReviewPlayer/WH30K Colony.exe`; it is excluded from Git. The player launched with a 1280x800 window request and produced no startup exception or shader error in its log. Computer-use approval for the separate executable timed out, so standalone on-screen interactions and exact-resolution layout acceptance remain unverified; editor interactions and automated scene checks were completed instead.
 - Loaded the user's existing seed-282164432 version-4 colony and saved it as version 5. Compared its data with `.utmp/colony-before-geography-update.json`: all 16 placement identities/cells and individual operations, credits, pending event state and terrain recipe matched. Industry initialized 16 empty building stores. A second local migration backup is `.utmp/colony-after-geography-migration.json`.
 - Geography recipe 2 applies to new worlds. Existing colonies gain survey/industry, ecology, waves and orbital presentation while keeping their saved geography. The sun's 180-second visual day and compressed moon paths are presentation cycles, not orbital physics. Vegetation, buildings and resources remain procedural art. Resource reward/upkeep balance, a timed large-colony performance run, the full three-minute visual lighting acceptance pass and both exact target resolutions still need dedicated play testing.
+
+
+## Finite ore bodies and excavation — 2026-10-24
+
+- All **69 executable checks** passed, including seeded reserve/grade/geometry variation, deeper/wider benches, directional exclusion, finite exhaustion, migration without refilling ore, mining-decision JSON validation and invalid foundation elevations. All **40 C# sources** parse for editor and player. Whitespace verification passed.
+- Unity 2022.3.2f1 / DX11 compiled the final gameplay/editor assemblies. All **87 scene checks** passed on the final code in **19.5 seconds**, including actual terrain lowering and pit meshes, detection before undermining neighbours, paused extraction, exact pending-decision persistence, limiting/reopening, demolition, inventory/cargo remapping, protected core facilities, simultaneous narrative/mining choices, construction inside deep cuts and retained foundation elevation after load.
+- The bulk version-5 migration fixture contains **164 deposits** with historical depletion. Its final run loaded in **3.70 seconds**. Spatial indexing bounds terrain sampling to nearby excavations; terrain mesh invalidations are batched. This is a bounded loading check, not a long-session frame-rate benchmark.
+- Through actual Unity mouse input, opened Excavation Plan, limited a sector and observed lower accessible ore, inspected lettered red/gold outlines and rendered terraced cuts, viewed an expansion warning, chose protection, and inspected a threatened facility with the modal hidden while time remained paused. The return control reopened the same decision. The final scene-check Console showed zero warnings/errors.
+- Loaded the existing seed-282164432 schema-5 colony and saved through F5 as schema 6. Compared it with `.utmp/colony-before-excavation.json`: all **16** construction identities, cells/directions and operations, full resource snapshot, seed, terrain recipe, pending narrative event and every deposit's remaining quantity matched. Re-ran the final scene checks with this colony active; it was restored automatically. Local migration copy: `.utmp/colony-after-excavation-migration.json`.
+- The fixtures can be reviewed using the WH30K menu. Art remains procedural, ore quantities are compressed gameplay lots, and retained foundations are an abstraction. Underground workings, slope-stability engineering, waste/tailings transport, reclamation, exact-resolution layout acceptance and a sustained large-colony frame-rate run remain outside this verified slice.
+- The updated Windows x64 development player built successfully from the final sources using **WH30K > Build Review Player**, including player assembly compilation. Output: `.utmp/ReviewPlayer/WH30K Colony.exe`. This build was not launched for standalone interaction testing; editor rendering and mouse/keyboard checks were completed.

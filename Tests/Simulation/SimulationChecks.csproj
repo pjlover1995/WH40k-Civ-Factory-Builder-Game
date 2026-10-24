@@ -12,6 +12,7 @@
     <Compile Include="../../Assets/Scripts/Sim/BuildingOperationRules.cs" />
     <Compile Include="../../Assets/Scripts/Sim/ColonyCalendar.cs" />
     <Compile Include="../../Assets/Scripts/Sim/IndustryRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/MiningRules.cs" />
     <Compile Include="../../Assets/Scripts/Sim/Environment/EnvironmentRules.cs" />
     <Compile Include="../../Assets/Scripts/Sim/Events/EventSchedule.cs" />
     <Compile Include="../../Assets/Scripts/Game/Construction/ConstructionSave.cs" />

@@ -16,7 +16,7 @@ using WH30K.Sim.Settlements;
 namespace WH30K.UI
 {
     [RequireComponent(typeof(PlanetBootstrap))]
-    public class NewGameMenu : MonoBehaviour
+    public partial class NewGameMenu : MonoBehaviour
     {
         private static readonly Color Gold = new Color(0.80f, 0.65f, 0.38f);
         private static readonly Color Ivory = new Color(0.88f, 0.90f, 0.87f);
@@ -60,7 +60,8 @@ namespace WH30K.UI
 #if UNITY_EDITOR
         private GameObject debugPanel;
 #endif
-        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf;
+        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf || MiningPanelOpen;
+        public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
         public ManagedBuilding InspectedBuilding => selectedBuilding;
         private SimpleOrbitCamera Orbit => Camera.main != null ? Camera.main.GetComponent<SimpleOrbitCamera>() : null;
 
@@ -115,6 +116,7 @@ namespace WH30K.UI
             colonyMarker.onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             BuildNewGame(root.transform);
             BuildEvent(root.transform);
+            BuildMiningPanel(root.transform);
 #if UNITY_EDITOR
             BuildDebug(root.transform);
 #endif
@@ -209,7 +211,7 @@ namespace WH30K.UI
 
         private void BuildInspector(Transform parent)
         {
-            inspector = Panel("BuildingInspector", parent, new Vector2(294, 454), new Vector2(-16, -132), TextAnchor.UpperRight);
+            inspector = Panel("BuildingInspector", parent, new Vector2(294, 496), new Vector2(-16, -132), TextAnchor.UpperRight);
             Label("InspectorTag", inspector.transform, "STRUCTURE DIRECTORATE", 10, new Vector2(18, -16), 230, 20, Gold);
             Button("CloseInspector", inspector.transform, new Vector2(252, -12), "X", out _, 26, 26)
                 .onClick.AddListener(() => selection.Select(null));
@@ -231,6 +233,8 @@ namespace WH30K.UI
             });
             operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -402), "", out operationLabel, 124, 34);
             operationButton.onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.ToggleOperation(); RefreshBuilding(); });
+            excavationButton = Button("ExcavationPlan", inspector.transform, new Vector2(18, -448), "EXCAVATION PLAN", out _, 258, 30);
+            excavationButton.onClick.AddListener(() => OpenExcavationPlan(selectedBuilding));
             inspector.SetActive(false);
         }
 
@@ -314,7 +318,7 @@ namespace WH30K.UI
             var snapshot = clock.Snapshot;
             dateText.text = $"{ColonyCalendar.Day(snapshot.simulationSeconds):00} {months[ColonyCalendar.Month(snapshot.simulationSeconds) - 1]}  /  YEAR {ColonyCalendar.Year(snapshot.simulationSeconds):000}";
             var played = TimeSpan.FromSeconds(snapshot.playedSeconds);
-            var mode = clock.DecisionPending ? "DECISION PENDING" : clock.Paused ? "PAUSED" : clock.Speed + "x SPEED";
+            var mode = clock.DecisionPending || clock.MiningDecisionPending ? "DECISION PENDING" : clock.Paused ? "PAUSED" : clock.Speed + "x SPEED";
             clockText.text = $"{mode}   |   PLAYED {(int)played.TotalHours:00}:{played.Minutes:00}:{played.Seconds:00}";
             Tone(pauseButton, clock.Paused);
             var speeds = new[] { 1, 3, 10 };
@@ -358,6 +362,7 @@ namespace WH30K.UI
             upgradeButton.interactable = selectedBuilding.CanUpgrade;
             upgradeLabel.text = state.level >= 2 ? "MAXIMUM TIER" : $"UPGRADE  {selectedBuilding.UpgradeCost:0}";
             operationLabel.text = state.offline ? "RESUME" : "SUSPEND";
+            excavationButton.gameObject.SetActive(selectedBuilding.Id=="Mine" || selectedBuilding.Id=="Quarry");
         }
 
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
@@ -396,7 +401,7 @@ namespace WH30K.UI
         }
         public void ShowNewGamePanel(bool visible) { newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
         public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) selection.Select(null); }
-        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible || (newGamePanel!=null && newGamePanel.activeSelf); }
+        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible || MiningPanelOpen || (newGamePanel!=null && newGamePanel.activeSelf); }
         public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
         public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)

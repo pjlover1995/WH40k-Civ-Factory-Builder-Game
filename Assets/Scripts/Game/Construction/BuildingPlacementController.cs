@@ -149,7 +149,8 @@ namespace WH30K.Gameplay.Construction
                 {
                     id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y,
                     operation = entry.Instance.GetComponent<ManagedBuilding>().State,
-                    freePlacement = entry.FreePlacement, nx = entry.Direction.x, ny = entry.Direction.y, nz = entry.Direction.z
+                    freePlacement = entry.FreePlacement, nx = entry.Direction.x, ny = entry.Direction.y, nz = entry.Direction.z,
+                    hasElevation=true, elevation=planet.transform.InverseTransformPoint(entry.Instance.transform.position).magnitude
                 });
             return snapshots.ToArray();
         }
@@ -170,6 +171,11 @@ namespace WH30K.Gameplay.Construction
                     var definition = Array.Find(availableStructures, item => item.Id == snapshot.id);
                     var cell = new PlanetGridCell(snapshot.face, snapshot.x, snapshot.y);
                     var frame = snapshot.freePlacement ? FrameAt(new Vector3(snapshot.nx, snapshot.ny, snapshot.nz), definition) : grid.CalculateFrame(cell);
+                    if(snapshot.hasElevation)
+                    {
+                        var n=planet.transform.InverseTransformPoint(frame.Center).normalized;
+                        frame=new CellFrame(cell,planet.transform.TransformPoint(n*snapshot.elevation),frame.Normal,frame.Right,frame.Forward,10,10);
+                    }
                     SpawnStructure(frame, definition, snapshot.freePlacement).Restore(snapshot.operation);
                 }
             RefreshEconomy();
@@ -337,6 +343,17 @@ namespace WH30K.Gameplay.Construction
 
         private static float FootprintRadius(BuildableStructure definition)
             => new Vector2(definition.Dimensions.x, definition.Dimensions.z).magnitude * 0.5f;
+
+        // Industry remaps inventory and cargo before removing an entry from this ordered list.
+        public bool Demolish(ManagedBuilding building)
+        {
+            var index = placedStructures.FindIndex(p => p.Instance.GetComponent<ManagedBuilding>() == building);
+            if (index < 0) return false;
+            var instance = placedStructures[index].Instance;
+            placedStructures.RemoveAt(index);
+            instance.SetActive(false); Destroy(instance);
+            RefreshEconomy(); return true;
+        }
 
         private void UpdatePreview(CellFrame frame, bool placementValid)
         {

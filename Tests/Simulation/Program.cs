@@ -40,6 +40,45 @@ internal static class Program
         try
         {
             var money = 500f;
+            var ore=MiningRules.Create(1234,10,MaterialKind.IronOre);
+            var copperBody=MiningRules.Create(1234,10,MaterialKind.CopperOre);
+            Check(MiningRules.Valid(ore) && ore.grade>=.5f && copperBody.grade<.02f && ore.majorRadius>ore.minorRadius,
+                "geological profiles distinguish enriched iron lenses and low-grade disseminated copper");
+            Check(JsonSerializer.Serialize(ore,JsonOptions)==JsonSerializer.Serialize(MiningRules.Create(1234,10,MaterialKind.IronOre),JsonOptions),
+                "seeded ore geometry, grades and directional reserves are deterministic");
+            Check(MiningRules.Remaining(ore)!=MiningRules.Remaining(MiningRules.Create(1234,11,MaterialKind.IronOre)),
+                "ore bodies have varied finite reserves instead of a fixed resource counter");
+            var initialOre=MiningRules.Remaining(ore);var originalRadius=MiningRules.Radius(ore,0);
+            MiningRules.Extract(ore,0,ore.capacity[0]*.2f);var shallowDepth=MiningRules.Depth(ore,0);var shallowRadius=MiningRules.Radius(ore,0);
+            MiningRules.Extract(ore,0,ore.capacity[0]*.4f);
+            Check(MiningRules.Depth(ore,0)>shallowDepth && MiningRules.Radius(ore,0)>shallowRadius && shallowRadius>originalRadius,
+                "working an ore body widens the pit and descends to deeper benches");
+            var physicalRemaining=MiningRules.Remaining(ore);var recoverable=MiningRules.Remaining(ore,true);
+            MiningRules.Limit(ore,1);
+            Check(MiningRules.Remaining(ore)==physicalRemaining && MiningRules.Remaining(ore,true)<recoverable && MiningRules.NextSector(ore)!=1
+                && MiningRules.Extract(ore,1,1)==0,"directional limits retain ore in ground and exclude it from mine extraction");
+            Check(MiningRules.Threatens(ore,0,40,ore.bearing,18) && !MiningRules.Threatens(ore,0,1000,ore.bearing,18)
+                && !MiningRules.Threatens(ore,0,40,ore.bearing+180,1),"expansion tests use the working direction, facility footprint and safety margin");
+            Check(MiningRules.Threatens(ore,0,1,ore.bearing+180,20),"facilities over the pit centre are protected regardless of sector bearing");
+            var migrated=MiningRules.Create(1234,10,MaterialKind.IronOre,1578.5f);
+            Check(Math.Abs(MiningRules.Remaining(migrated)-1578.5f)<.001f,"legacy deposit migration preserves remaining ore rather than refilling it");
+            for(var s=0;s<8;s++)MiningRules.Limit(ore,s);
+            Check(MiningRules.NextSector(ore)==-1 && MiningRules.Remaining(ore,true)==0 && MiningRules.Remaining(ore)>0,
+                "a fully constrained mine stops while retaining inaccessible ore");
+            ore.blocked=0;var extracted=initialOre-physicalRemaining;
+            for(var s=0;s<8;s++)extracted+=MiningRules.Extract(ore,s,float.MaxValue);
+            Check(MiningRules.NextSector(ore)==-1 && MiningRules.Remaining(ore)<.001f && Math.Abs(extracted-initialOre)<.001f
+                && MiningRules.Extract(ore,0,1)==0,"finite veins exhaust exactly without creating ore or extracting negative residues");
+            Check(MiningRules.Extract(ore,0,float.NaN)==0,"invalid extraction requests cannot corrupt ore state");
+            var miningSave=new IndustrySnapshot{facilities=new[]{new FacilityStock(),new FacilityStock()},cargo=Array.Empty<CargoStock>(),geologyVersion=1,
+                deposits=new[]{new DepositStock{id=0,remaining=MiningRules.Remaining(migrated),excavation=migrated}},
+                conflict=new MiningConflict{active=true,deposit=0,sector=2,mine=0,building=1}};
+            Check(IndustryRules.Valid(miningSave,2),"a pending expansion decision and partial benches form a valid industrial save");
+            var miningReload=JsonSerializer.Deserialize<IndustrySnapshot>(JsonSerializer.Serialize(miningSave,JsonOptions),JsonOptions);
+            Check(miningReload.conflict.active && miningReload.conflict.building==1 && miningReload.deposits[0].excavation.removed[0]==migrated.removed[0],
+                "JSON preserves directional excavation and the exact unanswered expansion decision");
+            miningReload.conflict.building=20;Check(!IndustryRules.Valid(miningReload,2),"invalid mining decision endpoints are rejected");
+            migrated.removed[0]=migrated.capacity[0]+1;Check(!MiningRules.Valid(migrated),"excavated ore cannot exceed the geological reserve");
             var stock=new float[7];stock[0]=2;
             Check(!IndustryRules.Process("Smelter",stock)&&stock[0]==2,"smelting waits for fuel without consuming ore");
             stock[3]=1;
@@ -55,11 +94,16 @@ internal static class Program
             var logistics=new IndustrySnapshot{facilities=new[]{new FacilityStock(),new FacilityStock()},deposits=new[]{new DepositStock{id=0,remaining=1999}},
                 cargo=new[]{new CargoStock{source=0,target=1,kind=0,amount=3,progress=.5f}}};
             Check(IndustryRules.Valid(logistics,2),"valid industrial saves retain in-flight cargo and depleted deposits");
+            logistics.deposits[0].remaining=2500;
+            Check(!IndustryRules.Valid(logistics,2),"legacy deposits cannot exceed their original capacity during migration");
+            logistics.deposits[0].remaining=1999;
             logistics.facilities[1].quantities[0]=119;
             Check(!IndustryRules.Valid(logistics,2),"incoming cargo reserves destination storage capacity");
             logistics.facilities[1].quantities[0]=0;logistics.cargo[0].target=3;
             Check(!IndustryRules.Valid(logistics,2),"invalid transport endpoints are rejected before loading");
             Check(ConstructionSave.ValidDirection(1,0,0)&&!ConstructionSave.ValidDirection(float.NaN,0,0)&&!ConstructionSave.ValidDirection(0,0,0),"free placement requires a finite unit surface direction");
+            Check(!ConstructionSave.Validate(new[]{new PlacedStructureSnapshot{id="Outpost",freePlacement=true,nx=1,hasElevation=true,elevation=float.NaN}},96,Ids,out _),
+                "invalid saved foundation elevations are rejected before loading");
             var free=new[]{new PlacedStructureSnapshot{id="Outpost",freePlacement=true,nx=1},new PlacedStructureSnapshot{id="Outpost",freePlacement=true,nx=.99995f,ny=.01f}};
             Check(ConstructionSave.Validate(free,96,Ids,out _),"separate free placements may share a legacy grid cell");
             free[1]=free[0];Check(!ConstructionSave.Validate(free,96,Ids,out _),"duplicate free surface positions are rejected");

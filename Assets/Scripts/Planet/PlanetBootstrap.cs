@@ -190,7 +190,7 @@ namespace WH30K.Gameplay
             if (!GameSettings.HasActiveGame) throw new InvalidOperationException("No active game to save.");
             return JsonUtility.ToJson(new GameSaveData
             {
-                version = 5,
+                version = 6,
                 terrainVersion = planet.TerrainVersion,
                 clock = clock.Snapshot,
                 seed = GameSettings.CurrentSeed,
@@ -250,6 +250,14 @@ namespace WH30K.Gameplay
                 save = JsonUtility.FromJson<GameSaveData>(json);
                 // JsonUtility may create an empty nested object for a missing field in older JSON.
                 if(save != null && save.version < 5) save.industry = null;
+                if(save != null && save.version < 6 && save.industry != null)
+                {
+                    save.industry.geologyVersion=0;save.industry.conflict=null;
+                    if(save.industry.deposits!=null)for(var i=0;i<save.industry.deposits.Length;i++)save.industry.deposits[i].excavation=null;
+                }
+                if(save?.industry?.deposits!=null && save.industry.geologyVersion==1)
+                    for(var i=0;i<save.industry.deposits.Length;i++)
+                        if(save.industry.deposits[i].kind==(int)MaterialKind.Biomass)save.industry.deposits[i].excavation=null;
                 if (!ValidateSave(save, out var error))
                 {
                     menu?.AppendEventLog($"Load rejected: {error}");
@@ -296,7 +304,8 @@ namespace WH30K.Gameplay
         private bool ValidateSave(GameSaveData save, out string error)
         {
             error = "Unsupported or incomplete save.";
-            if (save == null || save.version < 0 || save.version > 5
+            if (save == null || save.version < 0 || save.version > 6
+                || save.version>=6 && (save.industry==null || save.industry.geologyVersion!=1)
                 || save.terrainVersion < 0 || save.terrainVersion > 2
                 || !ColonyCalendar.Valid(save.clock)
                 || !IndustryRules.Valid(save.industry, save.structures != null ? save.structures.Length : 0)

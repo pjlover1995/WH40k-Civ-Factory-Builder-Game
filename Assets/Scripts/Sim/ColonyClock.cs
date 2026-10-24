@@ -9,17 +9,18 @@ namespace WH30K.Sim
         private ClockSnapshot state;
         private bool active;
         public bool DecisionPending { get; set; }
-        public bool Paused => state.paused || DecisionPending;
+        public bool MiningDecisionPending { get; set; }
+        public bool Paused => state.paused || DecisionPending || MiningDecisionPending;
         public int Speed => state.speed == 0 ? 1 : state.speed;
         public static float DeltaTime { get; private set; }
         public static double SimulationSeconds => instance != null ? instance.state.simulationSeconds : 0;
         public ClockSnapshot Snapshot => state;
         private void Awake() { instance = this; }
-        public void Begin() { state = new ClockSnapshot { speed = 1 }; active = true; DecisionPending = false; DeltaTime = 0f; }
+        public void Begin() { state = new ClockSnapshot { speed = 1 }; active = true; DecisionPending = MiningDecisionPending = false; DeltaTime = 0f; }
         public void Restore(ClockSnapshot saved)
         {
             state = saved; if (state.speed == 0) state.speed = 1;
-            active = true; DecisionPending = false; DeltaTime = 0f;
+            active = true; DecisionPending = MiningDecisionPending = false; DeltaTime = 0f;
         }
         public void SetSpeed(int speed)
         {
@@ -30,7 +31,7 @@ namespace WH30K.Sim
         private void Update()
         {
             DeltaTime = active && !Paused ? Time.unscaledDeltaTime * Speed : 0f;
-            if (active) state = ColonyCalendar.Advance(state, Time.unscaledDeltaTime, DecisionPending);
+            if (active) state = ColonyCalendar.Advance(state, Time.unscaledDeltaTime, DecisionPending || MiningDecisionPending);
         }
         private void OnDestroy() { if (instance == this) { instance = null; DeltaTime = 0f; } }
     }

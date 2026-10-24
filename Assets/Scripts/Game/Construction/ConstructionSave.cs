@@ -13,6 +13,8 @@ namespace WH30K.Gameplay.Construction
         public WH30K.Sim.BuildingOperationState operation;
         public bool freePlacement;
         public float nx, ny, nz;
+        public bool hasElevation;
+        public float elevation;
     }
 
     public static class ConstructionSave
@@ -37,6 +39,7 @@ namespace WH30K.Gameplay.Construction
             {
                 if (string.IsNullOrEmpty(structure.id) || !knownIds.Contains(structure.id)
                     || !WH30K.Sim.BuildingOperationRules.Valid(structure.operation)
+                    || structure.hasElevation && (!WH30K.Sim.ColonyRules.IsFinite(structure.elevation) || structure.elevation<100 || structure.elevation>100000)
                     || structure.face < 0 || structure.face > 5 || structure.x < 0 || structure.x >= resolution
                     || structure.y < 0 || structure.y >= resolution
                     || (structure.freePlacement ? !ValidDirection(structure.nx, structure.ny, structure.nz)

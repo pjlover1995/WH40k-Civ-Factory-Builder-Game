@@ -4,10 +4,10 @@ namespace WH30K.Sim
 {
     public enum MaterialKind { IronOre, CopperOre, Stone, Biomass, Crystal, Metal, Components }
     [Serializable] public class FacilityStock { public float[] quantities = new float[7]; public float work; }
-    [Serializable] public struct DepositStock { public int id; public float remaining; }
+    [Serializable] public struct DepositStock { public int id, kind; public float remaining; public ExcavationState excavation; }
     [Serializable] public struct CargoStock { public int source, target, kind; public float amount, progress; }
     [Serializable] public class IndustrySnapshot
-    { public FacilityStock[] facilities; public DepositStock[] deposits; public CargoStock[] cargo; }
+    { public FacilityStock[] facilities; public DepositStock[] deposits; public CargoStock[] cargo; public int geologyVersion; public MiningConflict conflict; }
 
     public static class IndustryRules
     {
@@ -66,9 +66,25 @@ namespace WH30K.Sim
                 || snapshot.cargo==null || snapshot.cargo.Length>64) return false;
             foreach(var facility in snapshot.facilities)
                 if(facility==null || !ValidStock(facility.quantities) || !ColonyRules.IsFinite(facility.work) || facility.work<0 || facility.work>5) return false;
+            if(snapshot.geologyVersion<0 || snapshot.geologyVersion>1) return false;
             var ids=new System.Collections.Generic.HashSet<int>();
             foreach(var deposit in snapshot.deposits)
-                if(deposit.id<0 || deposit.id>=4096 || !ids.Add(deposit.id) || !ColonyRules.IsFinite(deposit.remaining) || deposit.remaining<0 || deposit.remaining>3000) return false;
+            {
+                if(deposit.id<0 || deposit.id>=4096 || !ids.Add(deposit.id) || !ColonyRules.IsFinite(deposit.remaining) || deposit.remaining<0 || deposit.remaining>20000) return false;
+                if(snapshot.geologyVersion==0 && deposit.remaining>2000) return false;
+                if(snapshot.geologyVersion==1 && (deposit.kind<0 || deposit.kind>4 || deposit.kind!=3 && deposit.excavation==null)) return false;
+                if(deposit.excavation!=null && (!MiningRules.Valid(deposit.excavation)
+                    || Math.Abs(MiningRules.Remaining(deposit.excavation)-deposit.remaining)>.02f)) return false;
+            }
+            var conflict=snapshot.conflict;
+            if(conflict!=null && conflict.active)
+            {
+                if(conflict.mine<0 || conflict.mine>=buildingCount || conflict.building<0
+                    || conflict.building>=(conflict.core?3:buildingCount) || !conflict.core && conflict.mine==conflict.building
+                    || conflict.sector<0 || conflict.sector>=8 || !ids.Contains(conflict.deposit)) return false;
+                var record=Array.Find(snapshot.deposits,d=>d.id==conflict.deposit);
+                if(record.excavation==null || (record.excavation.blocked & 1<<conflict.sector)!=0) return false;
+            }
             var incoming=new float[buildingCount,MaterialCount];
             foreach(var cargo in snapshot.cargo)
             {
