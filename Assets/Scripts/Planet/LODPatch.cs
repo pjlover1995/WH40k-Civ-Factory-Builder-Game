@@ -23,6 +23,23 @@ namespace WH30K.Planet
         private LODPatch[] children;
         private Vector3 cachedCenter;
         private bool centerDirty = true;
+        private bool surfaceDirty;
+        private Vector3[] vertices, normals;
+        private Color[] colors;
+        private Vector2[] uvs;
+        private int[] triangles, edge;
+
+        public void RefreshSurface(Vector3 center, float range)
+        {
+            if (Vector3.Distance(center, GetCenterWorld()) > range + planet.Radius * 2.5f / Mathf.Pow(2, depth)) return;
+            surfaceDirty = true;
+            if (children != null) foreach (var child in children) child.RefreshSurface(center, range);
+        }
+        public void RebuildDirtySurface()
+        {
+            if(children!=null)foreach(var child in children)child.RebuildDirtySurface();
+            else if(surfaceDirty){Regenerate();surfaceDirty=false;}
+        }
 
         public void Initialize(LODPlanet parentPlanet, Vector3 faceNormal, Vector2 uvStart, Vector2 uvEnd, int lodDepth)
         {
@@ -39,6 +56,9 @@ namespace WH30K.Planet
             meshFilter = GetComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
             meshRenderer.sharedMaterial = planet.TerrainMaterial;
+            // The directional shader supplies the planetary terminator. Only local
+            // architecture casts shadow maps, avoiding acne across a 24,000-unit globe.
+            meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
 
             mesh = new Mesh { name = $"PatchMesh_{depth}" };
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
@@ -55,7 +75,8 @@ namespace WH30K.Planet
             }
 
             var center = GetCenterWorld();
-            var distance = Vector3.Distance(cameraPosition, center);
+            var patchExtent = planet.Radius * 1.1f / Mathf.Pow(2f, depth);
+            var distance = Mathf.Max(0f, Vector3.Distance(cameraPosition, center) - patchExtent);
             var splitThreshold = planet.SplitDistance / Mathf.Pow(planet.SplitFalloff, depth + 1);
             var mergeThreshold = splitThreshold * 1.6f;
 
@@ -76,7 +97,7 @@ namespace WH30K.Planet
             {
                 if (children != null)
                 {
-                    if (distance > mergeThreshold || depth == 0)
+                    if (distance > mergeThreshold)
                     {
                         DestroyChildren();
                         SetVisible(true);
@@ -104,6 +125,7 @@ namespace WH30K.Planet
             {
                 return;
             }
+            if (!planet.TrySplit()) return;
 
             children = new LODPatch[4];
             var midpoint = (uvMin + uvMax) * 0.5f;
@@ -118,7 +140,7 @@ namespace WH30K.Planet
         private LODPatch CreateChild(Vector2 childUvMin, Vector2 childUvMax, int childDepth, string suffix)
         {
             var go = new GameObject($"{name}_{suffix}");
-            go.transform.SetParent(transform.parent, false);
+            go.transform.SetParent(transform, false);
             var patch = go.AddComponent<LODPatch>();
             patch.Initialize(planet, localUp, childUvMin, childUvMax, childDepth);
             return patch;
@@ -144,6 +166,7 @@ namespace WH30K.Planet
 
         private void SetVisible(bool visible)
         {
+            if (visible && surfaceDirty) { Regenerate(); surfaceDirty = false; }
             if (meshRenderer != null)
             {
                 meshRenderer.enabled = visible;
@@ -159,11 +182,17 @@ namespace WH30K.Planet
         {
             centerDirty = true;
             var resolution = planet.GetResolutionForDepth(depth);
-            var vertexCount = resolution * resolution;
-            var vertices = new Vector3[vertexCount];
-            var normals = new Vector3[vertexCount];
-            var uvs = new Vector2[vertexCount];
-            var triangles = new int[(resolution - 1) * (resolution - 1) * 6];
+            var surfaceCount = resolution * resolution;
+            var edgeCount = (resolution - 1) * 4;
+            var vertexCount = surfaceCount + edgeCount;
+            var newTopology = vertices == null || vertices.Length != vertexCount;
+            if(newTopology)
+            {
+                vertices = new Vector3[vertexCount]; normals = new Vector3[vertexCount];
+                colors = new Color[vertexCount]; uvs = new Vector2[vertexCount];
+                triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
+                edge = new int[edgeCount];
+            }
 
             var triIndex = 0;
             for (var y = 0; y < resolution; y++)
@@ -177,7 +206,10 @@ namespace WH30K.Planet
                     var pointOnSphere = pointOnCube.normalized;
                     var vertex = planet.EvaluateSurfacePoint(pointOnSphere);
                     vertices[i] = vertex;
-                    normals[i] = pointOnSphere;
+                    // Match boundary normals across different LODs; reuse rendered neighbours inside.
+                    if(x==0 || y==0 || x==resolution-1 || y==resolution-1)
+                        normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
+                    colors[i] = planet.BiomeColor(pointOnSphere, vertex.magnitude);
                     uvs[i] = new Vector2(percentX, percentY);
 
                     if (x == resolution - 1 || y == resolution - 1)
@@ -195,18 +227,42 @@ namespace WH30K.Planet
                 }
             }
 
-            mesh.Clear();
+            // Sink a narrow skirt under each boundary to cover cracks between unequal LODs.
+            for(var y=1;y<resolution-1;y++)for(var x=1;x<resolution-1;x++)
+            {
+                var i=x+y*resolution;
+                var normal=Vector3.Cross(vertices[i+1]-vertices[i-1],vertices[i+resolution]-vertices[i-resolution]).normalized;
+                normals[i]=Vector3.Dot(normal,vertices[i])<0?-normal:normal;
+            }
+            var e = 0;
+            for (var x = 0; x < resolution - 1; x++) edge[e++] = x;
+            for (var y = 0; y < resolution - 1; y++) edge[e++] = y * resolution + resolution - 1;
+            for (var x = resolution - 1; x > 0; x--) edge[e++] = (resolution - 1) * resolution + x;
+            for (var y = resolution - 1; y > 0; y--) edge[e++] = y * resolution;
+            for (var i = 0; i < edgeCount; i++)
+            {
+                var a = edge[i]; var b = edge[(i + 1) % edgeCount];
+                var lower = surfaceCount + i; var nextLower = surfaceCount + (i + 1) % edgeCount;
+                vertices[lower] = vertices[a] - vertices[a].normalized * 12f;
+                normals[lower] = normals[a]; uvs[lower] = uvs[a];
+                colors[lower] = colors[a];
+                triangles[triIndex++] = a; triangles[triIndex++] = lower; triangles[triIndex++] = b;
+                triangles[triIndex++] = b; triangles[triIndex++] = lower; triangles[triIndex++] = nextLower;
+            }
+
+            if(newTopology)mesh.Clear();
             mesh.vertices = vertices;
             mesh.normals = normals;
-            mesh.uv = uvs;
-            mesh.triangles = triangles;
+            mesh.colors = colors;
+            if(newTopology){mesh.uv = uvs;mesh.triangles = triangles;}
+            else mesh.RecalculateBounds();
         }
 
         private Vector3 GetCenterWorld()
         {
             if (!centerDirty)
             {
-                return cachedCenter;
+                return transform.TransformPoint(cachedCenter);
             }
 
             var midX = (uvMin.x + uvMax.x) * 0.5f;
@@ -215,7 +271,7 @@ namespace WH30K.Planet
             var pointOnSphere = pointOnCube.normalized;
             cachedCenter = planet.EvaluateSurfacePoint(pointOnSphere);
             centerDirty = false;
-            return cachedCenter;
+            return transform.TransformPoint(cachedCenter);
         }
 
         private void OnDestroy()

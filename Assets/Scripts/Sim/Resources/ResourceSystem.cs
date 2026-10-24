@@ -32,6 +32,15 @@ namespace WH30K.Sim.Resources
         private GameSettings.DifficultyDefinition currentDifficulty;
 
         public float ResourceYieldMultiplier => currentDifficulty.resourceYieldMultiplier;
+        public float Stockpile => stockpile;
+        public bool CanAfford(float cost) => ColonyRules.CanAfford(stockpile, cost);
+
+        public bool TrySpend(float cost)
+        {
+            if (!ColonyRules.TrySpend(ref stockpile, cost)) return false;
+            PushUpdate();
+            return true;
+        }
 
         public void ConfigureMenu(NewGameMenu newMenu)
         {
