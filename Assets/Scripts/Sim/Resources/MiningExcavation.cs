@@ -221,6 +221,7 @@ namespace WH30K.Sim.Resources
         }
         private void FlushExcavations()
         {
+            if(dirtyDeposits.Count==0)return;
             var refresh=new HashSet<SurfaceDeposit>();
             foreach(var deposit in dirtyDeposits)
             {
@@ -278,10 +279,14 @@ namespace WH30K.Sim.Resources
                 var flight=flights[i];var state=flight.state;
                 var source=Array.IndexOf(current,old[state.source]);var target=state.target<0?state.target:Array.IndexOf(current,old[state.target]);
                 if(source<0 || state.target>=0&&target<0)
-                {Destroy(flight.ship.gameObject);Destroy(flight.line.gameObject);flights.RemoveAt(i);continue;}
+                {ReleaseFlight(flight);flights.RemoveAt(i);continue;}
                 state.source=source;state.target=target;flight.state=state;
             }
-            buildings=current;RefreshProtectedBuildings();
+            buildings=current;routes.Clear();
+            incoming=new float[buildings.Length*7];foreach(var group in consumers)group.Clear();
+            for(var i=0;i<buildings.Length;i++)for(var k=0;k<7;k++)
+                if(IndustryRules.Accepts(buildings[i].Id,(MaterialKind)k))consumers[k].Add(i);
+            RefreshProtectedBuildings();
         }
         private void ClearExcavation()
         {

@@ -27,7 +27,21 @@ namespace WH30K.Gameplay.Construction
         [SerializeField] private Color blockedGridColor = new Color(1f, 0.4f, 0.4f, 0.35f);
 
         private readonly List<PlacedStructure> placedStructures = new List<PlacedStructure>();
-        public ManagedBuilding[] Buildings => placedStructures.ConvertAll(p => p.Instance.GetComponent<ManagedBuilding>()).ToArray();
+        private ManagedBuilding[] cachedBuildings;
+        // Ordered like the saved facility inventories. Treat this shared registry as read-only.
+        public ManagedBuilding[] Buildings
+        {
+            get
+            {
+                if (cachedBuildings == null)
+                {
+                    cachedBuildings = new ManagedBuilding[placedStructures.Count];
+                    for (var i = 0; i < cachedBuildings.Length; i++)
+                        cachedBuildings[i] = placedStructures[i].Instance.GetComponent<ManagedBuilding>();
+                }
+                return cachedBuildings;
+            }
+        }
 
         private LODPlanet planet;
         private PlanetGrid grid;
@@ -104,6 +118,7 @@ namespace WH30K.Gameplay.Construction
             RebuildStructureRoot();
             ClearPreviewInstance();
             placedStructures.Clear();
+            cachedBuildings = null;
             RefreshEconomy();
             isPlacing = false;
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
@@ -120,6 +135,7 @@ namespace WH30K.Gameplay.Construction
             }
 
             placedStructures.Clear();
+            cachedBuildings = null;
             RefreshEconomy();
             CancelPlacement();
         }
@@ -183,9 +199,7 @@ namespace WH30K.Gameplay.Construction
 
         private void RefreshEconomy()
         {
-            var definitions = new List<ManagedBuilding>();
-            foreach (var entry in placedStructures) definitions.Add(entry.Instance.GetComponent<ManagedBuilding>());
-            settlement?.SetConstructedBuildings(definitions);
+            settlement?.SetConstructedBuildings(Buildings);
         }
 
         public void BeginPlacement()
@@ -351,6 +365,7 @@ namespace WH30K.Gameplay.Construction
             if (index < 0) return false;
             var instance = placedStructures[index].Instance;
             placedStructures.RemoveAt(index);
+            cachedBuildings = null;
             instance.SetActive(false); Destroy(instance);
             RefreshEconomy(); return true;
         }
@@ -446,6 +461,7 @@ namespace WH30K.Gameplay.Construction
 
             placedStructures.Add(new PlacedStructure(frame.Cell, definition, instance,
                 planet.transform.InverseTransformPoint(frame.Center).normalized, freePlacement));
+            cachedBuildings = null;
             if (freePlacement) AddSupports(instance, frame, dimensions);
             return managed;
         }

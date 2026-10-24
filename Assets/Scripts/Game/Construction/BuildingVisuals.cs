@@ -305,7 +305,7 @@ namespace WH30K.Gameplay.Construction
 
         private static Material Surface(string name, Color color, float metal, float gloss, int seed)
         {
-            var material = new Material(Shader.Find("Standard")) { name = name, color = color };
+            var material = new Material(Shader.Find("Standard")) { name = name, color = color, enableInstancing = true };
             material.SetFloat("_Metallic", metal);
             material.SetFloat("_Glossiness", gloss);
             var texture = new Texture2D(128, 128, TextureFormat.RGB24, true) { name = name + " grain", wrapMode = TextureWrapMode.Repeat };
@@ -326,7 +326,7 @@ namespace WH30K.Gameplay.Construction
 
         private static Material Emissive(string name, Color color)
         {
-            var material = new Material(Shader.Find("Standard")) { name = name, color = color * 0.24f };
+            var material = new Material(Shader.Find("Standard")) { name = name, color = color * 0.24f, enableInstancing = true };
             material.EnableKeyword("_EMISSION");
             material.SetColor("_EmissionColor", color * 1.1f);
             material.SetFloat("_Glossiness", 0.65f);

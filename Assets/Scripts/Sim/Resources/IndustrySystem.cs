@@ -27,6 +27,14 @@ namespace WH30K.Sim.Resources
         private readonly List<SurfaceDeposit> deposits=new List<SurfaceDeposit>();
         private readonly List<FacilityStock> stocks=new List<FacilityStock>();
         private readonly List<Flight> flights=new List<Flight>();
+        private readonly Stack<Flight> idleFlights=new Stack<Flight>();
+        private readonly Dictionary<(int,int),FlightRoute> routes=new Dictionary<(int,int),FlightRoute>();
+        private readonly List<int>[] consumers={new List<int>(),new List<int>(),new List<int>(),new List<int>(),new List<int>(),new List<int>(),new List<int>()};
+        private float[] incoming=Array.Empty<float>();
+        private Camera surveyCamera;
+        private float surveyTimer;
+        private int surveyOverlay=-1;
+        public int CargoVisualCount=>flights.Count+idleFlights.Count;
         private ManagedBuilding[] buildings=Array.Empty<ManagedBuilding>();
         private Transform visualRoot;
         private Material haulerMaterial, routeMaterial;
@@ -40,7 +48,7 @@ namespace WH30K.Sim.Resources
             Clear();planet=world;placement=GetComponent<BuildingPlacementController>();settlement=GetComponent<Settlement>();resources=GetComponent<ResourceSystem>();
             visualRoot=new GameObject("Geological survey and cargo").transform;visualRoot.SetParent(planet.transform,false);
             for(var k=0;k<5;k++) materials.Add(new Material(Shader.Find("Standard")) {color=DepositColor((MaterialKind)k)});
-            haulerMaterial=new Material(Shader.Find("Standard")) {color=new Color(.56f,.38f,.13f)};
+            haulerMaterial=new Material(Shader.Find("Standard")) {color=new Color(.56f,.38f,.13f),enableInstancing=true};
             routeMaterial=new Material(Shader.Find("Sprites/Default"));materials.Add(haulerMaterial);materials.Add(routeMaterial);
             GenerateDeposits(colonyNormal);
             if(saved!=null) foreach(var record in saved.deposits)
@@ -51,12 +59,12 @@ namespace WH30K.Sim.Resources
                         deposit.Excavation=saved.geologyVersion==0?MiningRules.Create(planet.Seed,deposit.Id,deposit.Kind,record.remaining):record.excavation;
                 }
             Synchronize();
+            ConfigureExcavation(saved);
             if(saved!=null)
             {
                 stocks.Clear();stocks.AddRange(saved.facilities);
                 foreach(var cargo in saved.cargo) AddFlight(cargo);
             }
-            ConfigureExcavation(saved);
             Overlay=0;
         }
         private void GenerateDeposits(Vector3 colony)
@@ -123,7 +131,9 @@ namespace WH30K.Sim.Resources
             return best;
         }
         public float[] Totals()
-        {var total=new float[7];foreach(var stock in stocks) for(var k=0;k<7;k++) total[k]+=stock.quantities[k];foreach(var flight in flights) total[flight.state.kind]+=flight.state.amount;return total;}
+        {var total=new float[7];FillTotals(total);return total;}
+        public void FillTotals(float[] total)
+        {Array.Clear(total,0,total.Length);foreach(var stock in stocks) for(var k=0;k<7;k++) total[k]+=stock.quantities[k];foreach(var flight in flights) total[flight.state.kind]+=flight.state.amount;}
         public string Status(ManagedBuilding building)
         {
             Synchronize();var index=Array.IndexOf(buildings,building);if(index<0 || !IndustryRules.Facility(building.Id)) return "";
@@ -144,7 +154,7 @@ namespace WH30K.Sim.Resources
         private void Synchronize()
         {
             if(placement==null) return;var current=placement.Buildings;
-            if(current.Length==buildings.Length) return;
+            if(ReferenceEquals(current,buildings)) return;
             RemapBuildings(current);
         }
         private void Update()
@@ -188,6 +198,9 @@ namespace WH30K.Sim.Resources
         }
         private void Dispatch()
         {
+            Array.Clear(incoming,0,incoming.Length);
+            foreach(var flight in flights)if(flight.state.target>=0)incoming[flight.state.target*7+flight.state.kind]+=flight.state.amount;
+            var coreFactory=CoreFactory();
             for(var source=0;source<buildings.Length && flights.Count<64;source++)
             {
                 if(buildings[source].State.offline) continue;
@@ -197,35 +210,59 @@ namespace WH30K.Sim.Resources
                     if(!(id=="Mine"&&(k==0||k==1||k==4) || id=="Quarry"&&k==2 || id=="Harvester"&&k==3 || id=="Smelter"&&k==5 || id=="Works"&&k==6)) continue;
                     var kind=(MaterialKind)k;var amount=Mathf.Min(3,stocks[source].quantities[k]);if(amount<.5f) continue;
                     var target=-2;var distance=float.MaxValue;
-                    if(kind==MaterialKind.Components && CoreFactory()!=null) target=-1;
-                    else for(var i=0;i<buildings.Length;i++)
+                    if(kind==MaterialKind.Components && coreFactory!=null) target=-1;
+                    else foreach(var i in consumers[k])
                     {
                         if(i==source || buildings[i].State.offline || !IndustryRules.Accepts(buildings[i].Id,kind)) continue;
                         var demand=(kind==MaterialKind.Biomass||kind==MaterialKind.Stone?8:kind==MaterialKind.Crystal?4:16)-stocks[i].quantities[k]-Incoming(i,k);
-                        var d=Vector3.Distance(buildings[source].transform.position,buildings[i].transform.position);
+                        var d=(buildings[source].transform.position-buildings[i].transform.position).sqrMagnitude;
                         if(demand>=.5f && d<distance){target=i;distance=d;}
                     }
                     if(target==-2) continue;
                     if(target>=0) amount=Mathf.Min(amount,IndustryRules.StorageLimit-stocks[target].quantities[k]-Incoming(target,k));
                     if(amount<.5f) continue;
-                    stocks[source].quantities[k]-=amount;AddFlight(new CargoStock{source=source,target=target,kind=k,amount=amount});
+                    stocks[source].quantities[k]-=amount;
+                    if(target>=0)incoming[target*7+k]+=amount;
+                    AddFlight(new CargoStock{source=source,target=target,kind=k,amount=amount});
                 }
             }
         }
         private ManagedBuilding CoreFactory()
         {foreach(var building in settlement.CoreBuildings)if(building.Id=="Factory"&&!building.State.offline)return building;return null;}
-        private float Incoming(int target,int kind) {var total=0f;foreach(var flight in flights)if(flight.state.target==target&&flight.state.kind==kind)total+=flight.state.amount;return total;}
+        private float Incoming(int target,int kind)=>incoming[target*7+kind];
         private Vector3 Destination(CargoStock cargo)
         {if(cargo.target>=0)return buildings[cargo.target].transform.position;foreach(var building in settlement.CoreBuildings)if(building.Id=="Factory")return building.transform.position;return buildings[cargo.source].transform.position;}
         private void AddFlight(CargoStock state)
         {
-            var ship=new GameObject("Cargo hauler - "+IndustryRules.Name((MaterialKind)state.kind),typeof(MeshFilter),typeof(MeshRenderer));ship.transform.SetParent(visualRoot,false);
-            ship.GetComponent<MeshFilter>().sharedMesh=WorldArt.Hauler;ship.GetComponent<Renderer>().sharedMaterial=haulerMaterial;ship.transform.localScale=Vector3.one*2;
-            ship.transform.position=FlightPoint(state,state.progress);
-            var route=new GameObject("Cargo route",typeof(LineRenderer));route.transform.SetParent(visualRoot,false);
-            var line=route.GetComponent<LineRenderer>();line.sharedMaterial=routeMaterial;line.startColor=line.endColor=new Color(.8f,.65f,.28f,.35f);line.widthMultiplier=1.2f;line.positionCount=25;
-            for(var i=0;i<25;i++)line.SetPosition(i,FlightPoint(state,i/24f));
-            flights.Add(new Flight{state=state,ship=ship.transform,line=line});
+            if(!routes.TryGetValue((state.source,state.target),out var path))
+            {
+                var a=planet.transform.InverseTransformPoint(buildings[state.source].transform.position).normalized;
+                var b=planet.transform.InverseTransformPoint(Destination(state)).normalized;
+                var length=Vector3.Angle(a,b)*Mathf.Deg2Rad*planet.Radius;
+                var points=new Vector3[Mathf.Clamp(Mathf.CeilToInt(length/12)+1,25,4097)];
+                for(var i=0;i<points.Length;i++)points[i]=FlightPoint(state,i/(float)(points.Length-1));
+                path=new FlightRoute{points=points,duration=Mathf.Max(3,length/80)};
+                // Bound the cache even when a large colony dispatches many unique routes.
+                if(routes.Count>=64)routes.Clear();routes[(state.source,state.target)]=path;
+            }
+            Flight flight;
+            if(idleFlights.Count>0)flight=idleFlights.Pop();
+            else
+            {
+                var ship=new GameObject("Cargo hauler - "+IndustryRules.Name((MaterialKind)state.kind),typeof(MeshFilter),typeof(MeshRenderer));ship.transform.SetParent(visualRoot,false);
+                ship.GetComponent<MeshFilter>().sharedMesh=WorldArt.Hauler;ship.GetComponent<Renderer>().sharedMaterial=haulerMaterial;ship.transform.localScale=Vector3.one*2;
+                var route=new GameObject("Cargo route",typeof(LineRenderer));route.transform.SetParent(visualRoot,false);
+                var line=route.GetComponent<LineRenderer>();line.sharedMaterial=routeMaterial;line.startColor=line.endColor=new Color(.8f,.65f,.28f,.35f);line.widthMultiplier=1.2f;
+                flight=new Flight{ship=ship.transform,line=line};
+            }
+            flight.state=state;flight.route=path;flight.ship.position=path.Point(state.progress);
+            flight.ship.gameObject.SetActive(true);flight.line.gameObject.SetActive(true);flight.line.enabled=Overlay!=0;
+            flight.line.positionCount=path.points.Length;flight.line.SetPositions(path.points);flights.Add(flight);
+        }
+        private void ReleaseFlight(Flight flight)
+        {
+            flight.ship.gameObject.SetActive(false);flight.line.gameObject.SetActive(false);
+            flight.route=null;idleFlights.Push(flight);
         }
         private Vector3 FlightPoint(CargoStock cargo,float t)
         {
@@ -240,29 +277,32 @@ namespace WH30K.Sim.Resources
             for(var i=flights.Count-1;i>=0;i--)
             {
                 var flight=flights[i];var state=flight.state;
-                var a=planet.transform.InverseTransformPoint(buildings[state.source].transform.position).normalized;
-                var b=planet.transform.InverseTransformPoint(Destination(state)).normalized;
-                var duration=Mathf.Max(3,Vector3.Angle(a,b)*Mathf.Deg2Rad*planet.Radius/80);
-                state.progress=Mathf.Clamp01(state.progress+seconds/duration);flight.state=state;
-                var point=FlightPoint(state,state.progress);var next=FlightPoint(state,Mathf.Min(1,state.progress+.01f));
+                state.progress=Mathf.Clamp01(state.progress+seconds/flight.route.duration);flight.state=state;
+                var point=flight.route.Point(state.progress);var next=flight.route.Point(Mathf.Min(1,state.progress+.01f));
                 flight.ship.position=point;if((next-point).sqrMagnitude>.001f)flight.ship.rotation=Quaternion.LookRotation(next-point,(point-planet.transform.position).normalized);
                 if(state.progress<1 || (state.target==-1 && CoreFactory()==null)) continue;
                 if(state.target==-1) resources.ModifyStockpile(state.amount*25);
                 else stocks[state.target].quantities[state.kind]+=state.amount;
-                Destroy(flight.ship.gameObject);Destroy(flight.line.gameObject);flights.RemoveAt(i);
+                ReleaseFlight(flight);flights.RemoveAt(i);
             }
         }
         private void UpdateSurvey()
         {
-            if(Camera.main==null)return;var camera=Camera.main.transform.position;
+            surveyTimer+=Time.unscaledDeltaTime;
+            if(surveyOverlay==Overlay && surveyTimer<.1f)return;
+            surveyTimer=0;surveyOverlay=Overlay;
+            if(surveyCamera==null)surveyCamera=Camera.main;
+            if(surveyCamera==null)return;var camera=surveyCamera.transform.position;
             foreach(var deposit in deposits)
             {
                 var world=deposit.Position;
                 var distance=Vector3.Distance(world,camera);var visible=Vector3.Dot(world-planet.transform.position,camera-world)>0;
-                deposit.outcrop.gameObject.SetActive(visible&&distance<2000&&deposit.Remaining>0);
+                var showOutcrop=visible&&distance<2000&&deposit.Remaining>0;
+                if(deposit.outcrop.gameObject.activeSelf!=showOutcrop)deposit.outcrop.gameObject.SetActive(showOutcrop);
                 if(deposit.outcrop.gameObject.activeSelf && deposit.Excavation!=null)
                     deposit.outcrop.position=planet.transform.TransformPoint(planet.EvaluateSurfacePoint(deposit.Direction)+deposit.Direction*2);
-                var show=visible&&deposit.Remaining>0&&(Overlay==1||Overlay==(int)deposit.Kind+2);deposit.marker.gameObject.SetActive(show);
+                var show=visible&&deposit.Remaining>0&&(Overlay==1||Overlay==(int)deposit.Kind+2);
+                if(deposit.marker.gameObject.activeSelf!=show)deposit.marker.gameObject.SetActive(show);
                 if(show){var scale=Mathf.Clamp(distance*.012f,7,260);deposit.marker.position=world+planet.transform.TransformDirection(deposit.Direction)*(scale+45);
                     deposit.marker.rotation=Quaternion.FromToRotation(Vector3.up,planet.transform.TransformDirection(deposit.Direction));deposit.marker.localScale=new Vector3(scale,scale*2,scale);}
             }
@@ -278,8 +318,24 @@ namespace WH30K.Sim.Resources
                 conflict=new MiningConflict{active=conflict.active,core=conflict.core,deposit=conflict.deposit,sector=conflict.sector,mine=conflict.mine,building=conflict.building}};
         }
         private void Clear()
-        { ClearExcavation();if(visualRoot!=null)Destroy(visualRoot.gameObject);foreach(var material in materials)if(material!=null)Destroy(material);materials.Clear();deposits.Clear();stocks.Clear();flights.Clear();buildings=Array.Empty<ManagedBuilding>();dispatchTimer=0;}
+        {
+            ClearExcavation();if(visualRoot!=null)Destroy(visualRoot.gameObject);
+            foreach(var material in materials)if(material!=null)Destroy(material);
+            materials.Clear();deposits.Clear();stocks.Clear();flights.Clear();idleFlights.Clear();routes.Clear();
+            foreach(var group in consumers)group.Clear();
+            incoming=Array.Empty<float>();buildings=Array.Empty<ManagedBuilding>();
+            dispatchTimer=0;surveyTimer=0;surveyOverlay=-1;
+        }
         private void OnDestroy(){Clear();}
-        private sealed class Flight{public CargoStock state;public Transform ship;public LineRenderer line;}
+        private sealed class Flight{public CargoStock state;public Transform ship;public LineRenderer line;public FlightRoute route;}
+        private sealed class FlightRoute
+        {
+            public Vector3[] points;public float duration;
+            public Vector3 Point(float progress)
+            {
+                var t=Mathf.Clamp01(progress)*(points.Length-1);var index=Mathf.Min((int)t,points.Length-2);
+                return Vector3.Lerp(points[index],points[index+1],t-index);
+            }
+        }
     }
 }

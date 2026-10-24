@@ -22,6 +22,28 @@ using WH30K.Planet;
 public static class GameplayChecks
 {
     private static int checks;
+    private const string RuntimeShaders="Assets/Scenes/Resources/WH30K/RuntimeShaders";
+    [MenuItem("WH30K/Prepare Runtime Shader References")]
+    public static void PrepareRuntimeShaderReferences()
+    {
+        if(!AssetDatabase.IsValidFolder(RuntimeShaders))AssetDatabase.CreateFolder("Assets/Scenes/Resources/WH30K","RuntimeShaders");
+        var names=new[]{"StandardOpaque","StandardEmission","UnlitColor","SpriteRoute"};
+        var shaders=new[]{"Standard","Standard","Unlit/Color","Sprites/Default"};
+        for(var i=0;i<names.Length;i++)
+        {
+            var path=RuntimeShaders+"/"+names[i]+".mat";
+            if(AssetDatabase.LoadAssetAtPath<Material>(path)!=null)continue;
+            var material=new Material(Shader.Find(shaders[i])){enableInstancing=i<2};
+            if(i==1){material.EnableKeyword("_EMISSION");material.SetColor("_EmissionColor",Color.white);}
+            AssetDatabase.CreateAsset(material,path);
+        }
+        // All renderers are created at runtime, so scene analysis cannot discover instancing.
+        var settings=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]);
+        var stripping=settings.FindProperty("m_InstancingStripping");
+        // Unity 2022 serializes this internal enum as an integer: 0 unused, 1 all, 2 keep all.
+        stripping.intValue=2;settings.ApplyModifiedPropertiesWithoutUndo();AssetDatabase.SaveAssets();
+        Debug.Log("Runtime shader references prepared; instancing variants retained for procedural buildings.");
+    }
     private const string ReloadBackupKey="WH30K.ColonyBeforeScriptReload";
     static GameplayChecks()
     {
@@ -291,7 +313,73 @@ public static class GameplayChecks
         clock.SetSpeed(1);
         RunIndustryChecks(bootstrap);
         RunMiningChecks(bootstrap);
+        RunPerformanceRegressions(bootstrap);
         Debug.Log($"WH30K gameplay checks: {checks} passed in {timer.Elapsed.TotalSeconds:0.0}s. Inspect camera, layout and terrain visually as well.");
+    }
+
+    private static void RunPerformanceRegressions(PlanetBootstrap bootstrap)
+    {
+        bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard);
+        bootstrap.GetComponent<ColonyEventSystem>().EndSession();
+        var placement=bootstrap.GetComponent<BuildingPlacementController>();var industry=bootstrap.GetComponent<IndustrySystem>();
+        var resources=bootstrap.GetComponent<ResourceSystem>();resources.ModifyStockpile(100000);
+        var normal=bootstrap.GetComponent<Settlement>().CreateSnapshot().normal;var planet=bootstrap.ActivePlanet;
+        var shaderAssets=UnityEngine.Resources.LoadAll<Material>("WH30K/RuntimeShaders");
+        Check(shaderAssets.Length==4&&Array.TrueForAll(shaderAssets,m=>m.shader!=null),"build includes explicit references to procedural Standard, emission, unlit and route shaders");
+        var graphics=new SerializedObject(AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/GraphicsSettings.asset")[0]);
+        var instancing=graphics.FindProperty("m_InstancingStripping");
+        Check(instancing.intValue==2,"player builds retain instancing variants for renderers created at runtime");
+        Check(Vector3.Dot(-RenderSettings.sun.transform.forward,planet.GetComponent<PlanetarySystem>().SunDirection)>.999f,
+            "landing-site lighting agrees with the orbital sun before the first paused frame");
+        var validNormals=true;var maxSurfaceError=0f;var roundTripError=0f;
+        var faces=new[]{Vector3.up,Vector3.down,Vector3.left,Vector3.right,Vector3.forward,Vector3.back};
+        for(var face=0;face<faces.Length;face++)
+        {
+            var patch=planet.transform.Find("Patch_"+face);
+            var mesh=patch.GetComponent<MeshFilter>().sharedMesh;var vertices=mesh.vertices;var normals=mesh.normals;var uv=mesh.uv;
+            var up=faces[face];var axisA=new Vector3(up.y,up.z,-up.x).normalized;var axisB=Vector3.Cross(up,axisA).normalized;
+            for(var i=0;i<planet.BaseResolution*planet.BaseResolution;i++)
+            {
+                if(!ColonyRules.IsFinite(normals[i].sqrMagnitude)||Mathf.Abs(normals[i].sqrMagnitude-1)>.01f||Vector3.Dot(normals[i],vertices[i])<=0)validNormals=false;
+                var direction=(up+(uv[i].x-.5f)*2*axisA+(uv[i].y-.5f)*2*axisB).normalized;
+                maxSurfaceError=Mathf.Max(maxSurfaceError,Vector3.Distance(vertices[i],planet.EvaluateSurfacePoint(direction)));
+                roundTripError=Mathf.Max(roundTripError,Vector3.Distance(vertices[i],planet.EvaluateSurfacePoint(vertices[i].normalized)));
+            }
+        }
+        Check(validNormals,"terrain patch normals remain finite, normalized and outward after reusing neighbour samples");
+        Check(maxSurfaceError<.001f,"optimized terrain retains original heightfield samples (error "+maxSurfaceError+" m; renormalized vertex round-trip "+roundTripError+" m)");
+        var empty=placement.Buildings;
+        Check(ReferenceEquals(empty,placement.Buildings),"stationary building queries reuse the registry");
+        Check(PlaceNear(placement,"Works",normal,planet.Radius,220),"transport regression facility can be placed");
+        var first=placement.Buildings;var works=first[0];
+        Check(!ReferenceEquals(empty,first)&&ReferenceEquals(first,placement.Buildings),"construction invalidates the registry once and keeps its order");
+        foreach(var material in works.GetComponent<Renderer>().sharedMaterials)
+            Check(material.enableInstancing,"shared architecture material enables GPU instancing: "+material.name);
+        var saved=industry.Capture();saved.facilities[0].quantities[6]=3;
+        saved.cargo=new[]{new CargoStock{source=0,target=-1,kind=6,amount=1,progress=.25f}};
+        industry.Configure(planet,normal,saved);works.ToggleOperation();var money=resources.Stockpile;
+        industry.Simulate(100);
+        Check(industry.CargoCount==0&&industry.CargoVisualCount==1&&resources.Stockpile==money+25,"arriving cargo delivers once and retains its visual for reuse");
+        works.ToggleOperation();industry.Simulate(1);
+        Check(industry.CargoCount==1&&industry.CargoVisualCount==1,"the next dispatch reuses the existing hauler and route renderer");
+        foreach(var line in planet.GetComponentsInChildren<LineRenderer>(true))if(line.name=="Cargo route")
+        {
+            var clear=true;
+            for(var i=0;i<line.positionCount-1;i++)
+            {
+                var point=planet.transform.InverseTransformPoint(Vector3.Lerp(line.GetPosition(i),line.GetPosition(i+1),.5f));
+                if(point.magnitude<planet.EvaluateSurfacePoint(point.normalized).magnitude+1)clear=false;
+            }
+            Check(clear,"cached transport segments clear the terrain between samples");
+        }
+        Check(placement.Demolish(works),"transport regression facility can be removed");
+        Check(PlaceNear(placement,"Works",normal,planet.Radius,220),"a same-count replacement can be built");
+        var replaced=placement.Buildings;
+        Check(!ReferenceEquals(first,replaced)&&replaced.Length==first.Length,"same-count replacements invalidate the building registry");
+        var replacedStock=industry.Capture();
+        Check(replacedStock.facilities[0].quantities[6]==0&&industry.CargoCount==0,"replacement clears the removed inventory and linked cargo even when the count is unchanged");
+        var json=bootstrap.CaptureSaveJson();Check(bootstrap.TryLoadSaveJson(json),"optimized registries and transport preserve save compatibility");
+        Check(!ReferenceEquals(replaced,placement.Buildings)&&ReferenceEquals(placement.Buildings,placement.Buildings),"loading rebuilds and then reuses the ordered registry");
     }
 
     private static void RunIndustryChecks(PlanetBootstrap bootstrap)

@@ -15,11 +15,25 @@ namespace WH30K.CameraSystem
         private float distance, defaultDistance, yaw, pitch;
         private bool surfaceMode;
         private Vector3 colonyDirection, navigationDirection;
+        private bool viewCached, cachedSurface;
+        private Vector3 cachedDirection, cachedTargetPosition, cachedTargetScale;
+        private Quaternion cachedTargetRotation;
+        private float cachedDistance, cachedYaw, cachedPitch;
+        private int cachedRevision, colonyRevision=-1;
+        private Vector3 cachedColonyDirection, colonyPoint;
         public bool IsSettlementView => surfaceMode;
         public bool IsSurfaceView => surfaceMode;
         public Vector3 NavigationDirection => navigationDirection;
-        public Vector3 ColonyWorldPosition => planet != null
-            ? target.TransformPoint(planet.EvaluateSurfacePoint(colonyDirection)) : Vector3.zero;
+        public Vector3 ColonyWorldPosition
+        {
+            get
+            {
+                if(planet==null)return Vector3.zero;
+                if(colonyRevision!=planet.SurfaceRevision || cachedColonyDirection!=colonyDirection)
+                {colonyPoint=planet.EvaluateSurfacePoint(colonyDirection);colonyRevision=planet.SurfaceRevision;cachedColonyDirection=colonyDirection;}
+                return target.TransformPoint(colonyPoint);
+            }
+        }
 
         public void SetTarget(Transform newTarget, float radius)
         {
@@ -27,6 +41,7 @@ namespace WH30K.CameraSystem
             camera.ResetProjectionMatrix(); camera.fieldOfView = 50;
             camera.nearClipPlane = 1f; camera.farClipPlane = radius * 20f;
             target = newTarget; planet = target != null ? target.GetComponent<LODPlanet>() : null;
+            viewCached=false;colonyRevision=-1;
             defaultDistance = radius * 3.7f; distance = defaultDistance;
             yaw = 135; pitch = 25; surfaceMode = false;
             if (target != null) UpdateCameraTransform();
@@ -109,6 +124,12 @@ namespace WH30K.CameraSystem
 
         private void UpdateCameraTransform()
         {
+            if(viewCached && cachedDirection==navigationDirection && cachedSurface==surfaceMode
+                && cachedDistance==distance && cachedYaw==yaw && cachedPitch==pitch && cachedRevision==planet.SurfaceRevision
+                && cachedTargetPosition==target.position && cachedTargetRotation==target.rotation && cachedTargetScale==target.lossyScale)return;
+            viewCached=true;cachedDirection=navigationDirection;cachedSurface=surfaceMode;
+            cachedDistance=distance;cachedYaw=yaw;cachedPitch=pitch;cachedRevision=planet.SurfaceRevision;
+            cachedTargetPosition=target.position;cachedTargetRotation=target.rotation;cachedTargetScale=target.lossyScale;
             if (surfaceMode)
             {
                 var ground = target.TransformPoint(planet.EvaluateSurfacePoint(navigationDirection));

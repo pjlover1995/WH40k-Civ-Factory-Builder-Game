@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 using WH30K.Gameplay.Construction;
+using WH30K.Sim.Settlements;
 
 namespace WH30K.Planet
 {
@@ -14,11 +16,15 @@ namespace WH30K.Planet
         private Transform root;
         private readonly List<Mesh> meshes = new List<Mesh>();
         private Material[] materials;
-        private int lastBuildingCount;
+        private BuildingPlacementController placement;
+        private Settlement settlement;
+        private ManagedBuilding[] lastBuildings;
+        private IEnumerator generation;
         private int lastSurfaceRevision;
         public void Configure(LODPlanet world)
         {
             planet = world;
+            placement=FindObjectOfType<BuildingPlacementController>();settlement=FindObjectOfType<Settlement>();
             materials = new[] { Surface("Bark", new Color(.19f,.14f,.09f)), Surface("Canopy", new Color(.12f,.26f,.12f)),
                 Surface("Weathered outcrop",new Color(.35f,.34f,.30f)), Surface("Wetland pool",new Color(.08f,.17f,.13f)) };
             materials[3].SetFloat("_Glossiness", .88f);
@@ -27,25 +33,27 @@ namespace WH30K.Planet
         private void Update()
         {
             if (planet == null || Camera.main == null) return;
+            if(generation!=null){if(!generation.MoveNext())generation=null;return;}
             timer += Time.unscaledDeltaTime; if (timer < 1) return; timer = 0;
             var cameraPosition = planet.transform.InverseTransformPoint(Camera.main.transform.position);
             var direction = cameraPosition.normalized;
             if (cameraPosition.magnitude - planet.EvaluateSurfacePoint(direction).magnitude > 2400)
             { if (root != null) root.gameObject.SetActive(false); return; }
             if (root != null) root.gameObject.SetActive(true);
-            var count = FindObjectsOfType<ManagedBuilding>().Length;
-            if (root == null || Vector3.Distance(lastDirection, direction) * planet.Radius > 170 || count != lastBuildingCount || lastSurfaceRevision != planet.SurfaceRevision)
-            { lastDirection = direction; lastBuildingCount = count; lastSurfaceRevision = planet.SurfaceRevision; Generate(direction); }
+            var buildings=placement!=null?placement.Buildings:null;
+            if (root == null || Vector3.Distance(lastDirection, direction) * planet.Radius > 170 || !ReferenceEquals(buildings,lastBuildings) || lastSurfaceRevision != planet.SurfaceRevision)
+            { lastDirection = direction; lastBuildings = buildings; lastSurfaceRevision = planet.SurfaceRevision; generation=Generate(direction); }
         }
-        private void Generate(Vector3 direction)
+        private IEnumerator Generate(Vector3 direction)
         {
-            if (root != null) Destroy(root.gameObject);
-            foreach (var mesh in meshes) Destroy(mesh); meshes.Clear();
-            root = new GameObject("Local forests, reeds and outcrops").transform; root.SetParent(transform, false);
             var groups = new List<CombineInstance>[4]; for(var i=0;i<4;i++) groups[i]=new List<CombineInstance>();
             var grid = new PlanetGrid(planet, 1024); var cell = grid.GetCellFromDirection(direction);
-            var buildings = FindObjectsOfType<ManagedBuilding>();
-            for(var y=-20;y<=20;y++) for(var x=-20;x<=20;x++)
+            var positions=new List<Vector3>();
+            if(lastBuildings!=null)foreach(var building in lastBuildings)positions.Add(transform.InverseTransformPoint(building.transform.position));
+            if(settlement!=null)foreach(var building in settlement.CoreBuildings)positions.Add(transform.InverseTransformPoint(building.transform.position));
+            for(var y=-20;y<=20;y++)
+            {
+            for(var x=-20;x<=20;x++)
             {
                 var sample = grid.OffsetCell(cell,x,y); var n=grid.GetDirection(sample);
                 var hash = unchecked(planet.Seed ^ sample.X*73856093 ^ sample.Y*19349663 ^ sample.Face*83492791);
@@ -55,10 +63,10 @@ namespace WH30K.Planet
                 var position=planet.EvaluateSurfacePoint(n);
                 if(planet.EvaluateBaseHeight(n)-position.magnitude>.5f) continue;
                 if(position.magnitude<planet.SeaLevel+2) continue;
-                var occupied=false; foreach(var building in buildings)
-                    if(Vector3.Distance(building.transform.position,transform.TransformPoint(position))<26) {occupied=true;break;}
+                var occupied=false; foreach(var buildingPosition in positions)
+                    if((buildingPosition-position).sqrMagnitude<26*26) {occupied=true;break;}
                 if(occupied) continue;
-                var biome=planet.Biome(n); var rotation=Quaternion.FromToRotation(Vector3.up,n)*Quaternion.Euler(0,(float)random.NextDouble()*360,0);
+                var biome=planet.Biome(n,position.magnitude); var rotation=Quaternion.FromToRotation(Vector3.up,n)*Quaternion.Euler(0,(float)random.NextDouble()*360,0);
                 var chance=random.NextDouble(); var height=7+(float)random.NextDouble()*10;
                 if((biome=="Forest" && chance<.8) || (biome=="Grassland" && chance<.12) || (biome=="Swamp" && chance<.24))
                 {
@@ -82,6 +90,12 @@ namespace WH30K.Planet
                 else if(chance<.13 || (biome=="Mountain range" && chance<.7))
                     Add(groups[2],WorldArt.Octahedron,position+n*1.4f,rotation,new Vector3(4+(float)chance*9,4+(float)chance*5,5));
             }
+            if((y+20)%4==3)yield return null;
+            }
+            // Keep the previous tile visible until its replacement is complete.
+            if (root != null) Destroy(root.gameObject);
+            foreach (var mesh in meshes) Destroy(mesh); meshes.Clear();
+            root = new GameObject("Local forests, reeds and outcrops").transform; root.SetParent(transform, false);
             for(var i=0;i<groups.Length;i++)
             {
                 if(groups[i].Count==0) continue;

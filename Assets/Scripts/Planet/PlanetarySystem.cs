@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
 using WH30K.Sim;
@@ -13,6 +14,11 @@ namespace WH30K.Planet
         private Transform star, moon, satellite, gasGiant, localWater;
         private Vector3 lastWaterDirection;
         private Mesh waterMesh;
+        private float lastOrbitSeconds=float.NaN, waterTimer;
+        private IEnumerator waterGeneration;
+        private Vector3[] waterVertices,waterNormals;
+        private Color[] waterColors;
+        private int[] waterTriangles;
         private readonly List<Material> materials=new List<Material>();
         public Vector3 SunDirection { get; private set; }
         public void Configure(LODPlanet world)
@@ -30,6 +36,7 @@ namespace WH30K.Planet
             landingNormal=normal.normalized;
             var tangent=Vector3.Cross(normal,Mathf.Abs(normal.y)>.95f?Vector3.right:Vector3.up).normalized;
             initialSun=(normal-tangent*.9f).normalized;axis=Vector3.Cross(normal,tangent).normalized;
+            lastOrbitSeconds=float.NaN;
             UpdateOrbit();
         }
         private Transform Body(string name,float radius,Color color,bool luminous)
@@ -41,10 +48,17 @@ namespace WH30K.Planet
             go.GetComponent<Renderer>().shadowCastingMode=ShadowCastingMode.Off;
             return go.transform;
         }
-        private void Update() { if(planet!=null) { UpdateOrbit(); UpdateLocalWater(); } }
+        private void Update()
+        {
+            if(planet==null)return;
+            UpdateOrbit();
+            if(waterGeneration!=null && !waterGeneration.MoveNext())waterGeneration=null;
+            UpdateLocalWater();
+        }
         private void UpdateOrbit()
         {
             var seconds=(float)ColonyClock.SimulationSeconds;
+            if(seconds==lastOrbitSeconds)return;lastOrbitSeconds=seconds;
             Shader.SetGlobalFloat("_PlanetSimulationTime",seconds);
             SunDirection=Quaternion.AngleAxis((float)IndustryRules.DayAngle(seconds),axis)*initialSun;
             if(sun!=null) sun.transform.rotation=Quaternion.LookRotation(-SunDirection,axis);
@@ -59,10 +73,12 @@ namespace WH30K.Planet
         }
         private void UpdateLocalWater()
         {
+            waterTimer+=Time.unscaledDeltaTime;if(waterTimer<.1f)return;waterTimer=0;
             if(Camera.main==null) return;
             var position=transform.InverseTransformPoint(Camera.main.transform.position);var n=position.normalized;
             var nearby=position.magnitude-planet.Radius<1800 && planet.EvaluateSurfacePoint(n).magnitude<planet.SeaLevel+35;
             if(localWater!=null) localWater.gameObject.SetActive(nearby);
+            if(waterGeneration!=null)return;
             if(!nearby || (localWater!=null && Vector3.Distance(lastWaterDirection,n)*planet.Radius<180)) return;
             lastWaterDirection=n;
             if(localWater==null)
@@ -72,14 +88,28 @@ namespace WH30K.Planet
                 go.GetComponent<MeshFilter>().sharedMesh=waterMesh;go.GetComponent<MeshRenderer>().sharedMaterial=transform.Find("Ocean").GetComponent<Renderer>().sharedMaterial;
                 go.GetComponent<Renderer>().shadowCastingMode=ShadowCastingMode.Off;
             }
-            const int size=80;var vertices=new Vector3[(size+1)*(size+1)];var normals=new Vector3[vertices.Length];var colors=new Color[vertices.Length];
-            var triangles=new int[size*size*6];var right=Vector3.Cross(n,Mathf.Abs(n.y)>.95f?Vector3.right:Vector3.up).normalized;var forward=Vector3.Cross(n,right);
-            for(var y=0;y<=size;y++) for(var x=0;x<=size;x++)
+            waterGeneration=GenerateWater(n);
+        }
+        private IEnumerator GenerateWater(Vector3 n)
+        {
+            const int size=80;
+            var first=waterVertices==null;
+            if(first){waterVertices=new Vector3[(size+1)*(size+1)];waterNormals=new Vector3[waterVertices.Length];waterColors=new Color[waterVertices.Length];waterTriangles=new int[size*size*6];}
+            var vertices=waterVertices;var normals=waterNormals;var colors=waterColors;var triangles=waterTriangles;
+            var right=Vector3.Cross(n,Mathf.Abs(n.y)>.95f?Vector3.right:Vector3.up).normalized;var forward=Vector3.Cross(n,right);
+            for(var y=0;y<=size;y++)
+            {
+            for(var x=0;x<=size;x++)
             {var i=y*(size+1)+x;var d=(n+(right*(x-size*.5f)+forward*(y-size*.5f))*10/planet.Radius).normalized;
                 vertices[i]=d*(planet.SeaLevel+.08f);normals[i]=d;var depth=Mathf.Clamp01((planet.SeaLevel-planet.EvaluateSurfacePoint(d).magnitude)/110);colors[i]=new Color(depth,depth,depth,1);}
+            if(y%8==7)yield return null;
+            }
+            if(first)
+            {
             var t=0;for(var y=0;y<size;y++) for(var x=0;x<size;x++)
             {var i=y*(size+1)+x;triangles[t++]=i;triangles[t++]=i+size+2;triangles[t++]=i+size+1;triangles[t++]=i;triangles[t++]=i+1;triangles[t++]=i+size+2;}
-            waterMesh.Clear();waterMesh.vertices=vertices;waterMesh.normals=normals;waterMesh.colors=colors;waterMesh.triangles=triangles;waterMesh.RecalculateBounds();
+            }
+            waterMesh.vertices=vertices;waterMesh.normals=normals;waterMesh.colors=colors;if(first)waterMesh.triangles=triangles;waterMesh.RecalculateBounds();
         }
         private void OnDestroy() { if(waterMesh!=null) Destroy(waterMesh);foreach(var material in materials) Destroy(material); }
     }

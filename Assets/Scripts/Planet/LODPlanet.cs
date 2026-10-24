@@ -58,6 +58,14 @@ namespace WH30K.Planet
         private LODPatch[] rootPatches;
         private Camera referenceCamera;
         private float elapsed;
+        private int splitBudget;
+        private bool pendingLod;
+        public int PatchesCreatedLastUpdate { get; private set; }
+        internal bool TrySplit()
+        {
+            if(splitBudget==0){pendingLod=true;return false;}
+            splitBudget--;PatchesCreatedLastUpdate+=4;return true;
+        }
 
         private int computedMaxDepth;
 
@@ -154,12 +162,15 @@ namespace WH30K.Planet
             }
 
             elapsed += Time.deltaTime;
-            if (elapsed < LodUpdateInterval)
+            if (!pendingLod && elapsed < LodUpdateInterval)
             {
                 return;
             }
 
             elapsed = 0f;
+            // Each split replaces a visible parent with four complete children atomically.
+            // Continue unfinished work next frame instead of building the whole tree in one frame.
+            splitBudget = 2; pendingLod = false; PatchesCreatedLastUpdate = 0;
             var cameraPosition = referenceCamera.transform.position;
             foreach (var patch in rootPatches)
             {
@@ -214,7 +225,12 @@ namespace WH30K.Planet
         public float Moisture(Vector3 direction) => Noise3(direction.normalized * 8.5f + continentOffset * 0.63f);
         public string Biome(Vector3 direction)
         {
-            var n = direction.normalized; var height = EvaluateHeight(n) - SeaLevel;
+            var n = direction.normalized;
+            return Biome(n, EvaluateHeight(n));
+        }
+        public string Biome(Vector3 direction, float surfaceHeight)
+        {
+            var n = direction.normalized; var height = surfaceHeight - SeaLevel;
             if (height < 0) return "Ocean";
             if (Mathf.Abs(n.y) > 0.83f || height > 650) return "Alpine / ice";
             if (height > 220) return "Mountain range";
@@ -226,8 +242,10 @@ namespace WH30K.Planet
         }
 
         public Color BiomeColor(Vector3 direction)
+            => BiomeColor(direction, EvaluateHeight(direction.normalized));
+        public Color BiomeColor(Vector3 direction, float surfaceHeight)
         {
-            switch (Biome(direction))
+            switch (Biome(direction, surfaceHeight))
             {
                 case "Swamp": return new Color(0.14f, 0.23f, 0.12f);
                 case "Forest": return new Color(0.10f, 0.24f, 0.13f);

@@ -50,7 +50,13 @@ namespace WH30K.UI
         private readonly string[] catalogLabels = { "FRONTIER OUTPOST\n250  /  LOGISTICS", "HAB BLOCK\n180  /  POPULATION", "MACRO FACTORY\n320  /  INDUSTRY", "AIR SCRUBBER\n220  /  ENVIRONMENT" };
         private string[] visibleIds = { "Outpost", "HabBlock", "Factory", "Utility" };
         private readonly string[][] catalogGroups = { new[] { "Outpost", "HabBlock", "Factory", "Utility" }, new[] { "Mine", "Quarry", "Harvester" }, new[] { "Smelter", "Works" } };
-        private IndustrySystem Industry => GetComponent<IndustrySystem>();
+        private IndustrySystem industry;
+        private IndustrySystem Industry => industry!=null?industry:industry=GetComponent<IndustrySystem>();
+        private SimpleOrbitCamera orbit;
+        private readonly float[] materialTotals=new float[7];
+        private static readonly int[] Speeds={1,3,10};
+        private static readonly string[] SurveyLabels={"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)"};
+        private readonly Dictionary<Button,bool> buttonTones=new Dictionary<Button,bool>();
         private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
         private ManagedBuilding selectedBuilding;
         private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
@@ -63,7 +69,7 @@ namespace WH30K.UI
         public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf || MiningPanelOpen;
         public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
         public ManagedBuilding InspectedBuilding => selectedBuilding;
-        private SimpleOrbitCamera Orbit => Camera.main != null ? Camera.main.GetComponent<SimpleOrbitCamera>() : null;
+        private SimpleOrbitCamera Orbit => orbit!=null?orbit:orbit=Camera.main!=null?Camera.main.GetComponent<SimpleOrbitCamera>():null;
 
         private void Awake()
         {
@@ -137,7 +143,7 @@ namespace WH30K.UI
             clockText = Label("PlayedTime", time.transform, "", 10, new Vector2(8, -30), 238, 18, Muted);
             pauseButton = Button("PauseSimulation", time.transform, new Vector2(8, -50), "II", out _, 43, 26);
             pauseButton.onClick.AddListener(() => clock.TogglePause());
-            var speeds = new[] { 1, 3, 10 };
+            var speeds = Speeds;
             for (var i = 0; i < speeds.Length; i++)
             {
                 var speed = speeds[i];
@@ -321,7 +327,7 @@ namespace WH30K.UI
             var mode = clock.DecisionPending || clock.MiningDecisionPending ? "DECISION PENDING" : clock.Paused ? "PAUSED" : clock.Speed + "x SPEED";
             clockText.text = $"{mode}   |   PLAYED {(int)played.TotalHours:00}:{played.Minutes:00}:{played.Seconds:00}";
             Tone(pauseButton, clock.Paused);
-            var speeds = new[] { 1, 3, 10 };
+            var speeds = Speeds;
             for (var i = 0; i < speeds.Length; i++) Tone(speedButtons[i], !clock.Paused && clock.Speed == speeds[i]);
         }
 
@@ -387,9 +393,9 @@ namespace WH30K.UI
         private void RefreshMaterials()
         {
             if(materialText==null || Industry==null || bootstrap.ActivePlanet==null)return;
-            var total=Industry.Totals();var biome=Orbit!=null?bootstrap.ActivePlanet.Biome(Orbit.NavigationDirection):"";
+            Industry.FillTotals(materialTotals);var total=materialTotals;var biome=Orbit!=null?bootstrap.ActivePlanet.Biome(Orbit.NavigationDirection):"";
             materialText.text=$"ORE  Fe {total[0]:0}   Cu {total[1]:0}\nSTONE {total[2]:0}   CRYSTAL {total[4]:0}\nBIO {total[3]:0}   METAL {total[5]:0}\nPARTS {total[6]:0}   CARGO {Industry.CargoCount}\n{biome}";
-            surveyLabel.text="SURVEY: "+new[]{"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)"}[Industry.Overlay];
+            surveyLabel.text="SURVEY: "+SurveyLabels[Industry.Overlay];
         }
         private void VisitDeposit()
         {
@@ -478,6 +484,8 @@ namespace WH30K.UI
         private void Tone(Button button, bool selected)
         {
             if (button == null) return;
+            if(buttonTones.TryGetValue(button,out var priorTone)&&priorTone==selected)return;
+            buttonTones[button]=selected;
             var colors = button.colors; colors.normalColor = selected ? new Color(0.24f, 0.20f, 0.12f) : ButtonBase;
             button.colors = colors;
             var edge = button.GetComponent<Outline>(); if (edge != null) edge.effectColor = selected ? Gold : new Color(0.2f, 0.27f, 0.29f, 0.65f);

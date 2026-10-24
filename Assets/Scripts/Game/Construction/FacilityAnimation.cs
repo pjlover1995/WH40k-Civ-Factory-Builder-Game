@@ -8,6 +8,7 @@ namespace WH30K.Gameplay.Construction
     {
         private Transform rotor;
         private float phase;
+        private ManagedBuilding building;
         public void Configure(string id)
         {
             var go=new GameObject("Working machinery",typeof(MeshFilter),typeof(MeshRenderer));go.transform.SetParent(transform,false);
@@ -16,7 +17,9 @@ namespace WH30K.Gameplay.Construction
         }
         private void Update()
         {
-            var building=GetComponent<ManagedBuilding>();if(building==null||building.State.offline||rotor==null)return;
+            if(ColonyClock.DeltaTime<=0)return;
+            if(building==null)building=GetComponent<ManagedBuilding>();
+            if(building==null||building.State.offline||rotor==null)return;
             phase+=ColonyClock.DeltaTime*80;rotor.localRotation=Quaternion.Euler(0,phase,0);
         }
     }

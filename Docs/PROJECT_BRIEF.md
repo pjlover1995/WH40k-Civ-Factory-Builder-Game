@@ -63,10 +63,16 @@ Select a mine or quarry, then **Excavation Plan** to review reserves, grade, dep
 
 Version-5 colonies preserve deposit IDs, remaining quantities, inventories, cargo, buildings and terrain. Their original 2,000-unit capacities migrate into directional reserves with proportional historical excavation; newer geological sizes apply to new worlds. Older schemas retain their existing migration paths. Underground tunnels, geotechnical slope stability, drilling uncertainty, waste/tailings transport and reclamation are outside this prototype.
 
+## Runtime performance
+
+Building registries and operation effects are cached until state changes; shared architecture materials support GPU instancing. Terrain refinement is limited to eight new patches per frame, with visible parents retained until children are ready. Local vegetation and detailed water rebuild over multiple frames. Cargo reuses pooled visuals and cached sampled arcs, with bounded route caching. Survey presentation refreshes at 10 Hz, while camera and sun work skip unchanged state. Dispatch caches consumers and incoming reservations. Save schema 6 and terrain recipes remain unchanged.
+
+See [the performance review](PERFORMANCE_REVIEW.md) for measured editor results, tradeoffs, reproduction instructions and remaining scale limits. The short editor benchmark does not establish standalone target frame rates.
+
 ## Limits and next priorities
 
 - There is one recurring narrative event, an aggregate credit stockpile and seven physical industrial materials. Only components currently export into credits.
 - Architecture and surface materials are procedural modular art, without authored high-resolution textures or animated inhabitants. Causeways are visual decoration. Cargo uses automatic atmospheric routes, without ground road pathfinding, player-authored routes, research, combat or multiple independent settlements.
 - The starting core uses the original fixed building classes; player construction uses ScriptableObject definitions. Both are aggregated once in the settlement economy.
 - Engine-independent checks run without Unity. Scene rendering, engine compilation, interaction, and standalone performance must be verified in Unity before release.
-- Next acceptance work: balance the extraction economy, profile large colonies and local ecology generation, and expand transport management only after the automatic loop is reliable.
+- Next acceptance work: balance the extraction economy, profile release-player GPU/memory costs and colonies approaching the construction limit, and expand transport management only after the automatic loop is reliable.

@@ -55,10 +55,6 @@ namespace WH30K.Planet
         public void LightLandingSite(Vector3 normal)
         {
             GetComponent<PlanetarySystem>()?.SetLandingSite(normal);
-            if (sun == null) return;
-            var tangent = Vector3.Cross(normal, Mathf.Abs(normal.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
-            sun.transform.rotation = Quaternion.LookRotation(-(normal + tangent * 0.9f).normalized,
-                Mathf.Abs(normal.y) > 0.95f ? Vector3.forward : Vector3.up);
         }
 
         private Material MakeMaterial(string resource)

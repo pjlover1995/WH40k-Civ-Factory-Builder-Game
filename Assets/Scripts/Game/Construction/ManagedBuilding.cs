@@ -12,11 +12,15 @@ namespace WH30K.Gameplay.Construction
         private EnvironmentImpact basicImpact;
         private ResourceSystem resources;
         private Settlement settlement;
+        private BuildingEconomy economy;
+        private EnvironmentImpact impact;
         public string Id { get; private set; }
         public string DisplayName { get; private set; }
         public BuildingOperationState State { get; private set; }
-        public BuildingEconomy Economy => BuildingOperationRules.Economy(Id, basicEconomy, State);
-        public EnvironmentImpact Impact => BuildingOperationRules.Impact(Id, basicImpact, State);
+        public BuildingEconomy Economy => economy;
+        public EnvironmentImpact Impact => impact;
+        private void RefreshOperation()
+        {economy=BuildingOperationRules.Economy(Id,basicEconomy,State);impact=BuildingOperationRules.Impact(Id,basicImpact,State);}
         public float UpgradeCost => BuildingOperationRules.UpgradeCost(State);
         public bool CanUpgrade => State.level < 2 && resources != null && resources.CanAfford(UpgradeCost);
 
@@ -25,26 +29,30 @@ namespace WH30K.Gameplay.Construction
         {
             Id = id; DisplayName = title; basicEconomy = economy; basicImpact = impact;
             resources = stockpile; settlement = owner; State = state;
+            RefreshOperation();
             var bounds = GetComponent<MeshFilter>().sharedMesh.bounds;
             var collider = gameObject.AddComponent<BoxCollider>();
             collider.center = bounds.center; collider.size = bounds.size;
         }
-        public void Restore(BuildingOperationState state) { State = state; }
+        public void Restore(BuildingOperationState state) { State = state; RefreshOperation(); }
         public bool SetFocus(int focus)
         {
             if (focus < 0 || focus > 2) return false;
             var state = State; state.focus = focus; State = state;
+            RefreshOperation();
             settlement.RefreshReadout(); return true;
         }
         public bool Upgrade()
         {
             if (!CanUpgrade || !resources.TrySpend(UpgradeCost)) return false;
             var state = State; state.level++; State = state;
+            RefreshOperation();
             settlement.RefreshReadout(); return true;
         }
         public void ToggleOperation()
         {
             var state = State; state.offline = !state.offline; State = state;
+            RefreshOperation();
             settlement.RefreshReadout();
         }
     }

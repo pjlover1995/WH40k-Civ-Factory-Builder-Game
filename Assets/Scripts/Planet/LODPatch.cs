@@ -24,6 +24,10 @@ namespace WH30K.Planet
         private Vector3 cachedCenter;
         private bool centerDirty = true;
         private bool surfaceDirty;
+        private Vector3[] vertices, normals;
+        private Color[] colors;
+        private Vector2[] uvs;
+        private int[] triangles, edge;
 
         public void RefreshSurface(Vector3 center, float range)
         {
@@ -121,6 +125,7 @@ namespace WH30K.Planet
             {
                 return;
             }
+            if (!planet.TrySplit()) return;
 
             children = new LODPatch[4];
             var midpoint = (uvMin + uvMax) * 0.5f;
@@ -180,11 +185,14 @@ namespace WH30K.Planet
             var surfaceCount = resolution * resolution;
             var edgeCount = (resolution - 1) * 4;
             var vertexCount = surfaceCount + edgeCount;
-            var vertices = new Vector3[vertexCount];
-            var normals = new Vector3[vertexCount];
-            var colors = new Color[vertexCount];
-            var uvs = new Vector2[vertexCount];
-            var triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
+            var newTopology = vertices == null || vertices.Length != vertexCount;
+            if(newTopology)
+            {
+                vertices = new Vector3[vertexCount]; normals = new Vector3[vertexCount];
+                colors = new Color[vertexCount]; uvs = new Vector2[vertexCount];
+                triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
+                edge = new int[edgeCount];
+            }
 
             var triIndex = 0;
             for (var y = 0; y < resolution; y++)
@@ -198,8 +206,10 @@ namespace WH30K.Planet
                     var pointOnSphere = pointOnCube.normalized;
                     var vertex = planet.EvaluateSurfacePoint(pointOnSphere);
                     vertices[i] = vertex;
-                    normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
-                    colors[i] = planet.BiomeColor(pointOnSphere);
+                    // Match boundary normals across different LODs; reuse rendered neighbours inside.
+                    if(x==0 || y==0 || x==resolution-1 || y==resolution-1)
+                        normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
+                    colors[i] = planet.BiomeColor(pointOnSphere, vertex.magnitude);
                     uvs[i] = new Vector2(percentX, percentY);
 
                     if (x == resolution - 1 || y == resolution - 1)
@@ -218,7 +228,12 @@ namespace WH30K.Planet
             }
 
             // Sink a narrow skirt under each boundary to cover cracks between unequal LODs.
-            var edge = new int[edgeCount];
+            for(var y=1;y<resolution-1;y++)for(var x=1;x<resolution-1;x++)
+            {
+                var i=x+y*resolution;
+                var normal=Vector3.Cross(vertices[i+1]-vertices[i-1],vertices[i+resolution]-vertices[i-resolution]).normalized;
+                normals[i]=Vector3.Dot(normal,vertices[i])<0?-normal:normal;
+            }
             var e = 0;
             for (var x = 0; x < resolution - 1; x++) edge[e++] = x;
             for (var y = 0; y < resolution - 1; y++) edge[e++] = y * resolution + resolution - 1;
@@ -235,12 +250,12 @@ namespace WH30K.Planet
                 triangles[triIndex++] = b; triangles[triIndex++] = lower; triangles[triIndex++] = nextLower;
             }
 
-            mesh.Clear();
+            if(newTopology)mesh.Clear();
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.colors = colors;
-            mesh.uv = uvs;
-            mesh.triangles = triangles;
+            if(newTopology){mesh.uv = uvs;mesh.triangles = triangles;}
+            else mesh.RecalculateBounds();
         }
 
         private Vector3 GetCenterWorld()
