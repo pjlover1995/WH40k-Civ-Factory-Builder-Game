@@ -41,6 +41,8 @@
 ExportedObj/
 .consulo/
 *.csproj
+!Tests/Simulation/SimulationChecks.csproj
+/Tests/Simulation/obj/
 *.unityproj
 *.sln
 *.suo

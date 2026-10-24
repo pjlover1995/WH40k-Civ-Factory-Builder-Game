@@ -9,7 +9,7 @@ namespace WH30K.Planet
     /// </summary>
     public class LODPlanet : MonoBehaviour
     {
-        [SerializeField] private float radius = 3000f;
+        [SerializeField] private float radius = 12000f;
         [SerializeField] private int baseResolution = 32;
         [SerializeField] private int maxDepth = 6;
         [SerializeField] private int maxPatchResolution = 1024;
@@ -28,7 +28,22 @@ namespace WH30K.Planet
         public float TargetTriangleArea => Mathf.Max(0.5f, targetTriangleArea);
         public int Seed { get; private set; }
         public Material TerrainMaterial { get; private set; }
-        public float SeaLevel => radius - 120f;
+        public int TerrainVersion { get; private set; } = 1;
+        public float SeaLevel => radius - (TerrainVersion == 0 ? 120f : 20f);
+        public Func<Vector3, float, float> ExcavationHeight { get; set; }
+        public int SurfaceRevision { get; private set; }
+
+        public void RefreshExcavation(Vector3 direction, float range)
+        {
+            SurfaceRevision++;
+            if (rootPatches == null) return;
+            var center = transform.TransformPoint(direction.normalized * EvaluateBaseHeight(direction.normalized));
+            foreach (var patch in rootPatches) patch?.RefreshSurface(center, range);
+        }
+        public void RebuildExcavatedSurface()
+        {
+            if(rootPatches!=null)foreach(var patch in rootPatches)patch?.RebuildDirtySurface();
+        }
 
         private readonly Vector3[] faceDirections =
         {
@@ -52,9 +67,11 @@ namespace WH30K.Planet
         private float ridgeScale;
         private float ridgeWeight;
 
-        public void BuildPlanet(int seed, Material material)
+        public void BuildPlanet(int seed, Material material, int terrainVersion = 2)
         {
             Seed = seed;
+            ExcavationHeight = null;
+            TerrainVersion = terrainVersion;
             TerrainMaterial = material;
 
             computedMaxDepth = CalculateEffectiveMaxDepth();
@@ -62,8 +79,12 @@ namespace WH30K.Planet
 
             continentOffset = GenerateOffset(seed, 17);
             ridgeOffset = GenerateOffset(seed, 83);
-            continentScale = Mathf.Lerp(0.65f, 1.35f, PseudoRandom(seed * 1.11f));
-            ridgeScale = Mathf.Lerp(2.6f, 3.8f, PseudoRandom(seed * 2.77f));
+            continentScale = TerrainVersion == 0
+                ? Mathf.Lerp(0.65f, 1.35f, PseudoRandom(seed * 1.11f))
+                : Mathf.Lerp(1.7f, 2.3f, PseudoRandom(seed * 1.11f));
+            ridgeScale = TerrainVersion == 0
+                ? Mathf.Lerp(2.6f, 3.8f, PseudoRandom(seed * 2.77f))
+                : Mathf.Lerp(9f, 13f, PseudoRandom(seed * 2.77f));
             ridgeWeight = Mathf.Lerp(0.35f, 0.65f, PseudoRandom(seed * 3.91f));
 
             ClearExisting();
@@ -148,36 +169,90 @@ namespace WH30K.Planet
 
         internal int GetResolutionForDepth(int depth)
         {
-            var resolution = BaseResolution;
-            for (var i = 0; i < depth; i++)
-            {
-                if (resolution >= MaxPatchResolution)
-                {
-                    return MaxPatchResolution;
-                }
-
-                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
-            }
-
-            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
+            // Subdivision already doubles density. Doubling each child's resolution as well
+            // made a close view allocate million-vertex patches on the larger planet.
+            return Mathf.Clamp(BaseResolution, 8, MaxPatchResolution);
         }
 
-        internal float EvaluateHeight(Vector3 pointOnUnitSphere)
+        internal float EvaluateHeight(Vector3 direction)
         {
-            var continents = Mathf.PerlinNoise(pointOnUnitSphere.x * continentScale + continentOffset.x,
-                pointOnUnitSphere.y * continentScale + continentOffset.y);
-            continents = Mathf.Pow(continents, 3f);
+            var height = EvaluateBaseHeight(direction);
+            return ExcavationHeight != null ? ExcavationHeight(direction, height) : height;
+        }
 
-            var ridged = Mathf.PerlinNoise(pointOnUnitSphere.z * ridgeScale + ridgeOffset.x,
-                pointOnUnitSphere.x * ridgeScale + ridgeOffset.y);
+        public float EvaluateBaseHeight(Vector3 pointOnUnitSphere)
+        {
+            if (TerrainVersion == 0)
+            {
+                // Preserve the exact old seed-to-coastline mapping when expanding a saved world.
+                var oldContinent = Mathf.Pow(Mathf.PerlinNoise(pointOnUnitSphere.x * continentScale + continentOffset.x,
+                    pointOnUnitSphere.y * continentScale + continentOffset.y), 3f);
+                var oldRidge = Mathf.PerlinNoise(pointOnUnitSphere.z * ridgeScale + ridgeOffset.x,
+                    pointOnUnitSphere.x * ridgeScale + ridgeOffset.y);
+                oldRidge = Mathf.Pow(1f - Mathf.Abs(oldRidge * 2f - 1f), 3.2f);
+                return radius + oldContinent * 520f + oldRidge * 380f * ridgeWeight - 210f;
+            }
+            var continents = Noise3(pointOnUnitSphere * continentScale + continentOffset) * 0.7f
+                + Noise3(pointOnUnitSphere * continentScale * 2.1f + continentOffset * 0.37f) * 0.3f;
+            var ridged = Noise3(pointOnUnitSphere * ridgeScale + ridgeOffset);
             ridged = 1f - Mathf.Abs(ridged * 2f - 1f);
-            ridged = Mathf.Pow(ridged, 3.2f);
-
-            var elevation = continents * 520f + ridged * 380f * ridgeWeight - 210f;
+            var inland = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.51f, 0.65f, continents));
+            var mountains = Mathf.Pow(ridged, 5f) * 150f * ridgeWeight * inland;
+            var detail = (Noise3(pointOnUnitSphere * 42f + ridgeOffset) - 0.5f) * 8f * inland;
+            var elevation = (continents - 0.52f) * 650f - 20f + mountains + detail;
+            if (TerrainVersion >= 2)
+            {
+                var ranges = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.43f, 0.66f,
+                    Noise3(pointOnUnitSphere * 7.7f + ridgeOffset * 0.31f)));
+                var peaks = Mathf.Pow(ridged, 3.1f) * ranges * inland * 1050f;
+                var hills = (Noise3(pointOnUnitSphere * 65f + continentOffset) - 0.45f) * 100f * inland;
+                elevation += peaks + hills;
+            }
             return radius + elevation;
         }
 
-        internal Vector3 EvaluateSurfacePoint(Vector3 direction)
+        public float Moisture(Vector3 direction) => Noise3(direction.normalized * 8.5f + continentOffset * 0.63f);
+        public string Biome(Vector3 direction)
+        {
+            var n = direction.normalized; var height = EvaluateHeight(n) - SeaLevel;
+            if (height < 0) return "Ocean";
+            if (Mathf.Abs(n.y) > 0.83f || height > 650) return "Alpine / ice";
+            if (height > 220) return "Mountain range";
+            var wet = Moisture(n);
+            if (height < 48 && wet > 0.49f) return "Swamp";
+            if (wet > 0.51f) return "Forest";
+            if (wet < 0.43f && Mathf.Abs(n.y) < 0.65f) return "Arid hills";
+            return height > 80 ? "Rolling hills" : "Grassland";
+        }
+
+        public Color BiomeColor(Vector3 direction)
+        {
+            switch (Biome(direction))
+            {
+                case "Swamp": return new Color(0.14f, 0.23f, 0.12f);
+                case "Forest": return new Color(0.10f, 0.24f, 0.13f);
+                case "Arid hills": return new Color(0.54f, 0.39f, 0.23f);
+                case "Mountain range": return new Color(0.34f, 0.33f, 0.30f);
+                case "Alpine / ice": return new Color(0.80f, 0.86f, 0.87f);
+                default: return new Color(0.28f, 0.37f, 0.17f);
+            }
+        }
+
+        private static float Noise3(Vector3 p)
+            => (Mathf.PerlinNoise(p.x, p.y) + Mathf.PerlinNoise(p.y, p.z) + Mathf.PerlinNoise(p.z, p.x)) / 3f;
+
+        internal Vector3 EvaluateSurfaceNormal(Vector3 direction)
+        {
+            var n = direction.normalized;
+            var a = Vector3.Cross(n, Mathf.Abs(n.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
+            var b = Vector3.Cross(n, a);
+            const float epsilon = 0.001f;
+            var da = EvaluateSurfacePoint(n + a * epsilon) - EvaluateSurfacePoint(n - a * epsilon);
+            var db = EvaluateSurfacePoint(n + b * epsilon) - EvaluateSurfacePoint(n - b * epsilon);
+            return Vector3.Cross(da, db).normalized;
+        }
+
+        public Vector3 EvaluateSurfacePoint(Vector3 direction)
         {
             var normalised = direction.normalized;
             var height = EvaluateHeight(normalised);
@@ -198,7 +273,7 @@ namespace WH30K.Planet
 
                 var point = EvaluateSurfacePoint(direction);
                 var height = point.magnitude;
-                if (height < SeaLevel)
+                if (height < SeaLevel + 12f)
                 {
                     continue;
                 }
@@ -260,13 +335,7 @@ namespace WH30K.Planet
 
         private int EstimateResolutionForDepth(int depth)
         {
-            var resolution = BaseResolution;
-            for (var i = 0; i < depth; i++)
-            {
-                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
-            }
-
-            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
+            return Mathf.Clamp(BaseResolution, 8, MaxPatchResolution);
         }
 
         private void UpdateTerrainMaterialParameters()
@@ -280,6 +349,9 @@ namespace WH30K.Planet
             {
                 TerrainMaterial.SetFloat("_PlanetRadius", radius);
             }
+
+            if (TerrainMaterial.HasProperty("_PlanetCenter"))
+                TerrainMaterial.SetVector("_PlanetCenter", transform.position);
 
             if (TerrainMaterial.HasProperty("_SeaLevel"))
             {

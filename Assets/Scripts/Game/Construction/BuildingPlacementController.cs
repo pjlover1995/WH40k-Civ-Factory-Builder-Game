@@ -1,8 +1,12 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using WH30K.Gameplay;
 using WH30K.Planet;
 using WH30K.UI;
+using WH30K.Sim.Resources;
+using WH30K.Sim.Settlements;
 
 namespace WH30K.Gameplay.Construction
 {
@@ -13,7 +17,7 @@ namespace WH30K.Gameplay.Construction
     public class BuildingPlacementController : MonoBehaviour
     {
         [Header("Grid")]
-        [SerializeField] private int cellsPerFace = 96;
+        [SerializeField] private int cellsPerFace = 256;
         [SerializeField] private float gridElevationOffset = 6f;
 
         [Header("Preview Colours")]
@@ -22,8 +26,8 @@ namespace WH30K.Gameplay.Construction
         [SerializeField] private Color allowedGridColor = new Color(0.6f, 1f, 0.6f, 0.35f);
         [SerializeField] private Color blockedGridColor = new Color(1f, 0.4f, 0.4f, 0.35f);
 
-        private readonly Dictionary<PlanetGridCell, PlacedStructure> placedStructures = new Dictionary<PlanetGridCell, PlacedStructure>();
-        private static readonly Dictionary<Color, Material> MaterialCache = new Dictionary<Color, Material>();
+        private readonly List<PlacedStructure> placedStructures = new List<PlacedStructure>();
+        public ManagedBuilding[] Buildings => placedStructures.ConvertAll(p => p.Instance.GetComponent<ManagedBuilding>()).ToArray();
 
         private LODPlanet planet;
         private PlanetGrid grid;
@@ -38,14 +42,33 @@ namespace WH30K.Gameplay.Construction
         private Transform structureRoot;
         private NewGameMenu menu;
         private Camera mainCamera;
+        private ResourceSystem resources;
+        private Settlement settlement;
 
         private bool isPlacing;
 
         public bool IsPlacing => isPlacing;
-        public string ActiveStructureName => activeStructure != null ? activeStructure.DisplayName : "Structure";
+        public string ActiveStructureId => activeStructure != null ? activeStructure.Id : "";
+        public string ActiveStructureName => activeStructure != null
+            ? $"{activeStructure.DisplayName} ({activeStructure.ConstructionCost:0})" : "Structure";
+        public int GridResolution => grid != null ? grid.CellsPerFace : cellsPerFace;
+        public string ActiveStructureDetails
+        {
+            get
+            {
+                if (activeStructure == null) return string.Empty;
+                var economy = activeStructure.Economy;
+                return $"Housing +{economy.capacity:0} | Jobs +{economy.jobs:0}\n" +
+                       $"Output/worker {economy.outputPerWorker:0.0} | Upkeep {economy.upkeep:0}\n" +
+                       $"CO2/s at full staffing: {activeStructure.IndustryImpact.co2Delta:+0.00;-0.00;0}";
+            }
+        }
 
         private void Awake()
         {
+            cellsPerFace = Mathf.Clamp(cellsPerFace, 8, 256);
+            resources = GetComponent<ResourceSystem>();
+            settlement = GetComponent<Settlement>();
             availableStructures = Resources.LoadAll<BuildableStructure>("Buildings");
             if (availableStructures == null || availableStructures.Length == 0)
             {
@@ -55,8 +78,10 @@ namespace WH30K.Gameplay.Construction
                 availableStructures = new[] { fallback };
             }
 
-            activeStructure = availableStructures[0];
+            Array.Sort(availableStructures, (a, b) => string.CompareOrdinal(a.Id, b.Id));
+            activeStructure = Array.Find(availableStructures, definition => definition.Id == "Outpost") ?? availableStructures[0];
             mainCamera = Camera.main;
+            menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
 
         private void OnDisable()
@@ -70,21 +95,23 @@ namespace WH30K.Gameplay.Construction
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
 
-        public void AttachToPlanet(LODPlanet newPlanet)
+        public void AttachToPlanet(LODPlanet newPlanet, int resolution = 0)
         {
+            if (resolution != 0) cellsPerFace = Mathf.Clamp(resolution, 8, 256);
             planet = newPlanet;
             grid = planet != null ? new PlanetGrid(planet, Mathf.Max(8, cellsPerFace)) : null;
             RebuildVisualizer();
             RebuildStructureRoot();
             ClearPreviewInstance();
             placedStructures.Clear();
+            RefreshEconomy();
             isPlacing = false;
             menu?.UpdateBuildButtonState(ActiveStructureName, false);
         }
 
         public void ResetPlacement()
         {
-            foreach (var structure in placedStructures.Values)
+            foreach (var structure in placedStructures)
             {
                 if (structure.Instance != null)
                 {
@@ -93,7 +120,72 @@ namespace WH30K.Gameplay.Construction
             }
 
             placedStructures.Clear();
+            RefreshEconomy();
             CancelPlacement();
+        }
+
+        public void CycleStructure()
+        {
+            var index = Array.IndexOf(availableStructures, activeStructure);
+            SelectStructure(availableStructures[(index + 1) % availableStructures.Length].Id);
+        }
+
+        public bool SelectStructure(string id)
+        {
+            var definition = Array.Find(availableStructures, item => item.Id == id);
+            if (definition == null) return false;
+            CancelPlacement();
+            ClearPreviewInstance();
+            activeStructure = definition;
+            menu?.UpdateBuildButtonState(ActiveStructureName, false);
+            return true;
+        }
+
+        public PlacedStructureSnapshot[] CreateSnapshot()
+        {
+            var snapshots = new List<PlacedStructureSnapshot>();
+            foreach (var entry in placedStructures)
+                snapshots.Add(new PlacedStructureSnapshot
+                {
+                    id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y,
+                    operation = entry.Instance.GetComponent<ManagedBuilding>().State,
+                    freePlacement = entry.FreePlacement, nx = entry.Direction.x, ny = entry.Direction.y, nz = entry.Direction.z,
+                    hasElevation=true, elevation=planet.transform.InverseTransformPoint(entry.Instance.transform.position).magnitude
+                });
+            return snapshots.ToArray();
+        }
+
+        public bool ValidateSnapshot(PlacedStructureSnapshot[] snapshots, int resolution, out string error)
+        {
+            var ids = new HashSet<string>();
+            foreach (var definition in availableStructures) ids.Add(definition.Id);
+            return ConstructionSave.Validate(snapshots, resolution, ids, out error);
+        }
+
+        public void RestoreSnapshot(PlacedStructureSnapshot[] snapshots)
+        {
+            ResetPlacement();
+            if (snapshots != null)
+                foreach (var snapshot in snapshots)
+                {
+                    var definition = Array.Find(availableStructures, item => item.Id == snapshot.id);
+                    var cell = new PlanetGridCell(snapshot.face, snapshot.x, snapshot.y);
+                    var frame = snapshot.freePlacement ? FrameAt(new Vector3(snapshot.nx, snapshot.ny, snapshot.nz), definition) : grid.CalculateFrame(cell);
+                    if(snapshot.hasElevation)
+                    {
+                        var n=planet.transform.InverseTransformPoint(frame.Center).normalized;
+                        frame=new CellFrame(cell,planet.transform.TransformPoint(n*snapshot.elevation),frame.Normal,frame.Right,frame.Forward,10,10);
+                    }
+                    SpawnStructure(frame, definition, snapshot.freePlacement).Restore(snapshot.operation);
+                }
+            RefreshEconomy();
+        }
+
+        private void RefreshEconomy()
+        {
+            var definitions = new List<ManagedBuilding>();
+            foreach (var entry in placedStructures) definitions.Add(entry.Instance.GetComponent<ManagedBuilding>());
+            settlement?.SetConstructedBuildings(definitions);
         }
 
         public void BeginPlacement()
@@ -133,6 +225,20 @@ namespace WH30K.Gameplay.Construction
                 return;
             }
 
+            // Cancel works even when the pointer is off the planet or over a panel.
+            if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
+            {
+                CancelPlacement();
+                return;
+            }
+            if ((EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+                || (menu != null && menu.HasOpenEvent))
+            {
+                if (previewInstance != null) previewInstance.SetActive(false);
+                visualizer?.Hide();
+                return;
+            }
+
             if (mainCamera == null)
             {
                 mainCamera = Camera.main;
@@ -155,11 +261,11 @@ namespace WH30K.Gameplay.Construction
 
             var placementValid = ValidatePlacement(frame);
             UpdatePreview(frame, placementValid);
-            visualizer?.ShowArea(grid, frame.Cell, placementValid);
+            visualizer?.Hide();
 
             if (placementValid && Input.GetMouseButtonDown(0))
             {
-                PlaceStructure(frame);
+                TryPlaceDirection(planet.transform.InverseTransformPoint(frame.Center).normalized);
             }
             else if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
             {
@@ -177,8 +283,7 @@ namespace WH30K.Gameplay.Construction
             }
 
             var localDirection = planet.transform.InverseTransformDirection(direction);
-            var cell = grid.GetCellFromDirection(localDirection);
-            frame = grid.CalculateFrame(cell);
+            frame = FrameAt(localDirection);
             return true;
         }
 
@@ -186,7 +291,7 @@ namespace WH30K.Gameplay.Construction
         {
             direction = Vector3.zero;
             var center = planet.transform.position;
-            var adjustedRadius = planet.Radius + 1200f;
+            var adjustedRadius = planet.Radius + 1600f;
             var oc = ray.origin - center;
             var a = Vector3.Dot(ray.direction, ray.direction);
             var b = 2f * Vector3.Dot(oc, ray.direction);
@@ -198,27 +303,56 @@ namespace WH30K.Gameplay.Construction
             }
 
             var sqrt = Mathf.Sqrt(discriminant);
-            var t = (-b - sqrt) / (2f * a);
-            if (t < 0f)
+            var start = Mathf.Max(0f, (-b - sqrt) / (2f * a));
+            var end = (-b + sqrt) / (2f * a);
+            if (end <= start) return false;
+            var previous = start;
+            // Intersect the generated height field, rather than an oversized imaginary sphere.
+            for (var i = 1; i <= 128; i++)
             {
-                t = (-b + sqrt) / (2f * a);
-                if (t < 0f)
+                var t = Mathf.Lerp(start, end, i / 128f);
+                var local = planet.transform.InverseTransformPoint(ray.GetPoint(t));
+                if (local.magnitude <= Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude))
                 {
-                    return false;
+                    for (var j = 0; j < 14; j++)
+                    {
+                        var mid = (previous + t) * 0.5f;
+                        local = planet.transform.InverseTransformPoint(ray.GetPoint(mid));
+                        if (local.magnitude <= Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude)) t = mid;
+                        else previous = mid;
+                    }
+                    direction = (ray.GetPoint(t) - center).normalized;
+                    return true;
                 }
+                previous = t;
             }
-
-            var hitPoint = ray.origin + ray.direction * t;
-            direction = (hitPoint - center).normalized;
-            return true;
+            return false;
         }
 
         private bool ValidatePlacement(CellFrame frame)
         {
-            var localPosition = planet.transform.InverseTransformPoint(frame.Center);
-            var aboveSeaLevel = localPosition.magnitude >= planet.SeaLevel;
-            var unoccupied = !placedStructures.ContainsKey(frame.Cell);
-            return aboveSeaLevel && unoccupied;
+            if (placedStructures.Count >= 4096 || activeStructure == null || resources == null
+                || !resources.CanAfford(activeStructure.ConstructionCost)
+                || settlement.OverlapsStartingBuildings(frame.Center, activeStructure.Dimensions)) return false;
+            var radius = FootprintRadius(activeStructure);
+            foreach (var entry in placedStructures)
+                if (Vector3.Distance(frame.Center, entry.Instance.transform.position)
+                    < radius + FootprintRadius(entry.Definition)) return false;
+            return true;
+        }
+
+        private static float FootprintRadius(BuildableStructure definition)
+            => new Vector2(definition.Dimensions.x, definition.Dimensions.z).magnitude * 0.5f;
+
+        // Industry remaps inventory and cargo before removing an entry from this ordered list.
+        public bool Demolish(ManagedBuilding building)
+        {
+            var index = placedStructures.FindIndex(p => p.Instance.GetComponent<ManagedBuilding>() == building);
+            if (index < 0) return false;
+            var instance = placedStructures[index].Instance;
+            placedStructures.RemoveAt(index);
+            instance.SetActive(false); Destroy(instance);
+            RefreshEconomy(); return true;
         }
 
         private void UpdatePreview(CellFrame frame, bool placementValid)
@@ -230,7 +364,6 @@ namespace WH30K.Gameplay.Construction
             }
 
             var dimensions = activeStructure.Dimensions;
-            var offset = frame.Normal * (dimensions.y * 0.5f);
             var forward = frame.Forward.sqrMagnitude > 0.001f
                 ? frame.Forward
                 : Vector3.ProjectOnPlane(mainCamera.transform.forward, frame.Normal).normalized;
@@ -244,26 +377,58 @@ namespace WH30K.Gameplay.Construction
             }
 
             var rotation = Quaternion.LookRotation(forward.normalized, frame.Normal);
-            previewInstance.transform.SetPositionAndRotation(frame.Center + offset, rotation);
+            previewInstance.transform.SetPositionAndRotation(frame.Center, rotation);
             previewInstance.transform.localScale = dimensions;
             var validColor = activeStructure != null ? activeStructure.PreviewColor : validPreviewColor;
             previewRenderer.sharedMaterial.color = placementValid ? validColor : invalidPreviewColor;
             previewInstance.SetActive(true);
         }
 
-        private void PlaceStructure(CellFrame frame)
+        public bool TryPlaceCell(PlanetGridCell cell)
         {
-            var instance = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            instance.name = activeStructure.DisplayName;
-            instance.transform.SetParent(structureRoot != null ? structureRoot : planet.transform, false);
-            var collider = instance.GetComponent<Collider>();
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
+            if (grid == null || cell.X < 0 || cell.Y < 0
+                || cell.X >= grid.CellsPerFace || cell.Y >= grid.CellsPerFace) return false;
+            var frame = grid.CalculateFrame(cell);
+            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            SpawnStructure(frame, activeStructure);
+            RefreshEconomy();
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            return true;
+        }
 
-            var dimensions = activeStructure.Dimensions;
-            var offset = frame.Normal * (dimensions.y * 0.5f);
+        public bool TryPlaceDirection(Vector3 direction)
+        {
+            if (grid == null || direction.sqrMagnitude < 0.001f || activeStructure == null) return false;
+            var frame = FrameAt(direction.normalized);
+            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            SpawnStructure(frame, activeStructure, true);
+            RefreshEconomy();
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            return true;
+        }
+
+        private CellFrame FrameAt(Vector3 direction, BuildableStructure definition = null)
+        {
+            var n = direction.normalized;
+            var radial = planet.transform.TransformDirection(n);
+            var right = Vector3.Cross(radial, Mathf.Abs(radial.y) > 0.95f ? Vector3.forward : Vector3.up).normalized;
+            var forward = Vector3.Cross(right, radial).normalized;
+            var height = Mathf.Max(planet.EvaluateSurfacePoint(n).magnitude, planet.SeaLevel + 4);
+            definition = definition != null ? definition : activeStructure;
+            if (definition != null)
+            {
+                var extent = FootprintRadius(definition) / planet.Radius;
+                foreach (var offset in new[] { right, -right, forward, -forward })
+                    height = Mathf.Max(height, planet.EvaluateSurfacePoint(n + planet.transform.InverseTransformDirection(offset) * extent).magnitude + 1);
+            }
+            return new CellFrame(grid.GetCellFromDirection(n), planet.transform.TransformPoint(n * height), radial, right, forward, 10, 10);
+        }
+
+        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition, bool freePlacement = false)
+        {
+            var dimensions = definition.Dimensions;
+            var instance = BuildingVisuals.Create(definition.Id, definition.DisplayName,
+                structureRoot != null ? structureRoot : planet.transform, dimensions);
             var forward = frame.Forward.sqrMagnitude > 0.001f
                 ? frame.Forward
                 : Vector3.Cross(frame.Normal, Vector3.right);
@@ -273,14 +438,34 @@ namespace WH30K.Gameplay.Construction
             }
 
             var rotation = Quaternion.LookRotation(forward.normalized, frame.Normal);
-            instance.transform.SetPositionAndRotation(frame.Center + offset, rotation);
+            instance.transform.SetPositionAndRotation(frame.Center, rotation);
             instance.transform.localScale = dimensions;
 
-            var renderer = instance.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = GetMaterial(activeStructure.StructureColor);
+            var managed = instance.AddComponent<ManagedBuilding>();
+            managed.Configure(definition.Id, definition.DisplayName, definition.Economy, definition.IndustryImpact, resources, settlement);
 
-            placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, activeStructure, instance);
-            menu?.AppendEventLog($"Placed {activeStructure.DisplayName} at {frame.Cell}.");
+            placedStructures.Add(new PlacedStructure(frame.Cell, definition, instance,
+                planet.transform.InverseTransformPoint(frame.Center).normalized, freePlacement));
+            if (freePlacement) AddSupports(instance, frame, dimensions);
+            return managed;
+        }
+
+        private void AddSupports(GameObject instance, CellFrame frame, Vector3 dimensions)
+        {
+            // Piles extend to the seabed/terrain; the deck stays level even on water or a slope.
+            for (var x = -1; x <= 1; x += 2)
+                for (var z = -1; z <= 1; z += 2)
+                {
+                    var top = frame.Center + frame.Right * x * dimensions.x * 0.36f + frame.Forward * z * dimensions.z * 0.36f;
+                    var local = planet.transform.InverseTransformPoint(top);
+                    var bottom = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(local.normalized));
+                    var length = Mathf.Max(3, Vector3.Distance(top, bottom) + 3);
+                    var pile = GameObject.CreatePrimitive(PrimitiveType.Cube); pile.name = "Terrain support pile";
+                    Destroy(pile.GetComponent<Collider>()); pile.transform.SetParent(instance.transform, false);
+                    pile.transform.SetPositionAndRotation(top - frame.Normal * length * 0.5f, instance.transform.rotation);
+                    pile.transform.localScale = new Vector3(0.06f, length / dimensions.y, 0.06f);
+                    pile.GetComponent<Renderer>().sharedMaterial = BuildingVisuals.ServiceRoadMaterials[0];
+                }
         }
 
         private void EnsurePreviewInstance()
@@ -302,17 +487,10 @@ namespace WH30K.Gameplay.Construction
                 name = "BuildingPreviewMaterial"
             };
 
-            previewInstance = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            previewInstance.name = "BuildingPreview";
-            previewInstance.transform.SetParent(planet.transform, false);
-            var collider = previewInstance.GetComponent<Collider>();
-            if (collider != null)
-            {
-                Destroy(collider);
-            }
+            previewInstance = BuildingVisuals.Create(activeStructure.Id, "BuildingPreview", planet.transform,
+                activeStructure.Dimensions, previewMaterial);
 
             previewRenderer = previewInstance.GetComponent<MeshRenderer>();
-            previewRenderer.sharedMaterial = previewMaterial;
             previewInstance.SetActive(false);
         }
 
@@ -386,28 +564,20 @@ namespace WH30K.Gameplay.Construction
             }
         }
 
-        private static Material GetMaterial(Color color)
-        {
-            if (!MaterialCache.TryGetValue(color, out var material) || material == null)
-            {
-                material = new Material(Shader.Find("Standard")) { color = color };
-                MaterialCache[color] = material;
-            }
-
-            return material;
-        }
-
         private struct PlacedStructure
         {
             public readonly PlanetGridCell Cell;
             public readonly BuildableStructure Definition;
             public readonly GameObject Instance;
+            public readonly Vector3 Direction;
+            public readonly bool FreePlacement;
 
-            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance)
+            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance, Vector3 direction, bool freePlacement)
             {
                 Cell = cell;
                 Definition = definition;
                 Instance = instance;
+                Direction = direction; FreePlacement = freePlacement;
             }
         }
     }

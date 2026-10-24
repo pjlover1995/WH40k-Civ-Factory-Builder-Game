@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59ef5f4d9a44a3e9d0fc35283a6b2cb, type: 3}
+  m_Name: Smelter
+  m_EditorClassIdentifier:
+  id: Smelter
+  displayName: Ore Smelter
+  constructionCost: 360
+  populationCapacity: 0
+  workforceSlots: 24
+  productionPerWorker: 0
+  upkeepPerCycle: 12
+  environmentImpact: {co2Delta: 0.7, o2Delta: -0.001, waterDelta: 0.01, temperatureDelta: 0.0001}
+  dimensions: {x: 145, y: 140, z: 125}
+  previewColor: {r: 0.45, g: 0.95, b: 0.45, a: 0.6}
+  structureColor: {r: 0.85, g: 0.45, b: 0.3, a: 1}
