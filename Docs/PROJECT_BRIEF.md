@@ -37,10 +37,24 @@ The shared simulation clock advances one year per 1,800 real seconds at 1x, with
 
 Every core and player-built structure has its own operations state. Focus is free to change. Hab blocks offer high-density housing or civil administration; factories offer surge or clean production; utilities offer deep purification or economy cycles; outposts offer logistics or residential support. Focus tradeoffs appear in the inspector and alter simulation values. Upgrades cost 150 and 300 stockpile, adding 25% capacity/jobs and 15% upkeep per tier, with a maximum of tier III. Upgrades also scale environmental effects. Suspension removes the building's capacity, jobs, output, upkeep and environmental effects until resumed.
 
+## Geography and physical resource chains
+
+Terrain recipe 2 adds ridged mountain ranges and coherent hills. Moisture, elevation and latitude classify forests, swamps, grassland, arid hills and alpine ice. Terrain colors use the same CPU classification as local vegetation and prospecting. Close views stream deterministic batched trees, reeds, wetland pools and rocks. Recipes 0/1 remain available for old saves, preserving coastline and building positions. Waves use simulation time with vertex swells, dynamic normals, shallow foam and a local detailed water patch.
+
+A sun, two moons and a distant gas world provide a stylized solar scene. One visual day is 180 simulation seconds, deliberately slower than the five-second calendar day; moon orbits are also compressed. The sun rotates relative to the fixed surface coordinates, preserving all placement anchors while producing day/night lighting. These are presentation orbits without gravity, seasons or eclipse simulation.
+
+New construction records a finite unit surface direction and ignores grid snapping. Support piles permit water and steep sites. Costs, non-overlap and the building limit still apply. Older grid placements retain their stored grid coordinates. Schema 5 includes these free directions and industry state.
+
+The construction deck has Colony, Extraction and Processing pages. Geological survey cycles Off/All and iron/copper/stone/biomass/crystal filters, colored pins and route lines. Visit Nearest Deposit targets a matching site without changing the colony shortcut. Prospecting is deterministic from seed, terrain recipe and landing region; elevations/moisture constrain mineral and biomass placement. Finite deposits each begin with 2,000 units. Physical outcrops indicate locations without the overlay.
+
+Mines (280 credits) select iron, copper or crystals; quarries (200) extract stone; harvesters (210) gather biomass. Extractors need a deposit within 250 metres but can be built elsewhere. Smelters (360) convert two ore plus one biomass into one metal. Fabrication works (420) convert two metal, one stone and half a crystal into one component. Five staffed simulation seconds complete one cycle; tiers and industrial focuses modify throughput, upkeep and emissions. Each facility stores up to 120 of each material. No input is consumed unless the whole recipe and output storage are available.
+
+Automatic atmospheric cargo haulers dispatch batches of up to three units to the closest suitable consumer, reserve incoming storage and deliver only on arrival. Components delivered to the active core factory earn 25 credits each. Vehicles follow surface-relative flight arcs rather than a road network. Deposits, local inventories, partial work and in-flight cargo persist; old saves initialize empty industrial stocks. The new industrial buildings also retain normal workforce/upkeep/environment effects. Machinery rotates only while operating and the simulation is running.
+
 ## Limits and next priorities
 
-- There is one recurring narrative event and one aggregate stockpile.
-- Architecture and surface materials are procedural modular art, without authored high-resolution textures or animated inhabitants. Causeways are visual decoration; there are no transport networks, production recipes, research, combat, or multiple independent settlements.
+- There is one recurring narrative event, an aggregate credit stockpile and seven physical industrial materials. Only components currently export into credits.
+- Architecture and surface materials are procedural modular art, without authored high-resolution textures or animated inhabitants. Causeways are visual decoration. Cargo uses automatic atmospheric routes, without ground road pathfinding, player-authored routes, research, combat or multiple independent settlements.
 - The starting core uses the original fixed building classes; player construction uses ScriptableObject definitions. Both are aggregated once in the settlement economy.
 - Engine-independent checks run without Unity. Scene rendering, engine compilation, interaction, and standalone performance must be verified in Unity before release.
-- After validating this loop, improve readability and balance from play sessions before expanding content or terrain complexity.
+- Next acceptance work: balance the extraction economy, profile large colonies and local ecology generation, and expand transport management only after the automatic loop is reliable.

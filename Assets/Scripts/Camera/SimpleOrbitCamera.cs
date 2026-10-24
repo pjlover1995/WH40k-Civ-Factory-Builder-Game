@@ -25,7 +25,7 @@ namespace WH30K.CameraSystem
         {
             var camera = GetComponent<UnityEngine.Camera>();
             camera.ResetProjectionMatrix(); camera.fieldOfView = 50;
-            camera.nearClipPlane = 1f; camera.farClipPlane = radius * 12f;
+            camera.nearClipPlane = 1f; camera.farClipPlane = radius * 20f;
             target = newTarget; planet = target != null ? target.GetComponent<LODPlanet>() : null;
             defaultDistance = radius * 3.7f; distance = defaultDistance;
             yaw = 135; pitch = 25; surfaceMode = false;
@@ -142,7 +142,14 @@ namespace WH30K.CameraSystem
         public void FocusSettlement(Vector3 direction)
         {
             if (target == null || direction.sqrMagnitude < 0.01f) return;
-            colonyDirection = direction.normalized; navigationDirection = colonyDirection;
+            colonyDirection = direction.normalized;
+            FocusLocation(direction);
+        }
+
+        public void FocusLocation(Vector3 direction)
+        {
+            if (target == null || direction.sqrMagnitude < 0.01f) return;
+            navigationDirection = direction.normalized;
             surfaceMode = true; yaw = 35; pitch = 48; distance = 220;
             UpdateCameraTransform();
         }

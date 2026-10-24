@@ -39,6 +39,7 @@ namespace WH30K.UI
         private Text dateText, clockText, environmentText, eventLogText, buildButtonLabel, structureDetails;
         private Text eventTitleText, eventBodyText, choiceALabel, choiceBLabel, buildingTitle, buildingStats, focusDescription;
         private Text upgradeLabel, operationLabel, statusText;
+        private Text materialText, surveyLabel;
         private Button saveButton, loadButton, buildButton, upgradeButton, operationButton, pauseButton, colonyMarker;
         private Button choiceA, choiceB;
         private readonly Button[] focuses = new Button[3];
@@ -47,6 +48,9 @@ namespace WH30K.UI
         private readonly List<string> log = new List<string>();
         private readonly string[] catalogIds = { "Outpost", "HabBlock", "Factory", "Utility" };
         private readonly string[] catalogLabels = { "FRONTIER OUTPOST\n250  /  LOGISTICS", "HAB BLOCK\n180  /  POPULATION", "MACRO FACTORY\n320  /  INDUSTRY", "AIR SCRUBBER\n220  /  ENVIRONMENT" };
+        private string[] visibleIds = { "Outpost", "HabBlock", "Factory", "Utility" };
+        private readonly string[][] catalogGroups = { new[] { "Outpost", "HabBlock", "Factory", "Utility" }, new[] { "Mine", "Quarry", "Harvester" }, new[] { "Smelter", "Works" } };
+        private IndustrySystem Industry => GetComponent<IndustrySystem>();
         private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
         private ManagedBuilding selectedBuilding;
         private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
@@ -153,7 +157,7 @@ namespace WH30K.UI
         private void BuildPlanetPanel(Transform parent)
         {
             var panel = Panel("PlanetStatus", parent, new Vector2(232, 236), new Vector2(16, -132), TextAnchor.UpperLeft);
-            Label("PlanetStatusTitle", panel.transform, "PLANETARY CONDITIONS", 11, new Vector2(16, -17), 210, 20, Gold);
+            Label("PlanetStatusTitle", panel.transform, "PLANET STATUS", 10, new Vector2(16, -17), 110, 20, Gold);
             environmentText = Label("EnvironmentReadout", panel.transform, "", 14, new Vector2(16, -49), 202, 119, Ivory);
             var track = Panel("HabitabilityTrack", panel.transform, new Vector2(200, 4), new Vector2(16, -176), TextAnchor.UpperLeft, false);
             track.GetComponent<Image>().color = ButtonBase;
@@ -163,25 +167,38 @@ namespace WH30K.UI
                 .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
                 .onClick.AddListener(() => Orbit?.FrameTarget());
-            var journal = Panel("OperationsLog", parent, new Vector2(232, 162), new Vector2(16, -384), TextAnchor.UpperLeft);
-            Label("JournalTitle", journal.transform, "COMMAND JOURNAL", 11, new Vector2(16, -17), 204, 20, Gold);
-            eventLogText = Label("EventLog", journal.transform, "Awaiting expedition orders.", 12, new Vector2(16, -48), 200, 102, Muted);
+            var journal = Panel("OperationsLog", parent, new Vector2(232, 202), new Vector2(16, -384), TextAnchor.UpperLeft);
+            Label("JournalTitle", journal.transform, "RESOURCE DIRECTORATE", 11, new Vector2(16, -13), 204, 20, Gold);
+            materialText = Label("MaterialInventory", journal.transform, "", 13, new Vector2(16, -37), 206, 80, Ivory);
+            Button("SurveyOverlay", journal.transform, new Vector2(16, -122), "SURVEY: OFF", out surveyLabel, 200, 25)
+                .onClick.AddListener(() => { if(Industry!=null) Industry.SetOverlay((Industry.Overlay+1)%7); });
+            Button("VisitDeposit", journal.transform, new Vector2(16, -151), "VISIT NEAREST DEPOSIT", out _, 200, 25)
+                .onClick.AddListener(VisitDeposit);
+            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -183), 200, 16, Muted);
+            Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out _, 87, 24)
+                .onClick.AddListener(() => ShowNewGamePanel(true));
         }
 
         private void BuildConstruction(Transform parent)
         {
-            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 134), new Vector2(0, 44), TextAnchor.LowerCenter);
+            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 166), new Vector2(0, 44), TextAnchor.LowerCenter);
             Label("ConstructionTitle", deck.transform, "CONSTRUCTION AUTHORITY", 10, new Vector2(16, -11), 300, 18, Gold);
+            for(var g=0;g<3;g++)
+            {
+                var group=g;Button("CatalogGroup"+g,deck.transform,new Vector2(302+g*127,-9),new[]{"COLONY","EXTRACTION","PROCESSING"}[g],out _,119,27)
+                    .onClick.AddListener(()=>SetCatalogGroup(group));
+            }
             for (var i = 0; i < 4; i++)
             {
+                var index=i;
                 var id = catalogIds[i];
-                catalog[i] = Button("BuildCard" + id, deck.transform, new Vector2(16 + i * 171, -36),
+                catalog[i] = Button("BuildCard" + id, deck.transform, new Vector2(16 + i * 171, -49),
                     catalogLabels[i], out var label, 161, 80);
                 label.fontSize = 14; label.lineSpacing = 1.4f;
-                catalog[i].onClick.AddListener(() => { selection.Select(null); buildingPlacement.SelectStructure(id); });
+                catalog[i].onClick.AddListener(() => { selection.Select(null); buildingPlacement.SelectStructure(visibleIds[index]); });
             }
-            structureDetails = Label("StructureDetails", deck.transform, "", 11, new Vector2(710, -33), 272, 44, Muted);
-            buildButton = Button("BuildButton", deck.transform, new Vector2(710, -87), "DEPLOY STRUCTURE", out buildButtonLabel, 272, 29);
+            structureDetails = Label("StructureDetails", deck.transform, "", 11, new Vector2(710, -44), 272, 68, Muted);
+            buildButton = Button("BuildButton", deck.transform, new Vector2(710, -122), "DEPLOY STRUCTURE", out buildButtonLabel, 272, 29);
             buildButton.onClick.AddListener(() =>
             {
                 selection.Select(null);
@@ -192,27 +209,27 @@ namespace WH30K.UI
 
         private void BuildInspector(Transform parent)
         {
-            inspector = Panel("BuildingInspector", parent, new Vector2(294, 490), new Vector2(-16, -132), TextAnchor.UpperRight);
+            inspector = Panel("BuildingInspector", parent, new Vector2(294, 454), new Vector2(-16, -132), TextAnchor.UpperRight);
             Label("InspectorTag", inspector.transform, "STRUCTURE DIRECTORATE", 10, new Vector2(18, -16), 230, 20, Gold);
             Button("CloseInspector", inspector.transform, new Vector2(252, -12), "X", out _, 26, 26)
                 .onClick.AddListener(() => selection.Select(null));
             buildingTitle = Label("SelectedBuildingTitle", inspector.transform, "", 22, new Vector2(18, -47), 260, 57, Ivory);
             buildingStats = Label("SelectedBuildingStats", inspector.transform, "", 13, new Vector2(18, -110), 258, 104, Ivory);
-            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -221), 258, 20, Gold);
+            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -206), 258, 20, Gold);
             for (var i = 0; i < 3; i++)
             {
                 var focus = i;
-                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -247 - i * 42), "", out _, 258, 34);
+                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -232 - i * 35), "", out _, 258, 29);
                 focuses[i].onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.SetFocus(focus); RefreshBuilding(); });
             }
-            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -379), 258, 48, Muted);
-            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -437), "", out upgradeLabel, 124, 34);
+            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -340), 258, 48, Muted);
+            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -402), "", out upgradeLabel, 124, 34);
             upgradeButton.onClick.AddListener(() =>
             {
                 if (selectedBuilding != null && selectedBuilding.Upgrade()) AppendEventLog(selectedBuilding.DisplayName + " upgraded.");
                 RefreshBuilding();
             });
-            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -437), "", out operationLabel, 124, 34);
+            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -402), "", out operationLabel, 124, 34);
             operationButton.onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.ToggleOperation(); RefreshBuilding(); });
             inspector.SetActive(false);
         }
@@ -244,7 +261,11 @@ namespace WH30K.UI
                     SetDifficulty(definitions[next].difficulty);
                 });
             Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
-                .onClick.AddListener(() => bootstrap.LoadFromFile());
+                .onClick.AddListener(() =>
+                {
+                    if(GameSettings.HasActiveGame) {ShowNewGamePanel(false);ShowHud(true);}
+                    else bootstrap.LoadFromFile();
+                });
             Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44)
                 .onClick.AddListener(() =>
                 {
@@ -284,7 +305,7 @@ namespace WH30K.UI
 #endif
             }
             refreshTimer += Time.unscaledDeltaTime;
-            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); }
+            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); }
             UpdateColonyMarker();
         }
 
@@ -326,6 +347,8 @@ namespace WH30K.UI
             var state = selectedBuilding.State; var e = selectedBuilding.Economy; var impact = selectedBuilding.Impact;
             buildingTitle.text = selectedBuilding.DisplayName;
             buildingStats.text = $"TIER {state.level + 1}   /   {(state.offline ? "OFFLINE" : "OPERATIONAL")}\nHousing {e.capacity:0}     Jobs {e.jobs:0}\nOutput / worker  {e.outputPerWorker:0.00}\nUpkeep  {e.upkeep:0.0} / s\nCO2 impact  {impact.co2Delta:+0.00;-0.00;0} / s at full staffing";
+            if(IndustryRules.Facility(selectedBuilding.Id) && Industry!=null)
+                buildingStats.text=$"TIER {state.level+1} / {(state.offline?"OFFLINE":"OPERATIONAL")}   Jobs {e.jobs:0}\nUpkeep {e.upkeep:0.#}/s\n"+Industry.Status(selectedBuilding);
             for (var i = 0; i < 3; i++)
             {
                 focuses[i].GetComponentInChildren<Text>().text = BuildingOperationRules.FocusName(selectedBuilding.Id, i);
@@ -340,14 +363,40 @@ namespace WH30K.UI
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
         {
             if (buildButtonLabel != null) buildButtonLabel.text = placementActive ? "CANCEL DEPLOYMENT  [ESC]" : "DEPLOY STRUCTURE";
-            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails.Split('\n')[0];
+            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails.Split('\n')[0]+"\nFree placement / terrain supports";
             Tone(buildButton, placementActive);
             for (var i = 0; i < catalog.Length; i++)
-                if (catalog[i] != null) Tone(catalog[i], buildingPlacement != null && displayName.StartsWith(catalogLabels[i].Split('\n')[0], StringComparison.OrdinalIgnoreCase));
+                if (catalog[i] != null) Tone(catalog[i], buildingPlacement != null && i<visibleIds.Length && buildingPlacement.ActiveStructureId==visibleIds[i]);
         }
-        public void ShowNewGamePanel(bool visible) { newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; }
+        private void SetCatalogGroup(int group)
+        {
+            visibleIds=catalogGroups[group];var definitions=Resources.LoadAll<BuildableStructure>("Buildings");
+            for(var i=0;i<4;i++)
+            {
+                catalog[i].gameObject.SetActive(i<visibleIds.Length);if(i>=visibleIds.Length)continue;
+                var definition=Array.Find(definitions,d=>d.Id==visibleIds[i]);
+                catalog[i].GetComponentInChildren<Text>().text=definition.DisplayName.ToUpperInvariant()+$"\n{definition.ConstructionCost:0}  /  "+(group==1?"EXTRACTION":group==2?"PROCESSING":"COLONY");
+            }
+            selection.Select(null);buildingPlacement.SelectStructure(visibleIds[0]);
+        }
+        private void RefreshMaterials()
+        {
+            if(materialText==null || Industry==null || bootstrap.ActivePlanet==null)return;
+            var total=Industry.Totals();var biome=Orbit!=null?bootstrap.ActivePlanet.Biome(Orbit.NavigationDirection):"";
+            materialText.text=$"ORE  Fe {total[0]:0}   Cu {total[1]:0}\nSTONE {total[2]:0}   CRYSTAL {total[4]:0}\nBIO {total[3]:0}   METAL {total[5]:0}\nPARTS {total[6]:0}   CARGO {Industry.CargoCount}\n{biome}";
+            surveyLabel.text="SURVEY: "+new[]{"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)"}[Industry.Overlay];
+        }
+        private void VisitDeposit()
+        {
+            if(Industry==null || Orbit==null || bootstrap.ActivePlanet==null)return;
+            var kind=(MaterialKind)Mathf.Clamp(Industry.Overlay-2,0,4);
+            var world=bootstrap.ActivePlanet.transform.TransformPoint(bootstrap.ActivePlanet.EvaluateSurfacePoint(Orbit.NavigationDirection));
+            var deposit=Industry.NearestDeposit(world,kind);
+            if(deposit!=null){Industry.SetOverlay((int)kind+2);Orbit.FocusLocation(deposit.Direction);AppendEventLog($"Survey: {IndustryRules.Name(kind)}, {deposit.Remaining:0} units.");}
+        }
+        public void ShowNewGamePanel(bool visible) { newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
         public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) selection.Select(null); }
-        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible; }
+        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible || (newGamePanel!=null && newGamePanel.activeSelf); }
         public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
         public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
@@ -368,7 +417,7 @@ namespace WH30K.UI
         public void AppendEventLog(string entry)
         {
             log.Add(entry); while (log.Count > 2) log.RemoveAt(0);
-            eventLogText.text = string.Join("\n\n", log);
+            eventLogText.text = entry;
         }
         public void PromptEvent(string title, string body, string optionAText, Action optionA, string optionBText, Action optionB)
         {

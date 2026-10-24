@@ -168,6 +168,7 @@ namespace WH30K.Planet
             var vertexCount = surfaceCount + edgeCount;
             var vertices = new Vector3[vertexCount];
             var normals = new Vector3[vertexCount];
+            var colors = new Color[vertexCount];
             var uvs = new Vector2[vertexCount];
             var triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
 
@@ -184,6 +185,7 @@ namespace WH30K.Planet
                     var vertex = planet.EvaluateSurfacePoint(pointOnSphere);
                     vertices[i] = vertex;
                     normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
+                    colors[i] = planet.BiomeColor(pointOnSphere);
                     uvs[i] = new Vector2(percentX, percentY);
 
                     if (x == resolution - 1 || y == resolution - 1)
@@ -214,6 +216,7 @@ namespace WH30K.Planet
                 var lower = surfaceCount + i; var nextLower = surfaceCount + (i + 1) % edgeCount;
                 vertices[lower] = vertices[a] - vertices[a].normalized * 12f;
                 normals[lower] = normals[a]; uvs[lower] = uvs[a];
+                colors[lower] = colors[a];
                 triangles[triIndex++] = a; triangles[triIndex++] = lower; triangles[triIndex++] = b;
                 triangles[triIndex++] = b; triangles[triIndex++] = lower; triangles[triIndex++] = nextLower;
             }
@@ -221,6 +224,7 @@ namespace WH30K.Planet
             mesh.Clear();
             mesh.vertices = vertices;
             mesh.normals = normals;
+            mesh.colors = colors;
             mesh.uv = uvs;
             mesh.triangles = triangles;
         }

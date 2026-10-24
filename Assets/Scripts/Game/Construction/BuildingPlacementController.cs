@@ -26,7 +26,8 @@ namespace WH30K.Gameplay.Construction
         [SerializeField] private Color allowedGridColor = new Color(0.6f, 1f, 0.6f, 0.35f);
         [SerializeField] private Color blockedGridColor = new Color(1f, 0.4f, 0.4f, 0.35f);
 
-        private readonly Dictionary<PlanetGridCell, PlacedStructure> placedStructures = new Dictionary<PlanetGridCell, PlacedStructure>();
+        private readonly List<PlacedStructure> placedStructures = new List<PlacedStructure>();
+        public ManagedBuilding[] Buildings => placedStructures.ConvertAll(p => p.Instance.GetComponent<ManagedBuilding>()).ToArray();
 
         private LODPlanet planet;
         private PlanetGrid grid;
@@ -47,6 +48,7 @@ namespace WH30K.Gameplay.Construction
         private bool isPlacing;
 
         public bool IsPlacing => isPlacing;
+        public string ActiveStructureId => activeStructure != null ? activeStructure.Id : "";
         public string ActiveStructureName => activeStructure != null
             ? $"{activeStructure.DisplayName} ({activeStructure.ConstructionCost:0})" : "Structure";
         public int GridResolution => grid != null ? grid.CellsPerFace : cellsPerFace;
@@ -109,7 +111,7 @@ namespace WH30K.Gameplay.Construction
 
         public void ResetPlacement()
         {
-            foreach (var structure in placedStructures.Values)
+            foreach (var structure in placedStructures)
             {
                 if (structure.Instance != null)
                 {
@@ -142,11 +144,12 @@ namespace WH30K.Gameplay.Construction
         public PlacedStructureSnapshot[] CreateSnapshot()
         {
             var snapshots = new List<PlacedStructureSnapshot>();
-            foreach (var entry in placedStructures.Values)
+            foreach (var entry in placedStructures)
                 snapshots.Add(new PlacedStructureSnapshot
                 {
                     id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y,
-                    operation = entry.Instance.GetComponent<ManagedBuilding>().State
+                    operation = entry.Instance.GetComponent<ManagedBuilding>().State,
+                    freePlacement = entry.FreePlacement, nx = entry.Direction.x, ny = entry.Direction.y, nz = entry.Direction.z
                 });
             return snapshots.ToArray();
         }
@@ -166,7 +169,8 @@ namespace WH30K.Gameplay.Construction
                 {
                     var definition = Array.Find(availableStructures, item => item.Id == snapshot.id);
                     var cell = new PlanetGridCell(snapshot.face, snapshot.x, snapshot.y);
-                    SpawnStructure(grid.CalculateFrame(cell), definition).Restore(snapshot.operation);
+                    var frame = snapshot.freePlacement ? FrameAt(new Vector3(snapshot.nx, snapshot.ny, snapshot.nz), definition) : grid.CalculateFrame(cell);
+                    SpawnStructure(frame, definition, snapshot.freePlacement).Restore(snapshot.operation);
                 }
             RefreshEconomy();
         }
@@ -174,7 +178,7 @@ namespace WH30K.Gameplay.Construction
         private void RefreshEconomy()
         {
             var definitions = new List<ManagedBuilding>();
-            foreach (var entry in placedStructures.Values) definitions.Add(entry.Instance.GetComponent<ManagedBuilding>());
+            foreach (var entry in placedStructures) definitions.Add(entry.Instance.GetComponent<ManagedBuilding>());
             settlement?.SetConstructedBuildings(definitions);
         }
 
@@ -251,11 +255,11 @@ namespace WH30K.Gameplay.Construction
 
             var placementValid = ValidatePlacement(frame);
             UpdatePreview(frame, placementValid);
-            visualizer?.ShowArea(grid, frame.Cell, placementValid);
+            visualizer?.Hide();
 
             if (placementValid && Input.GetMouseButtonDown(0))
             {
-                TryPlaceCell(frame.Cell);
+                TryPlaceDirection(planet.transform.InverseTransformPoint(frame.Center).normalized);
             }
             else if (Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Escape))
             {
@@ -273,8 +277,7 @@ namespace WH30K.Gameplay.Construction
             }
 
             var localDirection = planet.transform.InverseTransformDirection(direction);
-            var cell = grid.GetCellFromDirection(localDirection);
-            frame = grid.CalculateFrame(cell);
+            frame = FrameAt(localDirection);
             return true;
         }
 
@@ -282,7 +285,7 @@ namespace WH30K.Gameplay.Construction
         {
             direction = Vector3.zero;
             var center = planet.transform.position;
-            var adjustedRadius = planet.Radius + 700f;
+            var adjustedRadius = planet.Radius + 1600f;
             var oc = ray.origin - center;
             var a = Vector3.Dot(ray.direction, ray.direction);
             var b = 2f * Vector3.Dot(oc, ray.direction);
@@ -303,13 +306,13 @@ namespace WH30K.Gameplay.Construction
             {
                 var t = Mathf.Lerp(start, end, i / 128f);
                 var local = planet.transform.InverseTransformPoint(ray.GetPoint(t));
-                if (local.magnitude <= planet.EvaluateSurfacePoint(local.normalized).magnitude)
+                if (local.magnitude <= Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude))
                 {
                     for (var j = 0; j < 14; j++)
                     {
                         var mid = (previous + t) * 0.5f;
                         local = planet.transform.InverseTransformPoint(ray.GetPoint(mid));
-                        if (local.magnitude <= planet.EvaluateSurfacePoint(local.normalized).magnitude) t = mid;
+                        if (local.magnitude <= Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude)) t = mid;
                         else previous = mid;
                     }
                     direction = (ray.GetPoint(t) - center).normalized;
@@ -322,15 +325,12 @@ namespace WH30K.Gameplay.Construction
 
         private bool ValidatePlacement(CellFrame frame)
         {
-            var localPosition = planet.transform.InverseTransformPoint(frame.Center);
-            var aboveSeaLevel = localPosition.magnitude >= planet.SeaLevel;
-            var unoccupied = !placedStructures.ContainsKey(frame.Cell);
-            if (!aboveSeaLevel || !unoccupied || placedStructures.Count >= 4096 || activeStructure == null || resources == null
+            if (placedStructures.Count >= 4096 || activeStructure == null || resources == null
                 || !resources.CanAfford(activeStructure.ConstructionCost)
                 || settlement.OverlapsStartingBuildings(frame.Center, activeStructure.Dimensions)) return false;
             var radius = FootprintRadius(activeStructure);
-            foreach (var entry in placedStructures.Values)
-                if (Vector3.Distance(frame.Center, grid.GetCellCenterWorld(entry.Cell))
+            foreach (var entry in placedStructures)
+                if (Vector3.Distance(frame.Center, entry.Instance.transform.position)
                     < radius + FootprintRadius(entry.Definition)) return false;
             return true;
         }
@@ -379,7 +379,35 @@ namespace WH30K.Gameplay.Construction
             return true;
         }
 
-        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition)
+        public bool TryPlaceDirection(Vector3 direction)
+        {
+            if (grid == null || direction.sqrMagnitude < 0.001f || activeStructure == null) return false;
+            var frame = FrameAt(direction.normalized);
+            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            SpawnStructure(frame, activeStructure, true);
+            RefreshEconomy();
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            return true;
+        }
+
+        private CellFrame FrameAt(Vector3 direction, BuildableStructure definition = null)
+        {
+            var n = direction.normalized;
+            var radial = planet.transform.TransformDirection(n);
+            var right = Vector3.Cross(radial, Mathf.Abs(radial.y) > 0.95f ? Vector3.forward : Vector3.up).normalized;
+            var forward = Vector3.Cross(right, radial).normalized;
+            var height = Mathf.Max(planet.EvaluateSurfacePoint(n).magnitude, planet.SeaLevel + 4);
+            definition = definition != null ? definition : activeStructure;
+            if (definition != null)
+            {
+                var extent = FootprintRadius(definition) / planet.Radius;
+                foreach (var offset in new[] { right, -right, forward, -forward })
+                    height = Mathf.Max(height, planet.EvaluateSurfacePoint(n + planet.transform.InverseTransformDirection(offset) * extent).magnitude + 1);
+            }
+            return new CellFrame(grid.GetCellFromDirection(n), planet.transform.TransformPoint(n * height), radial, right, forward, 10, 10);
+        }
+
+        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition, bool freePlacement = false)
         {
             var dimensions = definition.Dimensions;
             var instance = BuildingVisuals.Create(definition.Id, definition.DisplayName,
@@ -399,8 +427,28 @@ namespace WH30K.Gameplay.Construction
             var managed = instance.AddComponent<ManagedBuilding>();
             managed.Configure(definition.Id, definition.DisplayName, definition.Economy, definition.IndustryImpact, resources, settlement);
 
-            placedStructures[frame.Cell] = new PlacedStructure(frame.Cell, definition, instance);
+            placedStructures.Add(new PlacedStructure(frame.Cell, definition, instance,
+                planet.transform.InverseTransformPoint(frame.Center).normalized, freePlacement));
+            if (freePlacement) AddSupports(instance, frame, dimensions);
             return managed;
+        }
+
+        private void AddSupports(GameObject instance, CellFrame frame, Vector3 dimensions)
+        {
+            // Piles extend to the seabed/terrain; the deck stays level even on water or a slope.
+            for (var x = -1; x <= 1; x += 2)
+                for (var z = -1; z <= 1; z += 2)
+                {
+                    var top = frame.Center + frame.Right * x * dimensions.x * 0.36f + frame.Forward * z * dimensions.z * 0.36f;
+                    var local = planet.transform.InverseTransformPoint(top);
+                    var bottom = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(local.normalized));
+                    var length = Mathf.Max(3, Vector3.Distance(top, bottom) + 3);
+                    var pile = GameObject.CreatePrimitive(PrimitiveType.Cube); pile.name = "Terrain support pile";
+                    Destroy(pile.GetComponent<Collider>()); pile.transform.SetParent(instance.transform, false);
+                    pile.transform.SetPositionAndRotation(top - frame.Normal * length * 0.5f, instance.transform.rotation);
+                    pile.transform.localScale = new Vector3(0.06f, length / dimensions.y, 0.06f);
+                    pile.GetComponent<Renderer>().sharedMaterial = BuildingVisuals.ServiceRoadMaterials[0];
+                }
         }
 
         private void EnsurePreviewInstance()
@@ -504,12 +552,15 @@ namespace WH30K.Gameplay.Construction
             public readonly PlanetGridCell Cell;
             public readonly BuildableStructure Definition;
             public readonly GameObject Instance;
+            public readonly Vector3 Direction;
+            public readonly bool FreePlacement;
 
-            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance)
+            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance, Vector3 direction, bool freePlacement)
             {
                 Cell = cell;
                 Definition = definition;
                 Instance = instance;
+                Direction = direction; FreePlacement = freePlacement;
             }
         }
     }

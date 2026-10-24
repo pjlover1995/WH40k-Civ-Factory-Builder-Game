@@ -53,7 +53,7 @@ namespace WH30K.Planet
         private float ridgeScale;
         private float ridgeWeight;
 
-        public void BuildPlanet(int seed, Material material, int terrainVersion = 1)
+        public void BuildPlanet(int seed, Material material, int terrainVersion = 2)
         {
             Seed = seed;
             TerrainVersion = terrainVersion;
@@ -179,7 +179,42 @@ namespace WH30K.Planet
             var mountains = Mathf.Pow(ridged, 5f) * 150f * ridgeWeight * inland;
             var detail = (Noise3(pointOnUnitSphere * 42f + ridgeOffset) - 0.5f) * 8f * inland;
             var elevation = (continents - 0.52f) * 650f - 20f + mountains + detail;
+            if (TerrainVersion >= 2)
+            {
+                var ranges = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.43f, 0.66f,
+                    Noise3(pointOnUnitSphere * 7.7f + ridgeOffset * 0.31f)));
+                var peaks = Mathf.Pow(ridged, 3.1f) * ranges * inland * 1050f;
+                var hills = (Noise3(pointOnUnitSphere * 65f + continentOffset) - 0.45f) * 100f * inland;
+                elevation += peaks + hills;
+            }
             return radius + elevation;
+        }
+
+        public float Moisture(Vector3 direction) => Noise3(direction.normalized * 8.5f + continentOffset * 0.63f);
+        public string Biome(Vector3 direction)
+        {
+            var n = direction.normalized; var height = EvaluateHeight(n) - SeaLevel;
+            if (height < 0) return "Ocean";
+            if (Mathf.Abs(n.y) > 0.83f || height > 650) return "Alpine / ice";
+            if (height > 220) return "Mountain range";
+            var wet = Moisture(n);
+            if (height < 48 && wet > 0.49f) return "Swamp";
+            if (wet > 0.51f) return "Forest";
+            if (wet < 0.43f && Mathf.Abs(n.y) < 0.65f) return "Arid hills";
+            return height > 80 ? "Rolling hills" : "Grassland";
+        }
+
+        public Color BiomeColor(Vector3 direction)
+        {
+            switch (Biome(direction))
+            {
+                case "Swamp": return new Color(0.14f, 0.23f, 0.12f);
+                case "Forest": return new Color(0.10f, 0.24f, 0.13f);
+                case "Arid hills": return new Color(0.54f, 0.39f, 0.23f);
+                case "Mountain range": return new Color(0.34f, 0.33f, 0.30f);
+                case "Alpine / ice": return new Color(0.80f, 0.86f, 0.87f);
+                default: return new Color(0.28f, 0.37f, 0.17f);
+            }
         }
 
         private static float Noise3(Vector3 p)

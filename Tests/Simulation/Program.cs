@@ -40,6 +40,30 @@ internal static class Program
         try
         {
             var money = 500f;
+            var stock=new float[7];stock[0]=2;
+            Check(!IndustryRules.Process("Smelter",stock)&&stock[0]==2,"smelting waits for fuel without consuming ore");
+            stock[3]=1;
+            Check(IndustryRules.Process("Smelter",stock)&&stock[0]==0&&stock[3]==0&&stock[5]==1,"smelting consumes exact ore and biomass quantities");
+            stock[1]=2;stock[3]=1;
+            Check(IndustryRules.Process("Smelter",stock)&&stock[1]==0&&stock[5]==2,"copper provides an alternative smelting input");
+            stock[2]=1;stock[4]=.5f;
+            Check(IndustryRules.Process("Works",stock)&&stock[5]==0&&stock[2]==0&&stock[4]==0&&stock[6]==1,"fabrication consumes metal, stone and crystal atomically");
+            stock[0]=2;stock[3]=1;stock[5]=120;
+            Check(!IndustryRules.Process("Smelter",stock)&&stock[0]==2,"full output storage blocks recipes without losing inputs");
+            stock[4]=float.NaN;
+            Check(!IndustryRules.ValidStock(stock),"invalid material quantities are rejected");
+            var logistics=new IndustrySnapshot{facilities=new[]{new FacilityStock(),new FacilityStock()},deposits=new[]{new DepositStock{id=0,remaining=1999}},
+                cargo=new[]{new CargoStock{source=0,target=1,kind=0,amount=3,progress=.5f}}};
+            Check(IndustryRules.Valid(logistics,2),"valid industrial saves retain in-flight cargo and depleted deposits");
+            logistics.facilities[1].quantities[0]=119;
+            Check(!IndustryRules.Valid(logistics,2),"incoming cargo reserves destination storage capacity");
+            logistics.facilities[1].quantities[0]=0;logistics.cargo[0].target=3;
+            Check(!IndustryRules.Valid(logistics,2),"invalid transport endpoints are rejected before loading");
+            Check(ConstructionSave.ValidDirection(1,0,0)&&!ConstructionSave.ValidDirection(float.NaN,0,0)&&!ConstructionSave.ValidDirection(0,0,0),"free placement requires a finite unit surface direction");
+            var free=new[]{new PlacedStructureSnapshot{id="Outpost",freePlacement=true,nx=1},new PlacedStructureSnapshot{id="Outpost",freePlacement=true,nx=.99995f,ny=.01f}};
+            Check(ConstructionSave.Validate(free,96,Ids,out _),"separate free placements may share a legacy grid cell");
+            free[1]=free[0];Check(!ConstructionSave.Validate(free,96,Ids,out _),"duplicate free surface positions are rejected");
+            Check(IndustryRules.DayAngle(0)==IndustryRules.DayAngle(180)&&IndustryRules.DayAngle(90)==180,"lighting day cycles deterministically with simulated time");
             Check(ColonyRules.TrySpend(ref money, 320f) && money == 180f, "construction deducts exact cost");
             Check(!ColonyRules.TrySpend(ref money, 220f) && money == 180f, "unaffordable purchase changes nothing");
             Check(ColonyRules.TrySpend(ref money, 180f) && money == 0f, "exact balance purchase succeeds");

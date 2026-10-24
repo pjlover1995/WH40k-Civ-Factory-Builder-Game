@@ -46,12 +46,15 @@ namespace WH30K.Planet
             Shell("Ocean", planet.SeaLevel, MakeMaterial("PlanetOcean"), planet);
             Shell("Cloud layer", planet.Radius + 135f, MakeMaterial("PlanetClouds"), null);
             Shell("Atmospheric scattering", planet.Radius * 1.022f, MakeMaterial("PlanetAtmosphere"), null);
+            gameObject.AddComponent<PlanetEcology>().Configure(planet);
+            gameObject.AddComponent<PlanetarySystem>().Configure(planet);
             var camera = Camera.main;
             if (camera != null) camera.clearFlags = CameraClearFlags.Skybox;
         }
 
         public void LightLandingSite(Vector3 normal)
         {
+            GetComponent<PlanetarySystem>()?.SetLandingSite(normal);
             if (sun == null) return;
             var tangent = Vector3.Cross(normal, Mathf.Abs(normal.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
             sun.transform.rotation = Quaternion.LookRotation(-(normal + tangent * 0.9f).normalized,

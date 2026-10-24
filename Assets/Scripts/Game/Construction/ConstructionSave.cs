@@ -11,6 +11,8 @@ namespace WH30K.Gameplay.Construction
         public int x;
         public int y;
         public WH30K.Sim.BuildingOperationState operation;
+        public bool freePlacement;
+        public float nx, ny, nz;
     }
 
     public static class ConstructionSave
@@ -37,13 +39,21 @@ namespace WH30K.Gameplay.Construction
                     || !WH30K.Sim.BuildingOperationRules.Valid(structure.operation)
                     || structure.face < 0 || structure.face > 5 || structure.x < 0 || structure.x >= resolution
                     || structure.y < 0 || structure.y >= resolution
-                    || !occupied.Add($"{structure.face}:{structure.x}:{structure.y}"))
+                    || (structure.freePlacement ? !ValidDirection(structure.nx, structure.ny, structure.nz)
+                        || !occupied.Add($"p:{Math.Round(structure.nx,6)}:{Math.Round(structure.ny,6)}:{Math.Round(structure.nz,6)}")
+                        : !occupied.Add($"{structure.face}:{structure.x}:{structure.y}")))
                 {
                     error = "Save contains an unknown building, invalid cell, or duplicate placement.";
                     return false;
                 }
             }
             return true;
+        }
+
+        public static bool ValidDirection(float x, float y, float z)
+        {
+            var length = x * x + y * y + z * z;
+            return !float.IsNaN(length) && !float.IsInfinity(length) && length > 0.99f && length < 1.01f;
         }
     }
 }

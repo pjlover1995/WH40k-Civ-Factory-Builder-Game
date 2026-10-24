@@ -55,6 +55,7 @@ namespace WH30K.Gameplay
         private SimpleOrbitCamera orbitCamera;
         private BuildingPlacementController buildingPlacement;
         private ColonyClock clock;
+        private IndustrySystem industry;
         public LODPlanet ActivePlanet => planet;
 
 #if UNITY_EDITOR
@@ -85,6 +86,7 @@ namespace WH30K.Gameplay
         {
             EnforcePatchResolutionCap();
             clock = GetComponent<ColonyClock>() ?? gameObject.AddComponent<ColonyClock>();
+            industry = GetComponent<IndustrySystem>() ?? gameObject.AddComponent<IndustrySystem>();
 
             menu = GetComponent<NewGameMenu>();
             resourceSystem = GetComponent<ResourceSystem>();
@@ -163,6 +165,7 @@ namespace WH30K.Gameplay
             planet.GetComponent<PlanetPresentation>().LightLandingSite(surfaceNormal);
             orbitCamera?.SetColonyLocation(surfaceNormal);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
+            industry.Configure(planet, surfaceNormal);
 
 #if UNITY_EDITOR
             if (spawnDebugMarkers)
@@ -187,7 +190,7 @@ namespace WH30K.Gameplay
             if (!GameSettings.HasActiveGame) throw new InvalidOperationException("No active game to save.");
             return JsonUtility.ToJson(new GameSaveData
             {
-                version = 4,
+                version = 5,
                 terrainVersion = planet.TerrainVersion,
                 clock = clock.Snapshot,
                 seed = GameSettings.CurrentSeed,
@@ -197,7 +200,8 @@ namespace WH30K.Gameplay
                 settlement = settlement.CreateSnapshot(),
                 gridResolution = buildingPlacement.GridResolution,
                 structures = buildingPlacement.CreateSnapshot(),
-                events = colonyEventSystem.CreateSnapshot()
+                events = colonyEventSystem.CreateSnapshot(),
+                industry = industry.Capture()
             }, true);
         }
 
@@ -244,6 +248,8 @@ namespace WH30K.Gameplay
             try
             {
                 save = JsonUtility.FromJson<GameSaveData>(json);
+                // JsonUtility may create an empty nested object for a missing field in older JSON.
+                if(save != null && save.version < 5) save.industry = null;
                 if (!ValidateSave(save, out var error))
                 {
                     menu?.AppendEventLog($"Load rejected: {error}");
@@ -273,6 +279,7 @@ namespace WH30K.Gameplay
             buildingPlacement.RestoreSnapshot(save.structures);
             settlement.RefreshReadout();
             clock.Restore(save.clock);
+            industry.Configure(planet, loadedNormal, save.industry);
 
             if (menu != null)
             {
@@ -289,9 +296,10 @@ namespace WH30K.Gameplay
         private bool ValidateSave(GameSaveData save, out string error)
         {
             error = "Unsupported or incomplete save.";
-            if (save == null || save.version < 0 || save.version > 4
-                || save.terrainVersion < 0 || save.terrainVersion > 1
+            if (save == null || save.version < 0 || save.version > 5
+                || save.terrainVersion < 0 || save.terrainVersion > 2
                 || !ColonyCalendar.Valid(save.clock)
+                || !IndustryRules.Valid(save.industry, save.structures != null ? save.structures.Length : 0)
                 || !Enum.IsDefined(typeof(GameSettings.Difficulty), save.difficulty)) return false;
             var colony = save.settlement;
             var resources = save.resources;
@@ -337,7 +345,7 @@ namespace WH30K.Gameplay
             orbitCamera = mainCamera != null ? mainCamera.GetComponent<SimpleOrbitCamera>() : null;
         }
 
-        private Transform BuildPlanet(int seed, int terrainVersion = 1)
+        private Transform BuildPlanet(int seed, int terrainVersion = 2)
         {
             if (planet != null)
             {
@@ -580,6 +588,7 @@ namespace WH30K.Gameplay
             public int gridResolution;
             public PlacedStructureSnapshot[] structures;
             public EventSnapshot events;
+            public IndustrySnapshot industry;
         }
     }
 }

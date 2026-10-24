@@ -12,6 +12,7 @@ namespace WH30K.Sim
         public bool Paused => state.paused || DecisionPending;
         public int Speed => state.speed == 0 ? 1 : state.speed;
         public static float DeltaTime { get; private set; }
+        public static double SimulationSeconds => instance != null ? instance.state.simulationSeconds : 0;
         public ClockSnapshot Snapshot => state;
         private void Awake() { instance = this; }
         public void Begin() { state = new ClockSnapshot { speed = 1 }; active = true; DecisionPending = false; DeltaTime = 0f; }

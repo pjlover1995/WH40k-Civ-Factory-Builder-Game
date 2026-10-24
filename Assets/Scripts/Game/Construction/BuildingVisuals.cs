@@ -28,6 +28,11 @@ namespace WH30K.Gameplay.Construction
                     case "HabBlock": Habitation(builder); break;
                     case "Factory": Manufactorum(builder); break;
                     case "Utility": Scrubber(builder); break;
+                    case "Mine": ExtractionRig(builder, false); break;
+                    case "Quarry": ExtractionRig(builder, true); break;
+                    case "Harvester": HarvestStation(builder); break;
+                    case "Smelter": SmeltingWorks(builder); break;
+                    case "Works": FabricationWorks(builder); break;
                     default: Outpost(builder); break;
                 }
                 mesh = builder.Build(id);
@@ -42,8 +47,59 @@ namespace WH30K.Gameplay.Construction
                 renderer.sharedMaterials = overrides;
                 renderer.shadowCastingMode = ShadowCastingMode.Off;
             }
-            else renderer.sharedMaterials = GetMaterials();
+            else
+            {
+                renderer.sharedMaterials = GetMaterials();
+                if (WH30K.Sim.IndustryRules.Facility(id)) go.AddComponent<FacilityAnimation>().Configure(id);
+            }
             return go;
+        }
+
+        private static void ExtractionRig(Architecture b, bool quarry)
+        {
+            b.Box(Stone,new Vector3(-24,30,15),new Vector3(35,40,47));
+            b.Gable(Roof,new Vector3(-24,50,15),38,16,49);
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Beam(Iron,new Vector3(15+side*18,12,-19),new Vector3(15+side*8,108,-19),6);
+                b.Beam(Brass,new Vector3(15+side*18,12,-19),new Vector3(15-side*8,88,-19),3);
+                Window(b,-24,31,side<0?-10:40,13,20);
+            }
+            b.Box(Brass,new Vector3(15,109,-19),new Vector3(35,6,22));
+            b.Cylinder(Iron,new Vector3(15,14,-19),10,quarry?4:1,70,12);
+            b.Box(Dark,new Vector3(15,15,-19),new Vector3(29,4,29));
+            for(var i=0;i<8;i++) b.Box(Brass,new Vector3(17,18+i*7,-31),new Vector3(22,2,3));
+            if(quarry) for(var i=0;i<4;i++) b.Box(Stone,new Vector3(24,12+i*5,19),new Vector3(40-i*6,5,34-i*5));
+            Crest(b,new Vector3(-24,35,-11));
+        }
+        private static void HarvestStation(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,28,0),new Vector3(72,32,64));b.Gable(Roof,new Vector3(0,44,0),76,17,68);
+            for(var x=-1;x<=1;x++) { Window(b,x*22,27,-33,10,18,Cyan);Window(b,x*22,27,33,10,18,Cyan); }
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Cylinder(Iron,new Vector3(side*32,14,-12),11,11,49,12);
+                b.Cylinder(Brass,new Vector3(side*32,62,-12),12,3,10,12);
+                b.Box(Cyan,new Vector3(side*32,39,-24),new Vector3(3,31,2));
+            }
+            b.Beam(Iron,new Vector3(0,60,0),new Vector3(0,95,0),3);Crest(b,new Vector3(0,38,-34));
+        }
+        private static void SmeltingWorks(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,35,0),new Vector3(84,46,67));b.Gable(Roof,new Vector3(0,58,0),87,20,70);
+            for(var x=-1;x<=1;x++)
+            {
+                b.Cylinder(Iron,new Vector3(x*27,17,8),11,8,99+x*8,12);
+                b.Cylinder(Brass,new Vector3(x*27,115+x*8,8),10,10,4,12);
+                b.Arch(Brass,new Vector3(x*24,13,-35),20,28,3);b.Arch(Amber,new Vector3(x*24,14,-37),14,24,1);
+                for(var rib=0;rib<5;rib++)b.Box(Iron,new Vector3(x*27,38+rib*13,-3),new Vector3(25,3,4));
+            }
+        }
+        private static void FabricationWorks(Architecture b)
+        {
+            Manufactorum(b);
+            b.Box(Brass,new Vector3(0,23,-43),new Vector3(75,5,8));
+            for(var x=-2;x<=2;x++)b.Box(Cyan,new Vector3(x*14,30,-43),new Vector3(7,5,5));
         }
 
         private static void Foundation(Architecture b)

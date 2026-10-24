@@ -15,12 +15,41 @@ using WH30K.Sim.Settlements;
 using WH30K.CameraSystem;
 using WH30K.Sim;
 using WH30K.UI;
+using WH30K.Planet;
 
 // Runs against the real scene, materials, UI, JsonUtility and placement controller.
 // Checks replace the world temporarily, then restore the active colony without changing its disk save.
 public static class GameplayChecks
 {
     private static int checks;
+    private const string ReloadBackupKey="WH30K.ColonyBeforeScriptReload";
+    static GameplayChecks()
+    {
+        AssemblyReloadEvents.beforeAssemblyReload += () =>
+        {
+            if(!Application.isPlaying || !GameSettings.HasActiveGame)return;
+            var bootstrap=UnityEngine.Object.FindObjectOfType<PlanetBootstrap>();if(bootstrap==null)return;
+            try { var json=bootstrap.CaptureSaveJson();SessionState.SetString(ReloadBackupKey,json);WriteReviewBackup(json); }
+            catch(Exception error) { Debug.LogWarning("Colony backup before script reload failed: "+error.Message); }
+        };
+    }
+
+    [MenuItem("WH30K/Build Review Player %&k")]
+    public static void BuildReviewPlayer()
+    {
+        if(Application.isPlaying) throw new InvalidOperationException("Exit Play Mode before building.");
+        var directory=Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp","ReviewPlayer");
+        Directory.CreateDirectory(directory);
+        var report=UnityEditor.BuildPipeline.BuildPlayer(new UnityEditor.BuildPlayerOptions
+        {
+            scenes=new[]{"Assets/Scenes/Prototype/WH30K_VS01.unity"},
+            locationPathName=Path.Combine(directory,"WH30K Colony.exe"),
+            target=BuildTarget.StandaloneWindows64,options=BuildOptions.Development
+        });
+        if(report.summary.result!=UnityEditor.Build.Reporting.BuildResult.Succeeded)
+            throw new InvalidOperationException("Review player build failed: "+report.summary.result);
+        Debug.Log("WH30K review player build succeeded: "+directory);
+    }
 
     [MenuItem("WH30K/Back Up Active Colony (Play Mode) %&b")]
     public static void BackUpActiveColony()
@@ -36,6 +65,9 @@ public static class GameplayChecks
     private static string CaptureReviewColony(PlanetBootstrap bootstrap)
     {
         if (bootstrap == null || bootstrap.ActivePlanet == null) return null;
+        var beforeReload=SessionState.GetString(ReloadBackupKey,"");
+        if(!GameSettings.HasActiveGame && !string.IsNullOrEmpty(beforeReload))return beforeReload;
+        SessionState.EraseString(ReloadBackupKey);
         // Editor script recompilation resets static settings while retaining scene components.
         if (!GameSettings.HasActiveGame)
             GameSettings.ApplyLoadedState(bootstrap.ActivePlanet.Seed,
@@ -56,8 +88,9 @@ public static class GameplayChecks
             foreach (var building in placedRoot.GetComponentsInChildren<ManagedBuilding>())
             {
                 var cell = grid.GetCellFromWorld(building.transform.position);
+                var n=bootstrap.ActivePlanet.transform.InverseTransformPoint(building.transform.position).normalized;
                 placed.Add(new PlacedStructureSnapshot { id = building.Id, face = cell.Face,
-                    x = cell.X, y = cell.Y, operation = building.State });
+                    x = cell.X, y = cell.Y, operation = building.State, freePlacement=true,nx=n.x,ny=n.y,nz=n.z });
             }
             saved.structures = placed.ToArray();
         }
@@ -81,6 +114,7 @@ public static class GameplayChecks
         public SettlementSnapshot settlement;
         public PlacedStructureSnapshot[] structures;
         public EventSnapshot events;
+        public IndustrySnapshot industry;
     }
 
     private static void WriteReviewBackup(string json)
@@ -120,7 +154,7 @@ public static class GameplayChecks
         Check(planet.Radius == 12000f && planet.transform.Find("Ocean") != null
             && planet.transform.Find("Cloud layer") != null && planet.transform.Find("Atmospheric scattering") != null,
             "larger planet includes ocean, clouds and atmosphere");
-        foreach (var id in new[] { "HabBlock", "Factory", "Utility", "Outpost" })
+        foreach (var id in new[] { "HabBlock", "Factory", "Utility", "Outpost", "Mine", "Quarry", "Harvester", "Smelter", "Works" })
         {
             var visual = BuildingVisuals.Create(id, "VisualCheck", bootstrap.transform, Vector3.one);
             var mesh = visual.GetComponent<MeshFilter>().sharedMesh;
@@ -161,7 +195,7 @@ public static class GameplayChecks
         events.TriggerDebugEventNow();
         var json = bootstrap.CaptureSaveJson();
         Check(bootstrap.TryLoadSaveJson(json), "complete game loads from JsonUtility JSON");
-        Check(bootstrap.ActivePlanet.TerrainVersion == 1, "new saves retain the new terrain recipe");
+        Check(bootstrap.ActivePlanet.TerrainVersion == 2, "new saves retain the varied terrain recipe");
         var loaded = placement.CreateSnapshot();
         Check(loaded.Length == 1 && loaded[0].id == built.id && loaded[0].face == built.face
             && loaded[0].x == built.x && loaded[0].y == built.y, "building identity and occupied cell restored");
@@ -235,7 +269,72 @@ public static class GameplayChecks
             && clock.Speed == 3 && clock.Paused,
             "building settings, calendar, real play time, speed and pause survive save/load");
         clock.SetSpeed(1);
+        RunIndustryChecks(bootstrap);
         Debug.Log($"WH30K gameplay checks: {checks} passed. Inspect camera, layout and terrain visually as well.");
+    }
+
+    private static void RunIndustryChecks(PlanetBootstrap bootstrap)
+    {
+        bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
+        var planet=bootstrap.ActivePlanet;var resources=bootstrap.GetComponent<ResourceSystem>();
+        var placement=bootstrap.GetComponent<BuildingPlacementController>();var industry=bootstrap.GetComponent<IndustrySystem>();
+        var colony=bootstrap.GetComponent<Settlement>().CreateSnapshot().normal;
+        var biomes=new HashSet<string>();var low=float.MaxValue;var high=float.MinValue;var water=Vector3.zero;
+        for(var i=0;i<512;i++)
+        {
+            var y=1-2*(i+.5f)/512;var a=i*2.39996323f;var r=Mathf.Sqrt(1-y*y);var n=new Vector3(Mathf.Cos(a)*r,y,Mathf.Sin(a)*r);
+            var height=planet.EvaluateSurfacePoint(n).magnitude;low=Mathf.Min(low,height);high=Mathf.Max(high,height);biomes.Add(planet.Biome(n));
+            if(height<planet.SeaLevel-15)water=n;
+        }
+        Check(high-low>400 && biomes.Count>=4,"new geography has meaningful relief and multiple climate biomes");
+        Check(planet.GetComponent<PlanetarySystem>()!=null && planet.transform.Find("Moon - Selene")!=null
+            && planet.transform.Find("Moon - Cinder")!=null && planet.transform.Find("Sun - Helios")!=null,
+            "sun and two orbiting moons are present in the actual world");
+        resources.ModifyStockpile(100000);
+        placement.SelectStructure("Outpost");
+        Check(water.sqrMagnitude>.9f && placement.TryPlaceDirection(water),"free placement accepts ocean sites with supports");
+        Check(!placement.TryPlaceDirection(water),"overlapping free placement is blocked");
+        var free=placement.CreateSnapshot()[0];
+        Check(free.freePlacement && Mathf.Abs(new Vector3(free.nx,free.ny,free.nz).magnitude-1)<.001f,"free sites save their exact surface direction");
+        var origin=planet.transform.TransformPoint(planet.EvaluateSurfacePoint(colony));
+        foreach(var kind in new[]{MaterialKind.IronOre,MaterialKind.Crystal,MaterialKind.Stone,MaterialKind.Biomass})
+        {
+            var deposit=industry.NearestDeposit(origin,kind);
+            Check(deposit!=null,"geological survey contains "+IndustryRules.Name(kind));
+            var id=kind==MaterialKind.Stone?"Quarry":kind==MaterialKind.Biomass?"Harvester":"Mine";
+            Check(PlaceNear(placement,id,deposit.Direction,planet.Radius),id+" can be deployed near its resource catchment");
+            if(kind==MaterialKind.Crystal) placement.Buildings[placement.Buildings.Length-1].SetFocus(2);
+        }
+        Check(PlaceNear(placement,"Smelter",colony,planet.Radius,125),"smelter is available through construction");
+        Check(PlaceNear(placement,"Works",colony,planet.Radius,200),"fabrication works is available through construction");
+        var beforeMoney=resources.Stockpile;
+        for(var step=0;step<220;step++)industry.Simulate(10);
+        Check(resources.Stockpile>beforeMoney,"extraction, hauler arrivals, smelting and fabrication deliver components to the core factory for credits");
+        var snapshot=industry.Capture();var depleted=false;foreach(var deposit in snapshot.deposits) if(deposit.remaining<2000)depleted=true;
+        Check(depleted,"extraction actually depletes geological deposits");
+        var ironMine=placement.Buildings[1];ironMine.ToggleOperation();
+        var depositBefore=industry.NearestDeposit(ironMine.transform.position,MaterialKind.IronOre);var remaining=depositBefore.Remaining;
+        industry.Simulate(100);
+        Check(depositBefore.Remaining==remaining,"suspending an extractor stops consumption of its deposit");
+        ironMine.ToggleOperation();industry.Simulate(10);
+        snapshot=industry.Capture();
+        Check(IndustryRules.Valid(snapshot,placement.Buildings.Length),"live industry state including cargo fits the save validation rules");
+        var serialized=JsonUtility.ToJson(snapshot);
+        Check(bootstrap.TryLoadSaveJson(bootstrap.CaptureSaveJson()),"free placements and production chains load through the complete save path");
+        Check(JsonUtility.ToJson(industry.Capture())==serialized,"facility stocks, work progress, deposit depletion and in-flight cargo survive loading exactly");
+        var loaded=placement.CreateSnapshot()[0];
+        Check(loaded.freePlacement && loaded.nx==free.nx && loaded.ny==free.ny && loaded.nz==free.nz,"ocean construction retains its exact free placement after load");
+        industry.SetOverlay(1);Camera.main.GetComponent<SimpleOrbitCamera>().FocusSettlement(colony);
+    }
+
+    private static bool PlaceNear(BuildingPlacementController placement,string id,Vector3 normal,float radius,float distance=0)
+    {
+        placement.SelectStructure(id);var tangent=Vector3.Cross(normal,Mathf.Abs(normal.y)>.95f?Vector3.right:Vector3.up).normalized;
+        var second=Vector3.Cross(normal,tangent);
+        for(var i=0;i<16;i++)
+        {var angle=i*Mathf.PI/8;var range=distance+i*5;var n=(normal+(tangent*Mathf.Cos(angle)+second*Mathf.Sin(angle))*range/radius).normalized;
+            if(placement.TryPlaceDirection(n))return true;}
+        return false;
     }
 
     private static bool PlaceFirstAvailable(BuildingPlacementController placement)
