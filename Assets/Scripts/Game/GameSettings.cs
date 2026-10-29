@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace WH30K.Game
 {
@@ -11,10 +12,22 @@ namespace WH30K.Game
     {
         public enum Difficulty
         {
-            Easy,
-            Standard,
-            Hard,
-            Grim
+            Easy = 0,
+            Standard = 1,
+            Hard = 2,
+            Grim = 3, // Historical save value; new expeditions use the five landing categories below.
+            Moderate = 4,
+            ExtremeHard = 5
+        }
+
+        [Serializable]
+        public struct LandingSite
+        {
+            public Difficulty category;
+            public int variant;
+            public Vector3 direction;
+            public float localRelief;
+            public float reserveMultiplier;
         }
 
         [Serializable]
@@ -73,6 +86,28 @@ namespace WH30K.Game
                         resourceYieldMultiplier = 0.7f,
                         eventFrequencyMultiplier = 1.35f
                     }
+                },
+                {
+                    Difficulty.Moderate,
+                    new DifficultyDefinition
+                    {
+                        difficulty = Difficulty.Moderate,
+                        displayName = "Moderate",
+                        environmentHarshnessMultiplier = 1.1f,
+                        resourceYieldMultiplier = 0.9f,
+                        eventFrequencyMultiplier = 1.05f
+                    }
+                },
+                {
+                    Difficulty.ExtremeHard,
+                    new DifficultyDefinition
+                    {
+                        difficulty = Difficulty.ExtremeHard,
+                        displayName = "Extreme Hard",
+                        environmentHarshnessMultiplier = 1.5f,
+                        resourceYieldMultiplier = 0.6f,
+                        eventFrequencyMultiplier = 1.45f
+                    }
                 }
             };
 
@@ -80,15 +115,31 @@ namespace WH30K.Game
         {
             Difficulty.Easy,
             Difficulty.Standard,
+            Difficulty.Moderate,
             Difficulty.Hard,
-            Difficulty.Grim
+            Difficulty.ExtremeHard
         };
+
+        private static readonly float[] LandingReserveMultipliers = { 1.7f, 1.35f, 1f, .72f, .48f };
 
         public static Difficulty CurrentDifficulty { get; private set; } = Difficulty.Standard;
         public static int CurrentSeed { get; private set; }
         public static bool HasActiveGame { get; private set; }
 
         public static DifficultyDefinition GetDefinition(Difficulty difficulty) => Definitions[difficulty];
+
+        public static float GetLandingReserveMultiplier(Difficulty difficulty)
+        {
+            switch (difficulty)
+            {
+                case Difficulty.Easy: return LandingReserveMultipliers[0];
+                case Difficulty.Standard: return LandingReserveMultipliers[1];
+                case Difficulty.Moderate: return LandingReserveMultipliers[2];
+                case Difficulty.Hard: return LandingReserveMultipliers[3];
+                case Difficulty.ExtremeHard: return LandingReserveMultipliers[4];
+                default: return LandingReserveMultipliers[1];
+            }
+        }
 
         public static DifficultyDefinition GetCurrentDefinition() => Definitions[CurrentDifficulty];
 

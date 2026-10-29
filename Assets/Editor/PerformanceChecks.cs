@@ -24,6 +24,24 @@ public static class PerformanceChecks
     private static string prior, output;
     private static int previousFrame, priorVsync, priorLimit;
     private static readonly List<string> rows=new List<string>();
+    private const string BatchKey="WH30K.Performance.Batch";
+    private static bool failed;
+    private static RenderTexture batchTarget;
+    private static RenderTexture priorTarget;
+    private static float priorAspect;
+    public static void RunBatch()
+    {
+        UnityEditor.SceneManagement.EditorSceneManager.OpenScene("Assets/Scenes/Prototype/WH30K_VS01.unity");
+        SessionState.SetBool(BatchKey,true);EditorApplication.playModeStateChanged+=BatchState;EditorApplication.isPlaying=true;
+    }
+    [InitializeOnLoadMethod]
+    private static void ResumeBatch()
+    {if(SessionState.GetBool(BatchKey,false))EditorApplication.playModeStateChanged+=BatchState;}
+    private static void BatchState(PlayModeStateChange state)
+    {
+        if(state!=PlayModeStateChange.EnteredPlayMode||!SessionState.GetBool(BatchKey,false))return;
+        SessionState.EraseBool(BatchKey);EditorApplication.delayCall+=()=>Begin("investigation-current");
+    }
     [MenuItem("WH30K/Performance/Measure Baseline %&o")]
     public static void Baseline()=>Begin("baseline");
     [MenuItem("WH30K/Performance/Measure Optimized %&j")]
@@ -39,27 +57,42 @@ public static class PerformanceChecks
         var directory=Path.Combine(Directory.GetParent(Application.dataPath).FullName,".utmp","performance");Directory.CreateDirectory(directory);
         if(prior!=null)File.WriteAllText(Path.Combine(directory,"colony-before-measurement.json"),prior);
         output=Path.Combine(directory,name+".csv");rows.Clear();
+        failed=false;
+        if(Application.isBatchMode)
+        {
+            var camera=Camera.main;priorTarget=camera.targetTexture;priorAspect=camera.aspect;
+            batchTarget=new RenderTexture(1280,800,24);batchTarget.Create();
+            camera.targetTexture=batchTarget;camera.aspect=1.6f;
+        }
         rows.Add("scenario,frames,mean_ms,p50_ms,p95_ms,p99_ms,max_ms,mean_fps,bytes_per_frame,gen0_collections,draw_calls,triangles");
         priorVsync=QualitySettings.vSyncCount;priorLimit=Application.targetFrameRate;QualitySettings.vSyncCount=0;Application.targetFrameRate=-1;
         routine=Run();previousFrame=-1;EditorApplication.update+=Step;
-        Debug.Log($"WH30K performance measurement started: {name}; {SystemInfo.graphicsDeviceName}; {Screen.width}x{Screen.height}; editor DX11, VSync off.");
+        var resolution=batchTarget!=null?$"{batchTarget.width}x{batchTarget.height} offscreen (overlay UI excluded)":$"{Screen.width}x{Screen.height} Game view";
+        Debug.Log($"WH30K performance measurement started: {name}; {SystemInfo.graphicsDeviceName}; {resolution}; editor DX11, VSync off.");
     }
     private static void Step()
     {
         if(!Application.isPlaying){Finish();return;}
         if(previousFrame==Time.frameCount)return;previousFrame=Time.frameCount;
-        try{if(!routine.MoveNext())Finish();}catch(Exception error){Debug.LogException(error);Finish();}
+        try{if(!routine.MoveNext())Finish();}catch(Exception error){failed=true;Debug.LogException(error);Finish();}
     }
     private static void Finish()
     {
         EditorApplication.update-=Step;routine=null;
         QualitySettings.vSyncCount=priorVsync;Application.targetFrameRate=priorLimit;
-        if(Application.isPlaying && prior!=null && !bootstrap.TryLoadSaveJson(prior))Debug.LogError("Performance test could not restore colony. Use the measurement backup.");
+        if(batchTarget!=null)
+        {
+            var camera=Camera.main;var sky=camera.GetComponent<SimpleOrbitCamera>().DistantCamera;
+            camera.targetTexture=priorTarget;camera.aspect=priorAspect;if(sky!=null)sky.targetTexture=priorTarget;
+            batchTarget.Release();UnityEngine.Object.DestroyImmediate(batchTarget);batchTarget=null;
+        }
+        if(Application.isPlaying && prior!=null && !bootstrap.TryLoadSaveJson(prior)){failed=true;Debug.LogError("Performance test could not restore colony. Use the measurement backup.");}
         prior=null;if(output!=null){File.WriteAllLines(output,rows);Debug.Log("WH30K performance report: "+output);}output=null;
+        if(Application.isBatchMode)SceneCheckExit.Exit(failed?1:0);
     }
     private static IEnumerator Run()
     {
-        bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard);
+        bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard, legacyCore: true);
         bootstrap.GetComponent<ColonyEventSystem>().EndSession();
         var clock=bootstrap.GetComponent<ColonyClock>();clock.TogglePause();
         var orbit=Camera.main.GetComponent<SimpleOrbitCamera>();
@@ -69,14 +102,42 @@ public static class PerformanceChecks
         measure=Measure("surface_traversal",orbit,true);while(measure.MoveNext())yield return null;
         orbit.FocusLocation(colony);
         var placement=bootstrap.GetComponent<BuildingPlacementController>();bootstrap.GetComponent<ResourceSystem>().ModifyStockpile(1000000);
+        GameplayChecks.FundConstruction(bootstrap);
         var right=Vector3.Cross(colony,Mathf.Abs(colony.y)>.95f?Vector3.right:Vector3.up).normalized;var forward=Vector3.Cross(colony,right);
-        var ids=new[]{"Outpost","Mine","Smelter","Works"};
+        // Unrestricted structures keep this a reproducible density benchmark;
+        // mines now require a compatible surveyed vein and cannot fill a regular grid.
+        var ids=new[]{"Outpost","Factory","Utility","Works"};
         for(var i=0;i<192;i++)
         {
+            if(i>0 && i%64==0)GameplayChecks.FundConstruction(bootstrap);
             placement.SelectStructure(ids[i%4]);
-            var n=(colony+(right*((i%16-7.5f)*65)+forward*((i/16-5.5f)*65))/bootstrap.ActivePlanet.Radius).normalized;
+            var offset=right*((i%16-7.5f)*65)+forward*((i/16-5.5f)*65);
+            var n=(colony+offset/bootstrap.ActivePlanet.Radius).normalized;
             placement.TryPlaceDirection(n);
         }
+        if(placement.Buildings.Length<180)throw new InvalidOperationException("Density fixture failed to construct at least 180 facilities; actual "+placement.Buildings.Length);
+        Debug.Log("Density fixture: "+placement.Buildings.Length+" actual facilities from 192 attempts.");
+        var routeTimer=System.Diagnostics.Stopwatch.StartNew();
+        var routeIndustry=bootstrap.GetComponent<IndustrySystem>();routeIndustry.SetOverlay(1);
+        var routeFrames=0;var maxRouteSegments=0;var maxRoutePairs=0;
+        var maxRouteMilliseconds=0d;var totalRouteMilliseconds=0d;
+        while(routeIndustry.LogisticsBuildPending)
+        {
+            if(++routeFrames>2000)throw new InvalidOperationException("Incremental routes did not finish within the fixture frame limit.");
+            RenderBatchFrame(orbit);yield return null;
+            maxRouteSegments=Math.Max(maxRouteSegments,routeIndustry.LogisticsSegmentsLastUpdate);
+            maxRoutePairs=Math.Max(maxRoutePairs,routeIndustry.LogisticsPairsLastUpdate);
+            maxRouteMilliseconds=Math.Max(maxRouteMilliseconds,routeIndustry.LogisticsBuildMillisecondsLastUpdate);
+            totalRouteMilliseconds+=routeIndustry.LogisticsBuildMillisecondsLastUpdate;
+            if(maxRouteSegments>IndustrySystem.LogisticsSegmentsPerFrame || maxRoutePairs>IndustrySystem.LogisticsPairsPerFrame)
+                throw new InvalidOperationException("Logistics geometry exceeded its per-frame work budget.");
+        }
+        var routeMesh=Array.Find(bootstrap.ActivePlanet.GetComponentsInChildren<MeshFilter>(true),f=>f.sharedMesh!=null && f.sharedMesh.name=="Industrial logistics network").sharedMesh;
+        if(routeMesh.vertexCount<=65535 || routeMesh.indexFormat!=UnityEngine.Rendering.IndexFormat.UInt32)
+            throw new InvalidOperationException("Dense routes did not exercise the 32-bit mesh index regression.");
+        Debug.Log($"Dense routes: {routeMesh.vertexCount} vertices, {routeFrames} frames, elapsed {routeTimer.Elapsed.TotalMilliseconds:0.0} ms, peak slice {maxRouteSegments} segments / {maxRoutePairs} pairs; 32-bit indices. Elapsed includes intervening frames.");
+        Debug.Log($"Route build CPU slices: {totalRouteMilliseconds:0.000} ms total, {maxRouteMilliseconds:0.000} ms maximum (includes final mesh upload).");
+        bootstrap.GetComponent<IndustrySystem>().SetOverlay(0);
         var industry=bootstrap.GetComponent<IndustrySystem>();var saved=industry.Capture();var cargo=new List<CargoStock>();
         for(var i=0;i<placement.Buildings.Length;i++)if(placement.Buildings[i].Id=="Works")
         {saved.facilities[i].quantities[6]=60;for(var j=0;j<2&&cargo.Count<64;j++)cargo.Add(new CargoStock{source=i,target=-1,kind=6,amount=1,progress=j*.25f});}
@@ -93,12 +154,13 @@ public static class PerformanceChecks
         var budgetProperty=bootstrap.ActivePlanet.GetType().GetProperty("PatchesCreatedLastUpdate");
         var readBudget=budgetProperty==null?null:(Func<int>)Delegate.CreateDelegate(typeof(Func<int>),bootstrap.ActivePlanet,budgetProperty.GetGetMethod());
         var warmEnd=Time.realtimeSinceStartupAsDouble+3;
-        while(Time.realtimeSinceStartupAsDouble<warmEnd){if(moving)orbit.Navigate(new Vector2(1,.25f),Time.unscaledDeltaTime);yield return null;}
+        while(Time.realtimeSinceStartupAsDouble<warmEnd){if(moving)orbit.Navigate(new Vector2(1,.25f),Time.unscaledDeltaTime);RenderBatchFrame(orbit);yield return null;}
         var values=new List<double>(16384);var start=Time.realtimeSinceStartupAsDouble;var last=start;
         var allocated=GC.GetAllocatedBytesForCurrentThread();var collections=GC.CollectionCount(0);double calls=0,triangles=0;
         while(Time.realtimeSinceStartupAsDouble-start<8)
         {
             if(moving)orbit.Navigate(new Vector2(1,.25f),Time.unscaledDeltaTime);
+            RenderBatchFrame(orbit);
             yield return null;
             if(readBudget!=null && readBudget()>8)
                 throw new InvalidOperationException("Terrain subdivision exceeded its eight-patch frame budget.");
@@ -110,6 +172,16 @@ public static class PerformanceChecks
         var row=string.Format(CultureInfo.InvariantCulture,"{0},{1},{2:F3},{3:F3},{4:F3},{5:F3},{6:F3},{7:F2},{8:F0},{9},{10:F0},{11:F0}",
             name,values.Count,mean,values[values.Count/2],values[(int)((values.Count-1)*.95)],values[(int)((values.Count-1)*.99)],values[values.Count-1],1000/mean,totalBytes/(double)values.Count,gen0,calls/values.Count,triangles/values.Count);
         rows.Add(row);Debug.Log("PERFORMANCE "+row);
+    }
+    private static void RenderBatchFrame(SimpleOrbitCamera orbit)
+    {
+        if(batchTarget==null)return;
+        // Batch Play Mode does not automatically render Game view. Explicit offscreen
+        // rendering avoids reporting thousands of non-rendered updates as game FPS.
+        var camera=Camera.main;camera.targetTexture=batchTarget;camera.aspect=1.6f;
+        var sky=orbit.DistantCamera;
+        if(sky!=null){sky.targetTexture=batchTarget;sky.aspect=1.6f;sky.Render();}
+        camera.Render();
     }
 }
 #endif

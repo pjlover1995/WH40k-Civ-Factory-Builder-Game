@@ -15,6 +15,9 @@ MonoBehaviour:
   id: Smelter
   displayName: Ore Smelter
   constructionCost: 360
+  constructionSupplies: 14.4
+  advancedSupplies: 0
+  developerOnly: 0
   populationCapacity: 0
   workforceSlots: 24
   productionPerWorker: 0

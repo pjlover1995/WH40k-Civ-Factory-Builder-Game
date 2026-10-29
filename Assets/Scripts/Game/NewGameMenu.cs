@@ -23,6 +23,7 @@ namespace WH30K.UI
         private static readonly Color Muted = new Color(0.49f, 0.57f, 0.60f);
         private static readonly Color Surface = new Color(0.025f, 0.040f, 0.052f, 0.96f);
         private static readonly Color ButtonBase = new Color(0.065f, 0.092f, 0.108f, 1f);
+        private static readonly Color ForgeRed = new Color(0.48f, 0.105f, 0.075f, 1f);
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
@@ -33,40 +34,44 @@ namespace WH30K.UI
         private ColonyClock clock;
         private Canvas canvas;
         private Font font;
-        private GameObject newGamePanel, hudPanel, eventPanel, inspector;
+        private GameObject newGamePanel, hudPanel, eventPanel, inspector, discoveryPanel;
         private InputField seedInput;
-        private Text difficultyLabel, stockpileValue, populationValue, netValue, workforceValue;
+        private Text difficultyLabel, stockpileValue, populationValue, netValue, workforceValue, waterSupplyValue;
         private Text dateText, clockText, environmentText, eventLogText, buildButtonLabel, structureDetails;
         private Text eventTitleText, eventBodyText, choiceALabel, choiceBLabel, buildingTitle, buildingStats, focusDescription;
-        private Text upgradeLabel, operationLabel, statusText;
+        private Text upgradeLabel, operationLabel, statusText, growthPlanLabel, growthModeLabel;
         private Text materialText, surveyLabel;
-        private Button saveButton, loadButton, buildButton, upgradeButton, operationButton, pauseButton, colonyMarker;
+        private Button discoveryButton, discoveryActionButton, discoveryLocateButton;
+        private Text discoveryTitleText, discoveryBodyText, discoveryActionLabel;
+        private Action discoveryAction, discoveryLocateAction;
+        private Button saveButton, loadButton, buildButton, upgradeButton, operationButton, pauseButton, colonyMarker, growthPlanButton, growthModeButton;
         private Button choiceA, choiceB;
         private readonly Button[] focuses = new Button[3];
         private readonly Button[] catalog = new Button[4];
         private readonly Button[] speedButtons = new Button[3];
         private readonly List<string> log = new List<string>();
         private readonly string[] catalogIds = { "Outpost", "HabBlock", "Factory", "Utility" };
-        private readonly string[] catalogLabels = { "FRONTIER OUTPOST\n250  /  LOGISTICS", "HAB BLOCK\n180  /  POPULATION", "MACRO FACTORY\n320  /  INDUSTRY", "AIR SCRUBBER\n220  /  ENVIRONMENT" };
         private string[] visibleIds = { "Outpost", "HabBlock", "Factory", "Utility" };
-        private readonly string[][] catalogGroups = { new[] { "Outpost", "HabBlock", "Factory", "Utility" }, new[] { "Mine", "Quarry", "Harvester" }, new[] { "Smelter", "Works" } };
+        private readonly string[][] catalogGroups = { new[] { "Outpost", "HabBlock", "Factory", "Utility" }, new[] { "Mine", "Quarry", "Harvester", "PromethiumExtractor" }, new[] { "PromethiumGenerator", "StorageDepot", "GroundwaterPump", "DesalinationPump" }, new[] { "Smelter", "Works", "Refinery", "Manufactorum" }, new[] { "Farm" }, new[] { "Cognitorium" } };
         private IndustrySystem industry;
         private IndustrySystem Industry => industry!=null?industry:industry=GetComponent<IndustrySystem>();
         private SimpleOrbitCamera orbit;
-        private readonly float[] materialTotals=new float[7];
+        private readonly float[] materialTotals=new float[IndustryRules.MaterialCount];
+        private readonly float[] materialProduced=new float[IndustryRules.MaterialCount],materialConsumed=new float[IndustryRules.MaterialCount];
         private static readonly int[] Speeds={1,3,10};
-        private static readonly string[] SurveyLabels={"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)"};
+        private static readonly string[] SurveyLabels={"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)","PROMETHIUM (OCHRE)"};
         private readonly Dictionary<Button,bool> buttonTones=new Dictionary<Button,bool>();
         private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
+        private InputField buildingNameInput;
+        private bool refreshingBuildingName;
         private ManagedBuilding selectedBuilding;
-        private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
         private Action choiceAHandler, choiceBHandler;
         private Image habitabilityFill;
         private float refreshTimer;
 #if UNITY_EDITOR
         private GameObject debugPanel;
 #endif
-        public bool HasOpenEvent => eventPanel != null && eventPanel.activeSelf || MiningPanelOpen;
+        public bool HasOpenEvent => bootstrap != null && bootstrap.ChoosingLanding || eventPanel != null && eventPanel.activeSelf || discoveryPanel!=null&&discoveryPanel.activeSelf || guidePanel!=null&&guidePanel.activeSelf || researchPanel!=null&&researchPanel.activeSelf || MiningPanelOpen || FacilityPanelOpen;
         public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
         public ManagedBuilding InspectedBuilding => selectedBuilding;
         private SimpleOrbitCamera Orbit => orbit!=null?orbit:orbit=Camera.main!=null?Camera.main.GetComponent<SimpleOrbitCamera>():null;
@@ -111,6 +116,8 @@ namespace WH30K.UI
             BuildPlanetPanel(hudPanel.transform);
             BuildConstruction(hudPanel.transform);
             BuildInspector(hudPanel.transform);
+            BuildShipHud(hudPanel.transform);
+            BuildEarthworks(hudPanel.transform);
             var footer = Panel("NavigationBar", hudPanel.transform, new Vector2(0, 28), Vector2.zero, TextAnchor.LowerCenter);
             StretchWidth(footer, 0);
             statusText = Label("NavigationHelp", footer.transform,
@@ -120,9 +127,16 @@ namespace WH30K.UI
             var markerRect = colonyMarker.GetComponent<RectTransform>();
             markerRect.anchorMin = markerRect.anchorMax = new Vector2(0.5f, 0.5f); markerRect.pivot = new Vector2(0.5f, 0.5f);
             colonyMarker.onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
+            BuildOutputTooltip();
             BuildNewGame(root.transform);
+            BuildLanding(root.transform);
             BuildEvent(root.transform);
+            BuildDiscovery(root.transform);
             BuildMiningPanel(root.transform);
+            BuildFacilityPanel(root.transform);
+            BuildColonyGuide(root.transform);
+            BuildResearchPanel(root.transform);
+            BuildResourceDepositsPane();
 #if UNITY_EDITOR
             BuildDebug(root.transform);
 #endif
@@ -130,29 +144,36 @@ namespace WH30K.UI
 
         private void BuildHeader(Transform parent)
         {
-            var header = Panel("CommandHeader", parent, new Vector2(0, 98), new Vector2(0, -16), TextAnchor.UpperLeft);
+            var header = Panel("CommandHeader", parent, new Vector2(0, 88), new Vector2(0, -12), TextAnchor.UpperLeft);
             StretchWidth(header, 16);
-            Label("IdentityTag", header.transform, "EXPEDITION AUTHORITY  /  M31", 10, new Vector2(18, -17), 205, 18, Gold);
-            Label("Identity", header.transform, "COLONY COMMAND", 19, new Vector2(18, -40), 210, 30, Ivory);
-            Metric(header.transform, "Stockpile", "STOCKPILE", 236, out stockpileValue, 176);
-            Metric(header.transform, "Population", "POPULATION", 426, out populationValue, 135);
-            Metric(header.transform, "Net", "NET OUTPUT / s", 572, out netValue, 140);
-            Metric(header.transform, "Workforce", "WORKFORCE", 722, out workforceValue, 130);
-            var time = Panel("TimeControl", header.transform, new Vector2(326, 82), new Vector2(-10, -8), TextAnchor.UpperRight, false);
-            dateText = Label("CalendarDate", time.transform, "", 17, new Vector2(8, -4), 234, 24, Ivory);
-            clockText = Label("PlayedTime", time.transform, "", 10, new Vector2(8, -30), 238, 18, Muted);
-            pauseButton = Button("PauseSimulation", time.transform, new Vector2(8, -50), "II", out _, 43, 26);
+            Accent(header, ForgeRed);
+            Label("IdentityTag", header.transform, "ADEPTUS MECHANICUS  /  M31", 10, new Vector2(18, -13), 205, 18, Gold);
+            Label("Identity", header.transform, "FORGE WORLD", 18, new Vector2(18, -34), 205, 28, Ivory);
+            Metric(header.transform, "Stockpile", "FOOD / RESERVE", 218, out stockpileValue, 136);
+            Metric(header.transform, "WaterSupply", "WATER / RESERVE", 358, out waterSupplyValue, 136);
+            Metric(header.transform, "Net", "BUILD SUPPLIES [?]", 498, out netValue, 158);
+            Metric(header.transform, "Population", "POPULATION [?]", 660, out populationValue, 130);
+            Metric(header.transform, "Workforce", "WORKERS / HEALTH", 794, out workforceValue, 112);
+            stockpileValue.fontSize = waterSupplyValue.fontSize = netValue.fontSize = 15;
+            workforceValue.fontSize = 14;
+            AddOutputHover(header.transform, "Population", 660, 130);
+            AddOutputHover(header.transform, "Net", 498, 158);
+            AddOutputHover(header.transform, "Workforce", 794, 112);
+            var time = Panel("TimeControl", header.transform, new Vector2(326, 76), new Vector2(-8, -6), TextAnchor.UpperRight, false);
+            dateText = Label("CalendarDate", time.transform, "", 16, new Vector2(8, -2), 234, 23, Ivory);
+            clockText = Label("PlayedTime", time.transform, "", 10, new Vector2(8, -25), 238, 17, Muted);
+            pauseButton = Button("PauseSimulation", time.transform, new Vector2(8, -45), "II", out _, 43, 25);
             pauseButton.onClick.AddListener(() => clock.TogglePause());
             var speeds = Speeds;
             for (var i = 0; i < speeds.Length; i++)
             {
                 var speed = speeds[i];
-                speedButtons[i] = Button("Speed" + speed, time.transform, new Vector2(58 + i * 54, -50), speed + "x", out _, 47, 26);
+                speedButtons[i] = Button("Speed" + speed, time.transform, new Vector2(58 + i * 54, -45), speed + "x", out _, 47, 25);
                 speedButtons[i].onClick.AddListener(() => clock.SetSpeed(speed));
             }
-            saveButton = Button("SaveButton", time.transform, new Vector2(248, -6), "SAVE", out _, 68, 29);
+            saveButton = Button("SaveButton", time.transform, new Vector2(248, -4), "SAVE", out _, 68, 27);
             saveButton.onClick.AddListener(() => bootstrap.SaveToFile());
-            loadButton = Button("HudLoadButton", time.transform, new Vector2(248, -46), "LOAD", out _, 68, 29);
+            loadButton = Button("HudLoadButton", time.transform, new Vector2(248, -42), "LOAD", out _, 68, 27);
             loadButton.onClick.AddListener(() => bootstrap.LoadFromFile());
         }
 
@@ -164,8 +185,9 @@ namespace WH30K.UI
 
         private void BuildPlanetPanel(Transform parent)
         {
-            var panel = Panel("PlanetStatus", parent, new Vector2(232, 236), new Vector2(16, -132), TextAnchor.UpperLeft);
-            Label("PlanetStatusTitle", panel.transform, "PLANET STATUS", 10, new Vector2(16, -17), 110, 20, Gold);
+            var panel = Panel("PlanetStatus", parent, new Vector2(248, 236), new Vector2(16, -116), TextAnchor.UpperLeft);
+            Accent(panel, Gold);
+            Label("PlanetStatusTitle", panel.transform, "PLANETARY VITALS", 10, new Vector2(16, -17), 150, 20, Gold);
             environmentText = Label("EnvironmentReadout", panel.transform, "", 14, new Vector2(16, -49), 202, 119, Ivory);
             var track = Panel("HabitabilityTrack", panel.transform, new Vector2(200, 4), new Vector2(16, -176), TextAnchor.UpperLeft, false);
             track.GetComponent<Image>().color = ButtonBase;
@@ -175,34 +197,47 @@ namespace WH30K.UI
                 .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
                 .onClick.AddListener(() => Orbit?.FrameTarget());
-            var journal = Panel("OperationsLog", parent, new Vector2(232, 202), new Vector2(16, -384), TextAnchor.UpperLeft);
-            Label("JournalTitle", journal.transform, "RESOURCE DIRECTORATE", 11, new Vector2(16, -13), 204, 20, Gold);
-            materialText = Label("MaterialInventory", journal.transform, "", 13, new Vector2(16, -37), 206, 80, Ivory);
-            Button("SurveyOverlay", journal.transform, new Vector2(16, -122), "SURVEY: OFF", out surveyLabel, 200, 25)
-                .onClick.AddListener(() => { if(Industry!=null) Industry.SetOverlay((Industry.Overlay+1)%7); });
-            Button("VisitDeposit", journal.transform, new Vector2(16, -151), "VISIT NEAREST DEPOSIT", out _, 200, 25)
+            var journal = Panel("OperationsLog", parent, new Vector2(248, 230), new Vector2(16, -366), TextAnchor.UpperLeft);
+            Accent(journal, ForgeRed);
+            Label("JournalTitle", journal.transform, "LOGISTICA / MANIFEST", 11, new Vector2(16, -13), 212, 20, Gold);
+            materialText = Label("MaterialInventory", journal.transform, "", 10, new Vector2(16, -37), 206, 70, Ivory);
+            Button("SurveyOverlay", journal.transform, new Vector2(16, -108), "SURVEY: OFF", out surveyLabel, 200, 23)
+                .onClick.AddListener(() => { if(Industry!=null) Industry.SetOverlay((Industry.Overlay+1)%8); });
+            Button("VisitDeposit", journal.transform, new Vector2(16, -135), "VISIT NEAREST DEPOSIT", out _, 200, 23)
                 .onClick.AddListener(VisitDeposit);
-            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -183), 200, 16, Muted);
-            Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out _, 87, 24)
+            discoveryButton=Button("DiscoveryStatus",journal.transform,new Vector2(16,-162),"SITES 0 / 0",out _,200,23);
+            discoveryButton.onClick.AddListener(OpenDiscoveries);
+            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -218), 200, 14, Muted);
+            Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out var expeditionLabel, 87, 24)
                 .onClick.AddListener(() => ShowNewGamePanel(true));
+            expeditionLabel.fontSize=11;
         }
 
         private void BuildConstruction(Transform parent)
         {
-            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 166), new Vector2(0, 44), TextAnchor.LowerCenter);
-            Label("ConstructionTitle", deck.transform, "CONSTRUCTION AUTHORITY", 10, new Vector2(16, -11), 300, 18, Gold);
-            for(var g=0;g<3;g++)
+            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 166), new Vector2(0, 38), TextAnchor.LowerCenter);
+            Accent(deck, ForgeRed);
+            Label("ConstructionTitle", deck.transform, "PRODUCTION & CONSTRUCTION", 10, new Vector2(16, -11), 300, 18, Gold);
+            Button("OpenEarthworks",deck.transform,new Vector2(710,-9),"EARTHWORKS",out var earthworkLabel,132,27)
+                .onClick.AddListener(()=>Earthworks.Open(EarthworkMode.Move));
+            earthworkLabel.color=EarthworksController.ColorFor(EarthworkMode.Flatten);
+            Button("OpenBulldoze",deck.transform,new Vector2(850,-9),"BULLDOZE",out var bulldozeLabel,132,27)
+                .onClick.AddListener(()=>Earthworks.Open(EarthworkMode.Demolish));
+            bulldozeLabel.color=EarthworksController.ColorFor(EarthworkMode.Demolish);
+            var categoryNames=new[]{"COLONY","EXTRACTION","UTILITIES","PROCESSING","FOOD","RESEARCH"};
+            for(var g=0;g<catalogGroups.Length;g++)
             {
-                var group=g;Button("CatalogGroup"+g,deck.transform,new Vector2(302+g*127,-9),new[]{"COLONY","EXTRACTION","PROCESSING"}[g],out _,119,27)
+                var group=g;Button("CatalogGroup"+g,deck.transform,new Vector2(210+g*82,-9),categoryNames[g],out var categoryLabel,78,27)
                     .onClick.AddListener(()=>SetCatalogGroup(group));
+                categoryLabel.fontSize=10;
             }
             for (var i = 0; i < 4; i++)
             {
                 var index=i;
                 var id = catalogIds[i];
                 catalog[i] = Button("BuildCard" + id, deck.transform, new Vector2(16 + i * 171, -49),
-                    catalogLabels[i], out var label, 161, 80);
-                label.fontSize = 14; label.lineSpacing = 1.4f;
+                    ConstructionCard(id), out var label, 161, 80);
+                label.fontSize = 12; label.lineSpacing = 1.1f;
                 catalog[i].onClick.AddListener(() => { selection.Select(null); buildingPlacement.SelectStructure(visibleIds[index]); });
             }
             structureDetails = Label("StructureDetails", deck.transform, "", 11, new Vector2(710, -44), 272, 68, Muted);
@@ -217,30 +252,63 @@ namespace WH30K.UI
 
         private void BuildInspector(Transform parent)
         {
-            inspector = Panel("BuildingInspector", parent, new Vector2(294, 496), new Vector2(-16, -132), TextAnchor.UpperRight);
-            Label("InspectorTag", inspector.transform, "STRUCTURE DIRECTORATE", 10, new Vector2(18, -16), 230, 20, Gold);
+            inspector = Panel("BuildingInspector", parent, new Vector2(310, 558), new Vector2(-16, -104), TextAnchor.UpperRight);
+            Accent(inspector, Gold);
+            Label("InspectorTag", inspector.transform, "MAGOS / STRUCTURE DATA", 10, new Vector2(18, -16), 260, 20, Gold);
             Button("CloseInspector", inspector.transform, new Vector2(252, -12), "X", out _, 26, 26)
                 .onClick.AddListener(() => selection.Select(null));
-            buildingTitle = Label("SelectedBuildingTitle", inspector.transform, "", 22, new Vector2(18, -47), 260, 57, Ivory);
-            buildingStats = Label("SelectedBuildingStats", inspector.transform, "", 13, new Vector2(18, -110), 258, 104, Ivory);
-            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -206), 258, 20, Gold);
+            Label("BuildingNameCaption",inspector.transform,"NAME / EDIT",10,new Vector2(18,-42),260,16,Gold);
+            var nameBox=Panel("BuildingName",inspector.transform,new Vector2(258,38),new Vector2(18,-60),TextAnchor.UpperLeft);
+            buildingNameInput=nameBox.AddComponent<InputField>();buildingNameInput.characterLimit=FacilityIdentityRules.NameLimit;
+            buildingTitle=Label("SelectedBuildingTitle",nameBox.transform,"",19,new Vector2(6,-4),246,30,Ivory);
+            buildingTitle.supportRichText=false;buildingNameInput.textComponent=buildingTitle;
+            buildingNameInput.onEndEdit.AddListener(value=>{
+                if(refreshingBuildingName || selectedBuilding==null)return;
+                if(!selectedBuilding.Rename(value))AppendEventLog("Use a unique, non-empty building name (up to 40 characters).");
+                RefreshBuilding();
+            });
+            buildingStats = Label("SelectedBuildingStats", inspector.transform, "", 13, new Vector2(18, -110), 258, 160, Ivory);
+            var statsViewport=new GameObject("Building detail scroll (mouse wheel)",typeof(RectTransform),typeof(Image),typeof(RectMask2D),typeof(ScrollRect));
+            statsViewport.GetComponent<Image>().color=Color.clear;
+            statsViewport.transform.SetParent(inspector.transform,false);
+            var viewportRect=statsViewport.GetComponent<RectTransform>();viewportRect.anchorMin=viewportRect.anchorMax=new Vector2(0,1);
+            viewportRect.pivot=new Vector2(0,1);viewportRect.anchoredPosition=new Vector2(18,-110);viewportRect.sizeDelta=new Vector2(258,154);
+            buildingStats.transform.SetParent(statsViewport.transform,false);
+            var statsRect=buildingStats.rectTransform;statsRect.anchorMin=statsRect.anchorMax=new Vector2(0,1);statsRect.pivot=new Vector2(0,1);
+            statsRect.anchoredPosition=Vector2.zero;statsRect.sizeDelta=new Vector2(258,160);
+            buildingStats.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+            var statsScroll=statsViewport.GetComponent<ScrollRect>();statsScroll.viewport=viewportRect;statsScroll.content=statsRect;
+            statsScroll.horizontal=false;statsScroll.movementType=ScrollRect.MovementType.Clamped;statsScroll.scrollSensitivity=18;
+            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -268), 258, 20, Gold);
             for (var i = 0; i < 3; i++)
             {
                 var focus = i;
-                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -232 - i * 35), "", out _, 258, 29);
+                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -291 - i * 33), "", out _, 258, 28);
                 focuses[i].onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.SetFocus(focus); RefreshBuilding(); });
             }
-            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -340), 258, 48, Muted);
-            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -402), "", out upgradeLabel, 124, 34);
+            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -386), 258, 38, Muted);
+            growthPlanButton = Button("GrowthPlan", inspector.transform, new Vector2(18, -424), "", out growthPlanLabel, 258, 27);
+            growthPlanButton.onClick.AddListener(() => { if (selectedBuilding != null && !selectedBuilding.State.improving) selectedBuilding.SetGrowthPlan(selectedBuilding.State.growthPlan == 0 ? 1 : selectedBuilding.State.growthPlan == 1 ? 2 : 0); RefreshBuilding(); });
+            growthModeButton = Button("GrowthMode", inspector.transform, new Vector2(18, -454), "", out growthModeLabel, 258, 27);
+            growthModeButton.onClick.AddListener(() => { selectedBuilding?.ToggleAutomaticImprovement(); RefreshBuilding(); });
+            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -485), "", out upgradeLabel, 124, 30);
             upgradeButton.onClick.AddListener(() =>
             {
-                if (selectedBuilding != null && selectedBuilding.Upgrade()) AppendEventLog(selectedBuilding.DisplayName + " upgraded.");
+                if(selectedBuilding!=null)
+                {
+                    if(selectedBuilding.Upgrade())AppendEventLog(selectedBuilding.DisplayName+" expanded.");
+                    else if(selectedBuilding.Id=="Farm")AppendEventLog("No free, suitable expansion territory for "+selectedBuilding.DisplayName+".");
+                }
                 RefreshBuilding();
             });
-            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -402), "", out operationLabel, 124, 34);
+            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -485), "", out operationLabel, 124, 30);
             operationButton.onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.ToggleOperation(); RefreshBuilding(); });
-            excavationButton = Button("ExcavationPlan", inspector.transform, new Vector2(18, -448), "EXCAVATION PLAN", out _, 258, 30);
-            excavationButton.onClick.AddListener(() => OpenExcavationPlan(selectedBuilding));
+            excavationButton = Button("ExcavationPlan", inspector.transform, new Vector2(18, -519), "EXCAVATION PLAN", out _, 258, 26);
+            excavationButton.onClick.AddListener(() => {
+                if(selectedBuilding!=null && selectedBuilding.Residential!=null){selectedBuilding.Residential.SelectedModule=-1;RefreshBuilding();}
+                else if(selectedBuilding!=null && (selectedBuilding.Id=="Manufactorum" || selectedBuilding.Id=="StorageDepot")) OpenFacilityPanel(selectedBuilding);
+                else OpenExcavationPlan(selectedBuilding);
+            });
             inspector.SetActive(false);
         }
 
@@ -263,13 +331,9 @@ namespace WH30K.UI
             seedInput = input.AddComponent<InputField>();
             var inputText = Label("SeedText", input.transform, "", 15, new Vector2(12, -8), 448, 26, Ivory);
             seedInput.textComponent = inputText; seedInput.contentType = InputField.ContentType.IntegerNumber;
-            Button("DifficultyButton", card.transform, new Vector2(34, -255), "STANDARD", out difficultyLabel, 472, 36)
-                .onClick.AddListener(() =>
-                {
-                    var definitions = GameSettings.GetAllDefinitions();
-                    var next = ((int)selectedDifficulty + 1) % definitions.Count;
-                    SetDifficulty(definitions[next].difficulty);
-                });
+            difficultyLabel = Label("LandingModeHint", card.transform,
+                "LANDING CATEGORY AND STARTING CONDITIONS ARE SELECTED ON THE PLANET",
+                11, new Vector2(34, -255), 472, 36, Gold);
             Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
                 .onClick.AddListener(() =>
                 {
@@ -280,7 +344,7 @@ namespace WH30K.UI
                 .onClick.AddListener(() =>
                 {
                     var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
-                    bootstrap.BeginNewGame(seed, selectedDifficulty);
+                    bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
                 });
         }
 
@@ -301,21 +365,46 @@ namespace WH30K.UI
             choiceA.onClick.AddListener(() => choiceAHandler?.Invoke()); choiceB.onClick.AddListener(() => choiceBHandler?.Invoke());
         }
 
+        private void BuildDiscovery(Transform parent)
+        {
+            discoveryPanel=new GameObject("DiscoveryPanel",typeof(RectTransform),typeof(Image));discoveryPanel.transform.SetParent(parent,false);
+            var rect=discoveryPanel.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
+            discoveryPanel.GetComponent<Image>().color=new Color(.005f,.008f,.012f,.62f);
+            var card=Panel("DiscoveryCard",discoveryPanel.transform,new Vector2(620,452),Vector2.zero,TextAnchor.MiddleCenter);
+            Label("DiscoveryTag",card.transform,"EXPEDITION RECORD  /  SURVEY INTELLIGENCE",11,new Vector2(28,-24),564,22,Gold);
+            discoveryTitleText=Label("DiscoveryTitle",card.transform,"",22,new Vector2(28,-57),564,58,Ivory);
+            discoveryBodyText=Label("DiscoveryDetails",card.transform,"",14,new Vector2(28,-123),564,204,Ivory);
+            Button("PreviousDiscovery",card.transform,new Vector2(28,-340),"< PREVIOUS",out _,162,30).onClick.AddListener(()=>Industry?.BrowseDiscoveredLocation(-1));
+            discoveryLocateButton=Button("LocateDiscovery",card.transform,new Vector2(205,-340),"LOCATE SITE",out _,210,30);
+            discoveryLocateButton.onClick.AddListener(()=>{var action=discoveryLocateAction;ResetDiscoveryPanel();action?.Invoke();});
+            Button("NextDiscovery",card.transform,new Vector2(430,-340),"NEXT >",out _,162,30).onClick.AddListener(()=>Industry?.BrowseDiscoveredLocation(1));
+            discoveryActionButton=Button("DiscoveryAction",card.transform,new Vector2(28,-388),"",out discoveryActionLabel,350,38);
+            discoveryActionButton.onClick.AddListener(()=>{var action=discoveryAction;ResetDiscoveryPanel();action?.Invoke();});
+            Button("CloseDiscovery",card.transform,new Vector2(394,-388),"CLOSE",out _,198,38).onClick.AddListener(CloseDiscoveryPanel);
+            discoveryPanel.SetActive(false);
+        }
+
         private void Update()
         {
+            RefreshLanding();
+            RefreshEarthworks();
+            if(FacilityPanelOpen && Input.GetKeyDown(KeyCode.Escape)){CloseFacilityPanel();return;}
             var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
             if (!typing)
             {
+                if (Input.GetKeyDown(KeyCode.Escape) && researchPanel != null && researchPanel.activeSelf) { CloseResearchPanel(); return; }
+                if (Input.GetKeyDown(KeyCode.Escape) && guidePanel != null && guidePanel.activeSelf) { CloseGuide(); return; }
+                if (Input.GetKeyDown(KeyCode.Escape) && resourceDepositsPanel.activeSelf && !resourceDepositsPinned) { resourceDepositsPanel.SetActive(false); return; }
                 if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) bootstrap.SaveToFile();
                 if (Input.GetKeyDown(KeyCode.F9)) bootstrap.LoadFromFile();
-                if (Input.GetKeyDown(KeyCode.Space) && GameSettings.HasActiveGame) clock.TogglePause();
+                if (Input.GetKeyDown(KeyCode.Space) && GameSettings.HasActiveGame && !bootstrap.ChoosingLanding) clock.TogglePause();
 #if UNITY_EDITOR
                 if (Input.GetKeyDown(KeyCode.F12)) debugPanel.SetActive(!debugPanel.activeSelf);
 #endif
             }
             refreshTimer += Time.unscaledDeltaTime;
-            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); }
+            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); RefreshOutputTooltip(); RefreshFacilityPanel(); RefreshResearchPanel(); RefreshResourceDepositsPane(); }
             UpdateColonyMarker();
         }
 
@@ -348,33 +437,75 @@ namespace WH30K.UI
 
         public void ShowBuilding(ManagedBuilding building)
         {
+            if (building != selectedBuilding && building != null && resourceDepositsPanel != null && !resourceDepositsPinned) resourceDepositsPanel.SetActive(false);
+            if(FacilityPanelOpen && facilityBuilding!=building)CloseFacilityPanel();
+            if(building!=null && building.Id=="Farm")building=building.EntityRoot??building;
             selectedBuilding = building; inspector.SetActive(building != null); RefreshBuilding();
+            if(building!=null && (building.Id=="Manufactorum" || building.Id=="StorageDepot")) OpenFacilityPanel(building);
         }
         private void RefreshBuilding()
         {
+            var selectingShip = selectedBuilding != null && selectedBuilding.Id == "ColonyShip";
+            if (shipPanel != null) shipPanel.SetActive(selectingShip);
+            if (selectingShip) { inspector.SetActive(false); RefreshShipHud(); return; }
             if (selectedBuilding == null) { inspector.SetActive(false); return; }
             inspector.SetActive(true);
             var state = selectedBuilding.State; var e = selectedBuilding.Economy; var impact = selectedBuilding.Impact;
-            buildingTitle.text = selectedBuilding.DisplayName;
-            buildingStats.text = $"TIER {state.level + 1}   /   {(state.offline ? "OFFLINE" : "OPERATIONAL")}\nHousing {e.capacity:0}     Jobs {e.jobs:0}\nOutput / worker  {e.outputPerWorker:0.00}\nUpkeep  {e.upkeep:0.0} / s\nCO2 impact  {impact.co2Delta:+0.00;-0.00;0} / s at full staffing";
+            if(!buildingNameInput.isFocused){refreshingBuildingName=true;buildingNameInput.SetTextWithoutNotify(selectedBuilding.DisplayName);refreshingBuildingName=false;}
+            if(selectedBuilding.Residential==null)buildingStats.text = $"TIER {state.level + 1}   /   {(state.offline ? "OFFLINE" : "OPERATIONAL")}\nHousing {e.capacity:0}     Jobs {e.jobs:0}\nCO2 impact  {impact.co2Delta:+0.00;-0.00;0} / s at full staffing\n{selectedBuilding.ImprovementStatus}";
+            if(selectedBuilding.SurveyRadius>0)buildingStats.text+=$"\nSurvey radius {selectedBuilding.SurveyRadius:0} m\nRevealed sites {Industry?.DiscoveredCount??0}/{Industry?.DiscoveryCount??0}";
             if(IndustryRules.Facility(selectedBuilding.Id) && Industry!=null)
-                buildingStats.text=$"TIER {state.level+1} / {(state.offline?"OFFLINE":"OPERATIONAL")}   Jobs {e.jobs:0}\nUpkeep {e.upkeep:0.#}/s\n"+Industry.Status(selectedBuilding);
+                buildingStats.text=$"TIER {state.level+1} / {(state.offline?"OFFLINE":"OPERATIONAL")}   Jobs {e.jobs:0}\n"+Industry.Status(selectedBuilding)+"\n"+selectedBuilding.ImprovementStatus;
+            if(selectedBuilding.Id=="Farm" && Industry!=null)buildingStats.text=Industry.Status(selectedBuilding);
+            if(selectedBuilding.Id=="DevSupply")
+                buildingStats.text=$"DEVELOPER TEST SOURCE / {(state.offline?"OFF":"ON")}\nUnlimited construction supplies and advanced supplies while active.\nUse { (state.offline?"RESUME":"SUSPEND") } below to toggle.";
             for (var i = 0; i < 3; i++)
             {
+                focuses[i].gameObject.SetActive(selectedBuilding.Id != "Mine");
                 focuses[i].GetComponentInChildren<Text>().text = BuildingOperationRules.FocusName(selectedBuilding.Id, i);
                 Tone(focuses[i], state.focus == i);
+                focuses[i].interactable = selectedBuilding.Id != "ColonyShip";
             }
-            focusDescription.text = BuildingOperationRules.FocusDescription(selectedBuilding.Id, state.focus);
+            focusDescription.text = selectedBuilding.Id == "Mine"
+                ? BuildingOperationRules.FocusName("Mine", state.focus) + "\nSet automatically at placement."
+                : BuildingOperationRules.FocusDescription(selectedBuilding.Id, state.focus);
             upgradeButton.interactable = selectedBuilding.CanUpgrade;
-            upgradeLabel.text = state.level >= 2 ? "MAXIMUM TIER" : $"UPGRADE  {selectedBuilding.UpgradeCost:0}";
+            upgradeLabel.text = state.level >= 2 ? "MAX TIER" : state.improving ? "IN PROGRESS" : $"IMPROVE  {selectedBuilding.UpgradeCost * ColonyRules.LegacyProjectSupplyScale:0.##} SUP";
+            growthPlanLabel.text = "EXPANSION: " + AdaptiveBuildingRules.PlanName(state.growthPlan) + "  [CHANGE]";
+            growthModeLabel.text = state.manualImprovements ? "MILESTONE: MANUAL" : "MILESTONE: AUTOMATIC";
+            growthPlanButton.interactable = state.level < 2 && !state.improving;
+            growthModeButton.interactable = state.level < 2 && !state.improving;
+            upgradeButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+#if UNITY_EDITOR
+            if(selectedBuilding.Id=="Farm") { upgradeButton.gameObject.SetActive(true); upgradeButton.interactable=Industry.HasFarmCapacity(selectedBuilding); upgradeLabel.text="DEV: ADD FIELD"; }
+#endif
+            growthPlanButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+            growthModeButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+            if(selectedBuilding.Residential!=null)
+            {
+                var residential=selectedBuilding.Residential;
+                buildingStats.fontSize=11;buildingStats.text=residential.Status;
+                upgradeLabel.text=residential.Data.project!=null?"CONSTRUCTING":"APPROVE";
+                growthPlanLabel.text="PREFER: "+(state.growthPlan==1?"UPWARD":state.growthPlan==2?"OUTWARD":"BALANCED");
+                growthModeLabel.text=state.manualImprovements?"DEVELOPMENT: MANUAL":"DEVELOPMENT: AUTOMATIC";
+                growthPlanButton.interactable=residential.Data.project==null;
+                growthModeButton.interactable=true;
+            }
+            else buildingStats.fontSize=13;
+            if(selectedBuilding.Id=="Manufactorum")
+            {
+                upgradeLabel.text=state.manufactorum.project!=null?"CONSTRUCTING":"EXPAND";
+                growthPlanButton.gameObject.SetActive(false); growthModeButton.gameObject.SetActive(false);
+            }
             operationLabel.text = state.offline ? "RESUME" : "SUSPEND";
-            excavationButton.gameObject.SetActive(selectedBuilding.Id=="Mine" || selectedBuilding.Id=="Quarry");
+            excavationButton.gameObject.SetActive(selectedBuilding.Id=="Mine" || selectedBuilding.Id=="Quarry" || selectedBuilding.Residential!=null || selectedBuilding.Id=="Manufactorum" || selectedBuilding.Id=="StorageDepot");
+            excavationButton.GetComponentInChildren<Text>().text=selectedBuilding.Id=="Manufactorum"?"SELECT PRODUCTION":selectedBuilding.Id=="StorageDepot"?"CONFIGURE STORAGE":selectedBuilding.Residential!=null?"WHOLE BLOCK DETAILS":"EXCAVATION PLAN";
         }
 
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
         {
             if (buildButtonLabel != null) buildButtonLabel.text = placementActive ? "CANCEL DEPLOYMENT  [ESC]" : "DEPLOY STRUCTURE";
-            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails.Split('\n')[0]+"\nFree placement / terrain supports";
+            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails;
             Tone(buildButton, placementActive);
             for (var i = 0; i < catalog.Length; i++)
                 if (catalog[i] != null) Tone(catalog[i], buildingPlacement != null && i<visibleIds.Length && buildingPlacement.ActiveStructureId==visibleIds[i]);
@@ -386,39 +517,96 @@ namespace WH30K.UI
             {
                 catalog[i].gameObject.SetActive(i<visibleIds.Length);if(i>=visibleIds.Length)continue;
                 var definition=Array.Find(definitions,d=>d.Id==visibleIds[i]);
-                catalog[i].GetComponentInChildren<Text>().text=definition.DisplayName.ToUpperInvariant()+$"\n{definition.ConstructionCost:0}  /  "+(group==1?"EXTRACTION":group==2?"PROCESSING":"COLONY");
+                catalog[i].GetComponentInChildren<Text>().text=ConstructionCard(definition.Id);
             }
             selection.Select(null);buildingPlacement.SelectStructure(visibleIds[0]);
+        }
+        private string ConstructionCard(string id)
+        {
+            var definition = Array.Find(Resources.LoadAll<BuildableStructure>("Buildings"), d => d.Id == id);
+            if (definition == null) return id;
+            return definition.DisplayName.ToUpperInvariant()+$"\n{definition.ConstructionSupplies:0.#} SUPPLIES"+
+                (definition.AdvancedSupplies > 0 ? $" / {definition.AdvancedSupplies:0.#} PLAS" : "") +
+                (Industry != null && !Industry.CanAffordConstruction(definition.ConstructionSupplies,definition.AdvancedSupplies) ? "\nNEED SUPPLIES" : "\nREADY TO PLACE");
         }
         private void RefreshMaterials()
         {
             if(materialText==null || Industry==null || bootstrap.ActivePlanet==null)return;
             Industry.FillTotals(materialTotals);var total=materialTotals;var biome=Orbit!=null?bootstrap.ActivePlanet.Biome(Orbit.NavigationDirection):"";
-            materialText.text=$"ORE  Fe {total[0]:0}   Cu {total[1]:0}\nSTONE {total[2]:0}   CRYSTAL {total[4]:0}\nBIO {total[3]:0}   METAL {total[5]:0}\nPARTS {total[6]:0}   CARGO {Industry.CargoCount}\n{biome}";
-            surveyLabel.text="SURVEY: "+SurveyLabels[Industry.Overlay];
+            Industry.FillRates(materialProduced,materialConsumed);
+            UpdateResourceReadout(resourceSystem.CreateSnapshot());
+            for(var i=0;i<catalog.Length && i<visibleIds.Length;i++)catalog[i].GetComponentInChildren<Text>().text=ConstructionCard(visibleIds[i]);
+            UpdateBuildButtonState(buildingPlacement.ActiveStructureName,buildingPlacement.IsPlacing);
+            materialText.text=$"FOOD {resourceSystem.Food:0}  NEED {FarmRules.MonthlyDemand(resourceSystem.CreateSnapshot().Population):0}/mo  W {resourceSystem.Water:0}\nFE {total[0]:0}  CU {total[1]:0}  ST {total[2]:0}  BIO {total[3]:0}\nMET {total[5]:0}  PART {total[6]:0}  PLAS {total[8]:0}  CRY {total[4]:0}\nFERT B {total[9]:0}  I {total[10]:0}  A {total[11]:0}  FUEL {total[7]:0}\nPOWER {Industry.PowerGenerated:0.#}/{Industry.PowerDemand:0.#}  STAFF {Industry.WorkersAvailable:0}/{Industry.WorkersRequired:0}\nCARGO {Industry.CargoCount} / FOOD {Industry.FoodTransportCount}  {biome}";
+            surveyLabel.text=Industry.Overlay==1 && Industry.LogisticsBuildPending ? "ROUTES: PREPARING"
+                : Industry.Overlay==1 && Industry.LogisticsVisualTruncated ? "ROUTES: DISPLAY LIMIT"
+                : "SURVEY: "+SurveyLabels[Industry.Overlay];
+            if(discoveryButton!=null){var label=discoveryButton.GetComponentInChildren<Text>();label.fontSize=11;label.text=$"SITES {Industry.DiscoveredCount}/{Industry.DiscoveryCount}  /  AREA {Industry.ExploredFraction:P0}";}
         }
         private void VisitDeposit()
         {
             if(Industry==null || Orbit==null || bootstrap.ActivePlanet==null)return;
-            var kind=(MaterialKind)Mathf.Clamp(Industry.Overlay-2,0,4);
+            var kind=Industry.Overlay==7?MaterialKind.Promethium:(MaterialKind)Mathf.Clamp(Industry.Overlay-2,0,4);
             var world=bootstrap.ActivePlanet.transform.TransformPoint(bootstrap.ActivePlanet.EvaluateSurfacePoint(Orbit.NavigationDirection));
             var deposit=Industry.NearestDeposit(world,kind);
-            if(deposit!=null){Industry.SetOverlay((int)kind+2);Orbit.FocusLocation(deposit.Direction);AppendEventLog($"Survey: {IndustryRules.Name(kind)}, {deposit.Remaining:0} units.");}
+            if(deposit!=null){Industry.SetOverlay(kind==MaterialKind.Promethium?7:(int)kind+2);Orbit.FocusLocation(deposit.Direction);AppendEventLog($"Survey: {IndustryRules.Name(kind)}, {deposit.Remaining:0} units.");}
         }
-        public void ShowNewGamePanel(bool visible) { newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
-        public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) selection.Select(null); }
-        public void ShowEventPanel(bool visible) { eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = visible || MiningPanelOpen || (newGamePanel!=null && newGamePanel.activeSelf); }
+        private void OpenDiscoveries()
+        {
+            if(Industry==null)return;
+            Industry.SetOverlay(1);
+            Industry.BrowseDiscoveredLocation(1);
+        }
+        public void ShowDiscoveryPanel(string title,string body,string actionLabel,Action action,Action locate=null)
+        {
+            HideOutputTooltip();
+            discoveryTitleText.text=title;discoveryBodyText.text=body;discoveryActionLabel.text=actionLabel;
+            discoveryAction=action;discoveryActionButton.interactable=action!=null;discoveryPanel.SetActive(true);
+            discoveryLocateAction=locate;discoveryLocateButton.interactable=locate!=null;
+            if(clock!=null)clock.DecisionPending=true;
+        }
+        public void ResetDiscoveryPanel()
+        {
+            if(discoveryPanel!=null)discoveryPanel.SetActive(false);
+            discoveryAction=null;discoveryLocateAction=null;
+            if(clock!=null)clock.DecisionPending=HasOpenEvent||(newGamePanel!=null&&newGamePanel.activeSelf);
+        }
+        private void CloseDiscoveryPanel()=>ResetDiscoveryPanel();
+        // Session UI must not retain a modal, callback or selected object from a replaced world.
+        public void ResetSessionUi()
+        {
+            CloseResearchPanel(); CloseGuide(); CloseFacilityPanel(); CloseMiningPanel();
+            ResetDiscoveryPanel(); ShowEventPanel(false); HideOutputTooltip();
+            ShowLandingPanel(false); ResetGuideForNewExpedition();
+            selectedBuilding = null;
+            if (shipPanel != null) shipPanel.SetActive(false);
+            if (inspector != null) inspector.SetActive(false);
+        }
+        public void FocusLocation(Vector3 direction){Orbit?.FocusLocation(direction);}
+        public void ShowNewGamePanel(bool visible) { if (visible) { HideOutputTooltip(); CloseFacilityPanel(); } newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
+        public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) { selection.Select(null); RefreshResourceDepositsPane(); } }
+        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || (newGamePanel!=null && newGamePanel.activeSelf); }
         public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
         public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
         {
-            selectedDifficulty = difficulty; difficultyLabel.text = "CONDITIONS  /  " + GameSettings.GetDefinition(difficulty).displayName.ToUpperInvariant();
+            if (difficultyLabel != null)
+                difficultyLabel.text = "LAST EXPEDITION  /  " + GameSettings.GetDefinition(difficulty).displayName.ToUpperInvariant();
         }
         public void UpdateResourceReadout(ResourceSnapshot state)
         {
-            stockpileValue.text = state.Stockpile.ToString("N0"); populationValue.text = state.Population.ToString("N0");
-            netValue.text = state.NetProduction.ToString("+0.0;-0.0;0.0"); netValue.color = state.NetProduction >= 0 ? new Color(0.52f, 0.77f, 0.66f) : new Color(0.9f, 0.43f, 0.35f);
-            workforceValue.text = state.Workforce.ToString("N0");
+            stockpileValue.text = ColonyRules.SupplyLabel(state.Food, FarmRules.MonthlyDemand(state.Population)) + $" / {state.Food:0}";
+            waterSupplyValue.text = ColonyRules.SupplyLabel(state.Water, WaterRules.Demand(state.Population) * (float)ColonyCalendar.SecondsPerMonth) + $" / {state.Water:0}";
+            populationValue.text = state.Population.ToString("N0");
+            workforceValue.text = $"{state.Workforce:0} / {ColonyRules.PopulationHealth:P0}";
+            if (Industry != null)
+            {
+                var supplies = Industry.ConstructionSupplyTotals();
+                Industry.FillRates(materialProduced, materialConsumed);
+                netValue.text = ColonyRules.SupplyLabel(supplies.basic, materialConsumed[6] * (float)ColonyCalendar.SecondsPerMonth)
+                    + $" / {supplies.basic:0.#}\n{ supplies.advanced:0.#} plasteel";
+            }
+            RefreshOutputTooltip();
         }
         public void UpdateEnvironmentReadout(EnvironmentSnapshot state)
         {
@@ -432,6 +620,7 @@ namespace WH30K.UI
         }
         public void PromptEvent(string title, string body, string optionAText, Action optionA, string optionBText, Action optionB)
         {
+            choiceA.interactable=choiceB.interactable=true;
             eventTitleText.text = title; eventBodyText.text = body; choiceALabel.text = optionAText; choiceBLabel.text = optionBText;
             choiceAHandler = () => { ShowEventPanel(false); optionA?.Invoke(); };
             choiceBHandler = () => { ShowEventPanel(false); optionB?.Invoke(); };
@@ -449,6 +638,16 @@ namespace WH30K.UI
             go.GetComponent<Image>().color = Surface;
             if (border) { var edge = go.AddComponent<Outline>(); edge.effectColor = new Color(0.39f, 0.34f, 0.23f, 0.7f); edge.effectDistance = new Vector2(1, -1); }
             return go;
+        }
+        private void Accent(GameObject panel, Color color)
+        {
+            var stripe = new GameObject("PanelAccent", typeof(RectTransform), typeof(Image));
+            stripe.transform.SetParent(panel.transform, false);
+            var rect = stripe.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 0); rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(3, 0);
+            rect.anchoredPosition = new Vector2(2, 0);
+            var image = stripe.GetComponent<Image>(); image.color = color; image.raycastTarget = false;
         }
         private void StretchWidth(GameObject panel, float inset)
         {
@@ -497,10 +696,13 @@ namespace WH30K.UI
             Label("DebugTitle", debugPanel.transform, "DEVELOPER TOOLS  [F12]", 11, new Vector2(16, -16), 206, 20, Gold);
             Button("AdvanceTick", debugPanel.transform, new Vector2(16, -52), "ADVANCE SETTLEMENT TICK", out _, 200)
                 .onClick.AddListener(() => settlement.DebugRunImmediateTick());
-            Button("AddStockpile", debugPanel.transform, new Vector2(16, -96), "+100 STOCKPILE", out _, 200)
+            Button("DevSupply", debugPanel.transform, new Vector2(16, -88), "PLACE INFINITE SUPPLY NEXUS", out _, 200)
+                .onClick.AddListener(() => buildingPlacement.SelectStructure("DevSupply"));
+            Button("AddStockpile", debugPanel.transform, new Vector2(16, -124), "+100 BUILD SUPPLIES", out _, 200)
                 .onClick.AddListener(() => resourceSystem.ModifyStockpile(100));
-            Button("TriggerEvent", debugPanel.transform, new Vector2(16, -140), "TRIGGER POLICY EVENT", out _, 200)
-                .onClick.AddListener(() => colonyEventSystem.TriggerDebugEventNow());
+            var triggerEvent = Button("TriggerEvent", debugPanel.transform, new Vector2(16, -160), "TRIGGER POLICY EVENT", out _, 200);
+            triggerEvent.interactable = EventSchedule.PriorityTransmissionsEnabled;
+            triggerEvent.onClick.AddListener(() => colonyEventSystem.TriggerDebugEventNow());
             debugPanel.SetActive(false);
         }
 #endif

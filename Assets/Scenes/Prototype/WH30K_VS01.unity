@@ -139,6 +139,7 @@ GameObject:
   - component: {fileID: 100006}
   - component: {fileID: 100007}
   - component: {fileID: 100008}
+  - component: {fileID: 100009}
   m_Layer: 0
   m_Name: GameRoot
   m_TagString: Untagged
@@ -172,10 +173,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: adb3bb49a9a445a19492c33cd8777468, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  planetRadius: 12000
-  basePatchResolution: 48
+  planetRadius: 3185500
+  basePatchResolution: 33
   maximumDepth: 6
-  splitDistance: 4800
+  splitDistance: 1200
   splitFalloff: 1.8
   lodUpdateInterval: 0.25
   terrainMaterialResource: WH30K/PlanetTerrain
@@ -256,12 +257,24 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7cf8dd7d0c2a45e3af69c59d4b0f3886, type: 3}
   m_Name:
   m_EditorClassIdentifier:
-  cellsPerFace: 96
+  cellsPerFace: 256
   gridElevationOffset: 6
   validPreviewColor: {r: 0.5, g: 1, b: 0.5, a: 0.6}
   invalidPreviewColor: {r: 1, g: 0.35, b: 0.35, a: 0.6}
   allowedGridColor: {r: 0.6, g: 1, b: 0.6, a: 0.35}
   blockedGridColor: {r: 1, g: 0.4, b: 0.4, a: 0.35}
+--- !u!114 &100009
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 100000}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9702ad91597d44c6b503c2b68172b441, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
 --- !u!1 &110000
 GameObject:
   m_ObjectHideFlags: 0

@@ -20,9 +20,17 @@ namespace WH30K.Sim.Resources
         public MiningConflict PendingConflict => new MiningConflict { active=conflict.active,core=conflict.core,
             deposit=conflict.deposit,sector=conflict.sector,mine=conflict.mine,building=conflict.building };
 
+        public void RefreshAfterDemolition()
+        {
+            Synchronize();
+            foreach(var deposit in workedDeposits) { deposit.renderedRadii=null; dirtyDeposits.Add(deposit); }
+            FlushExcavations();
+        }
+
         private static ExcavationState CloneExcavation(ExcavationState state) => state == null ? null : new ExcavationState {
             capacity=(float[])state.capacity.Clone(),removed=(float[])state.removed.Clone(),blocked=state.blocked,
-            majorRadius=state.majorRadius,minorRadius=state.minorRadius,depth=state.depth,grade=state.grade,bearing=state.bearing };
+            majorRadius=state.majorRadius,minorRadius=state.minorRadius,depth=state.depth,grade=state.grade,bearing=state.bearing,
+            layoutVersion=state.layoutVersion,accessAngle=state.accessAngle,extractionCarry=state.extractionCarry };
 
         private void ConfigureExcavation(IndustrySnapshot saved)
         {
@@ -48,13 +56,22 @@ namespace WH30K.Sim.Resources
             SurfaceDeposit deposit=null;
             // Keep exhausted deposits inspectable instead of silently moving their plans to another body.
             foreach(var candidate in deposits)
-                if(candidate.Kind==ExtractionKind(building) && (deposit==null || Vector3.Distance(candidate.Position,building.transform.position)<Vector3.Distance(deposit.Position,building.transform.position))) deposit=candidate;
+                if(candidate.Discovered && candidate.Kind==ExtractionKind(building) && (deposit==null || Vector3.Distance(candidate.Position,building.transform.position)<Vector3.Distance(deposit.Position,building.transform.position))) deposit=candidate;
             return deposit!=null && Vector3.Distance(deposit.Position,building.transform.position)<=250 ? deposit : null;
         }
         public string ExcavationReport(ManagedBuilding building)
         {
-            var deposit=DepositFor(building);if(deposit==null)return "No matching ore body within 250 m. Change mineral focus or establish a new mine.";
+            var deposit=DepositFor(building);if(deposit==null)return "No matching ore body within 250 m. Establish a new mine at a surveyed deposit.";
             var state=deposit.Excavation;var depth=0f;for(var s=0;s<8;s++)depth=Mathf.Max(depth,MiningRules.Depth(state,s));
+            if(state.layoutVersion==1)
+                return $"{MiningRules.Geology(deposit.Kind)}  /  Survey #{deposit.Id}\n"+
+                    $"Grade {state.grade:P1}  |  Vein {state.majorRadius*2:0} x {state.minorRadius*2:0} x {state.depth:0} m\n"+
+                    $"Reserve {deposit.Remaining:0.0} / {MiningRules.Capacity(state):0.0} lots\n"+
+                    $"Working depth {depth:0.0} / {state.depth:0.0} m  |  Rim {MiningRules.PitRadiusScale(state):P0} of vein\n\n"+
+                    "The pit expands with extraction to the full mineral vein. No directional limits.\n"+
+                    "Place the mine outside the surveyed rim; its site remains clear as the pit grows.\n\n"+
+                    "Two-turn haul ramps and wheel tracks follow the excavated ground. Haulers run only while extraction operates; flooded workings park them.\n\n"+
+                    "Solid minerals and stone excavate. Biomass, water and liquid fuel do not. Exhausted pits remain.";
             return $"{MiningRules.Geology(deposit.Kind)}  /  Survey #{deposit.Id}\n"+
                 $"Estimated grade {state.grade*100:0.0}%  |  Extent {state.majorRadius*2:0} x {state.minorRadius*2:0} m\n"+
                 $"Remaining {deposit.Remaining:0.0} lots  |  Accessible {MiningRules.Remaining(state,true):0.0}\n"+
@@ -66,7 +83,7 @@ namespace WH30K.Sim.Resources
         }
         public void ToggleSector(ManagedBuilding building,int sector)
         {
-            var deposit=DepositFor(building);if(deposit==null || sector<0 || sector>=8 || conflict.active)return;
+            var deposit=DepositFor(building);if(deposit==null || deposit.Excavation.layoutVersion==1 || sector<0 || sector>=8 || conflict.active)return;
             deposit.Excavation.blocked ^= 1<<sector;
             ShowExcavationOutline(deposit);
             GetComponent<NewGameMenu>()?.AppendEventLog($"Survey #{deposit.Id}: sector {(char)('A'+sector)} "+((deposit.Excavation.blocked & 1<<sector)!=0?"limited. Ore retained in ground.":"reopened for review."));
@@ -110,6 +127,19 @@ namespace WH30K.Sim.Resources
         {
             if(conflict.active)return 0;
             var state=deposit.Excavation;var sector=MiningRules.NextSector(state);if(sector<0)return 0;
+            if(state.layoutVersion==1)
+            {
+                if(MiningRules.PitScale(state)==0)
+                {
+                    Coordinates(deposit,planet.transform.InverseTransformPoint(buildings[mine].transform.position).normalized,out var distance,out var bearing);
+                    var angle=(bearing-state.bearing)*Mathf.Deg2Rad;
+                    state.accessAngle=Mathf.Repeat(Mathf.Atan2(Mathf.Sin(angle)/state.minorRadius,Mathf.Cos(angle)/state.majorRadius)*Mathf.Rad2Deg,360);
+                }
+                var taken=MiningRules.ExtractSolid(state,requested);
+                deposit.Remaining=MiningRules.Remaining(state);
+                MarkPitWorked(deposit,taken);
+                return taken;
+            }
             for(var i=0;i<protectedBuildings.Count;i++)
             {
                 var building=protectedBuildings[i];if(building==null || building==buildings[mine])continue;
@@ -126,6 +156,12 @@ namespace WH30K.Sim.Resources
             deposit.Remaining=MiningRules.Remaining(state);
             if(!workedDeposits.Contains(deposit)){workedDeposits.Add(deposit);IndexExcavation(deposit);}
             dirtyDeposits.Add(deposit);return amount;
+        }
+        private void MarkPitWorked(SurfaceDeposit deposit,float amount)
+        {
+            if(!workedDeposits.Contains(deposit)){workedDeposits.Add(deposit);IndexExcavation(deposit);}
+            dirtyDeposits.Add(deposit);
+            ActivatePitHaulers(deposit,amount);
         }
         private ManagedBuilding ThreatenedBuilding() => !conflict.active ? null : conflict.core
             ? (conflict.building<settlement.CoreBuildings.Count?settlement.CoreBuildings[conflict.building]:null)
@@ -168,7 +204,7 @@ namespace WH30K.Sim.Resources
         }
         private static void Basis(Vector3 n,out Vector3 right,out Vector3 forward)
         { right=Vector3.Cross(n,Mathf.Abs(n.y)>.95f?Vector3.right:Vector3.up).normalized;forward=Vector3.Cross(n,right); }
-        private static float Footprint(ManagedBuilding building) => new Vector2(building.transform.lossyScale.x,building.transform.lossyScale.z).magnitude*.5f;
+        private static float Footprint(ManagedBuilding building) => building.FootprintRadius;
 
         private Vector3Int ExcavationTile(Vector3 direction) => new Vector3Int(Mathf.FloorToInt(direction.x*planet.Radius/256),
             Mathf.FloorToInt(direction.y*planet.Radius/256),Mathf.FloorToInt(direction.z*planet.Radius/256));
@@ -193,6 +229,12 @@ namespace WH30K.Sim.Resources
                 var state=deposit.Excavation;
                 if((direction-deposit.Direction).sqrMagnitude*planet.Radius*planet.Radius>state.majorRadius*state.majorRadius*1.1f)continue;
                 Coordinates(deposit,direction,out var distance,out var bearing);
+                if(state.layoutVersion==1)
+                {
+                    var a=(bearing-state.bearing)*Mathf.Deg2Rad;
+                    cut=Mathf.Max(cut,MiningRules.SolidCutDepth(state,distance*Mathf.Cos(a),distance*Mathf.Sin(a)));
+                    continue;
+                }
                 var angle=Mathf.Repeat(bearing-state.bearing+22.5f,360)/45;
                 var sector=(int)angle;var radius=MiningRules.RadiusAt(state,sector,bearing);var depth=MiningRules.Depth(state,sector);
                 // Blend the edge towards the adjacent sector so directional limits leave a stable wall.
@@ -227,7 +269,7 @@ namespace WH30K.Sim.Resources
             {
                 var changed=deposit.renderedRadii==null;
                 for(var s=0;s<8 && !changed;s++)changed=Mathf.Abs(deposit.renderedRadii[s]-MiningRules.Radius(deposit.Excavation,s))>.75f
-                    || deposit.renderedDepths[s]!=MiningRules.Depth(deposit.Excavation,s);
+                    || Mathf.Abs(deposit.renderedDepths[s]-MiningRules.Depth(deposit.Excavation,s))>.2f;
                 if(!changed)continue;
                 planet.RefreshExcavation(deposit.Direction,deposit.Excavation.majorRadius+25);
                 refresh.Add(deposit);
@@ -238,7 +280,7 @@ namespace WH30K.Sim.Resources
                 for(var s=0;s<8;s++){deposit.renderedRadii[s]=MiningRules.Radius(deposit.Excavation,s);deposit.renderedDepths[s]=MiningRules.Depth(deposit.Excavation,s);}
             }
             if(refresh.Count>0)planet.RebuildExcavatedSurface();
-            foreach(var deposit in refresh)BuildPitMesh(deposit);
+            foreach(var deposit in refresh){BuildPitMesh(deposit);RebuildPitRoad(deposit);}
             dirtyDeposits.Clear();
         }
         private void BuildPitMesh(SurfaceDeposit deposit)
@@ -250,8 +292,9 @@ namespace WH30K.Sim.Resources
                 deposit.pitMesh=new Mesh{name="Terraced excavation "+deposit.Id};go.GetComponent<MeshFilter>().sharedMesh=deposit.pitMesh;
                 go.GetComponent<Renderer>().sharedMaterial=planet.TerrainMaterial;
             }
-            const int resolution=65;var vertices=new Vector3[resolution*resolution];var colors=new Color[vertices.Length];var cuts=new bool[vertices.Length];var triangles=new List<int>();
-            Basis(deposit.Direction,out var right,out var forward);var extent=deposit.Excavation.majorRadius+12;
+            var resolution=deposit.Excavation.layoutVersion==1?97:65;var vertices=new Vector3[resolution*resolution];var colors=new Color[vertices.Length];var cuts=new bool[vertices.Length];var triangles=new List<int>();
+            Basis(deposit.Direction,out var right,out var forward);
+            var extent=deposit.Excavation.majorRadius*(deposit.Excavation.layoutVersion==1?MiningRules.PitRadiusScale(deposit.Excavation):1)+12;
             for(var y=0;y<resolution;y++)for(var x=0;x<resolution;x++)
             {
                 var n=(deposit.Direction+(right*(x/(float)(resolution-1)*2-1)+forward*(y/(float)(resolution-1)*2-1))*extent/planet.Radius).normalized;
@@ -283,15 +326,19 @@ namespace WH30K.Sim.Resources
                 state.source=source;state.target=target;flight.state=state;
             }
             buildings=current;routes.Clear();
-            incoming=new float[buildings.Length*7];foreach(var group in consumers)group.Clear();
-            for(var i=0;i<buildings.Length;i++)for(var k=0;k<7;k++)
-                if(IndustryRules.Accepts(buildings[i].Id,(MaterialKind)k))consumers[k].Add(i);
+            var surveyorList=new List<ManagedBuilding>();
+            foreach(var building in current)if(building!=null&&building.SurveyRadius>0)surveyorList.Add(building);
+            surveyors=surveyorList.ToArray();
+            incoming=new float[buildings.Length*IndustryRules.MaterialCount];RebuildConsumers();
+            RefreshIncoming();
+            RebuildLogisticsNetwork();
             RefreshProtectedBuildings();
         }
         private void ClearExcavation()
         {
             if(planet!=null)planet.ExcavationHeight=null;
             foreach(var deposit in deposits)if(deposit.pitMesh!=null)Destroy(deposit.pitMesh);
+            ClearPitRoads();
             workedDeposits.Clear();dirtyDeposits.Clear();protectedBuildings.Clear();conflict=new MiningConflict();
             excavationTiles.Clear();
             outlineRoot=null;outlineLabels.Clear();

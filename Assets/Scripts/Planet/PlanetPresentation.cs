@@ -44,7 +44,7 @@ namespace WH30K.Planet
             QualitySettings.shadows = ShadowQuality.All;
             QualitySettings.shadowResolution = ShadowResolution.High;
             Shell("Ocean", planet.SeaLevel, MakeMaterial("PlanetOcean"), planet);
-            Shell("Cloud layer", planet.Radius + 135f, MakeMaterial("PlanetClouds"), null);
+            Shell("Cloud layer", planet.Radius + (planet.Radius > 50000 ? 12000f : 135f), MakeMaterial("PlanetClouds"), null);
             Shell("Atmospheric scattering", planet.Radius * 1.022f, MakeMaterial("PlanetAtmosphere"), null);
             gameObject.AddComponent<PlanetEcology>().Configure(planet);
             gameObject.AddComponent<PlanetarySystem>().Configure(planet);

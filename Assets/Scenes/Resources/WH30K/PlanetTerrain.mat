@@ -22,7 +22,23 @@ Material:
   m_LockedProperties: 
   m_SavedProperties:
     serializedVersion: 3
-    m_TexEnvs: []
+    m_TexEnvs:
+    - _RockTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SoilTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _GrassTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _SnowTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _BiomeContrast: 2.25
@@ -30,10 +46,14 @@ Material:
     - _BlendSharpness: 3.69
     - _CoastBlend: 120
     - _NoiseIntensity: 0.303
-    - _PlanetRadius: 12000
-    - _SeaLevel: 11980
+    - _PlanetRadius: 6000
+    - _SeaLevel: 5980
     - _SnowLine: 600
-    - _TextureScale: 500
+    - _TextureScale: 0.08
+    - _TextureStrength: 1
+    - _UseTextures: 0
+    - _TerrainRecipe: 3
+    - _DebugOverlay: 0
     m_Colors:
     - _DesertColor: {r: 0.57, g: 0.43, b: 0.25, a: 1}
     - _DirtColor: {r: 0.26, g: 0.23, b: 0.17, a: 1}

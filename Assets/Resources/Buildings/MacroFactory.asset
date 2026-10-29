@@ -15,6 +15,9 @@ MonoBehaviour:
   id: Factory
   displayName: Macro Factory
   constructionCost: 320
+  constructionSupplies: 12.8
+  advancedSupplies: 0
+  developerOnly: 0
   populationCapacity: 0
   workforceSlots: 120
   productionPerWorker: 2.2

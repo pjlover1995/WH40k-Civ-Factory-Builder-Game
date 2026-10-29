@@ -8,6 +8,7 @@ namespace WH30K.Planet
 {
     public sealed class PlanetarySystem : MonoBehaviour
     {
+        public const int CelestialLayer = 30;
         private LODPlanet planet;
         private Light sun;
         private Vector3 landingNormal, axis, initialSun;
@@ -41,7 +42,7 @@ namespace WH30K.Planet
         }
         private Transform Body(string name,float radius,Color color,bool luminous)
         {
-            var go=GameObject.CreatePrimitive(PrimitiveType.Sphere);go.name=name;Destroy(go.GetComponent<Collider>());
+            var go=GameObject.CreatePrimitive(PrimitiveType.Sphere);go.name=name;go.layer=CelestialLayer;Destroy(go.GetComponent<Collider>());
             go.transform.SetParent(transform,false);go.transform.localScale=Vector3.one*radius*2;
             var material=new Material(luminous?Shader.Find("Unlit/Color"):Resources.Load<Shader>("WH30K/CelestialBody")) {color=color};
             materials.Add(material);go.GetComponent<Renderer>().sharedMaterial=material;

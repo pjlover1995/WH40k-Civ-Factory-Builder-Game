@@ -15,7 +15,7 @@ namespace WH30K.Sim.Events
         private Settlement settlement;
         private EventSchedule schedule;
         public bool HasActiveSession => schedule != null;
-        private float SafetyCost => 60f * resourceSystem.ResourceYieldMultiplier;
+        private float SafetyCost => 0.6f * resourceSystem.ResourceYieldMultiplier;
 
         public void ConfigureMenu(NewGameMenu newMenu) => menu = newMenu;
 
@@ -47,10 +47,11 @@ namespace WH30K.Sim.Events
 
         private void TriggerIndustrialPolicyEvent()
         {
+            if (schedule == null || !schedule.AwaitingChoice) return;
             menu?.PromptEvent("Industrial Priorities",
                 "Factory prefects demand higher output while the air scrubbers struggle to keep pace. " +
                 "Fund permanent cleaner operating practices, or raise output and industrial emissions?",
-                $"Safety retrofits (-{SafetyCost:0} stockpile)\nLower output and emissions",
+                $"Safety retrofits (-{SafetyCost:0.##} construction supplies)\nLower output and emissions",
                 OnSafetyChosen, "Overclock furnaces\nMore output and emissions", OnOverdriveChosen);
             menu?.SetEventChoiceAInteractable(resourceSystem.CanAfford(SafetyCost));
         }
@@ -76,7 +77,7 @@ namespace WH30K.Sim.Events
         private void OnOverdriveChosen()
         {
             if (schedule == null || !schedule.Resolve()) return;
-            resourceSystem.ModifyStockpile(45f * resourceSystem.ResourceYieldMultiplier);
+            resourceSystem.ModifyStockpile(0.45f * resourceSystem.ResourceYieldMultiplier);
             settlement.AdjustPolicy(0.12f, 0.08f, null, 0.15f);
             environmentState.ApplyImmediateImpact(new EnvironmentImpact
             {

@@ -5,13 +5,16 @@ using UnityEngine.Rendering;
 namespace WH30K.Gameplay.Construction
 {
     /// <summary>Shared, batched gothic-industrial architecture for the core, construction and its preview.</summary>
-    public static class BuildingVisuals
+    public static partial class BuildingVisuals
     {
         public const float WorldScale = 0.2f;
+        public static Vector3 ShipDimensions => new Vector3(WH30K.Sim.ShipRules.Beam, WH30K.Sim.ShipRules.Height, WH30K.Sim.ShipRules.Length);
         private static readonly Dictionary<string, Mesh> Meshes = new Dictionary<string, Mesh>();
         private static Material[] materials;
+        private static Material[] shipMaterials;
         private const int Stone = 0, Iron = 1, Roof = 2, Brass = 3, Amber = 4, Cyan = 5, Dark = 6;
         public static Material[] ServiceRoadMaterials => new[] { GetMaterials()[Iron], GetMaterials()[Brass] };
+        public static Material[] ArchitectureMaterials => GetMaterials();
 
         public static GameObject Create(string id, string name, Transform parent, Vector3 dimensions,
             Material preview = null)
@@ -21,10 +24,16 @@ namespace WH30K.Gameplay.Construction
             go.transform.localScale = dimensions;
             if (!Meshes.TryGetValue(id, out var mesh) || mesh == null)
             {
+                if(id=="Farm")mesh=FarmMesh(0);
+                else if(id=="HabBlock")mesh=ResidentialVisual.PreviewCoreMesh;
+                else
+                {
                 var builder = new Architecture();
-                Foundation(builder);
+                if (id != "ColonyShip") Foundation(builder);
                 switch (id)
                 {
+                    case "ColonyShip": ExploratorShip(builder); break;
+                    case "ColonyShipLegacy": LandingShip(builder); break;
                     case "HabBlock": Habitation(builder); break;
                     case "Factory": Manufactorum(builder); break;
                     case "Utility": Scrubber(builder); break;
@@ -33,9 +42,18 @@ namespace WH30K.Gameplay.Construction
                     case "Harvester": HarvestStation(builder); break;
                     case "Smelter": SmeltingWorks(builder); break;
                     case "Works": FabricationWorks(builder); break;
+                    case "PromethiumExtractor": ExtractionRig(builder, false); bFuelPump(builder); break;
+                    case "PromethiumGenerator": PowerGenerator(builder); break;
+                    case "Refinery": Refinery(builder); break;
+                    case "Manufactorum": Manufactorum(builder); break;
+                    case "StorageDepot": StorageDepot(builder); break;
+                    case "GroundwaterPump": GroundwaterStation(builder); break;
+                    case "DesalinationPump": DesalinationPlant(builder); break;
+                    case "Cognitorium": Cognitorium(builder); break;
                     default: Outpost(builder); break;
                 }
                 mesh = builder.Build(id);
+                }
                 Meshes[id] = mesh;
             }
             go.GetComponent<MeshFilter>().sharedMesh = mesh;
@@ -49,10 +67,32 @@ namespace WH30K.Gameplay.Construction
             }
             else
             {
-                renderer.sharedMaterials = GetMaterials();
+                renderer.sharedMaterials = id == "Farm" ? FarmMaterials : id == "ColonyShip" ? GetShipMaterials() : GetMaterials();
                 if (WH30K.Sim.IndustryRules.Facility(id)) go.AddComponent<FacilityAnimation>().Configure(id);
             }
+            if (id == "ColonyShip") AddDistantShip(go, renderer);
             return go;
+        }
+
+        private static void LandingShip(Architecture b)
+        {
+            b.Box(Iron, new Vector3(0, 40, 0), new Vector3(54, 38, 100));
+            b.Box(Brass, new Vector3(0, 61, -20), new Vector3(36, 9, 48));
+            b.Gable(Iron, new Vector3(0, 59, 20), 45, 20, 58);
+            b.Box(Cyan, new Vector3(0, 52, 51), new Vector3(31, 9, 2));
+            for (var side = -1; side <= 1; side += 2)
+            {
+                b.Box(Iron, new Vector3(side * 36, 30, -10), new Vector3(22, 26, 65));
+                b.Cylinder(Dark, new Vector3(side * 36, 9, -28), 10, 12, 10, 12);
+                b.Cylinder(Amber, new Vector3(side * 36, 9, 12), 9, 11, 10, 12);
+                for (var end = -1; end <= 1; end += 2)
+                {
+                    b.Beam(Brass, new Vector3(side * 25, 30, end * 34), new Vector3(side * 42, 5, end * 42), 5);
+                    b.Box(Iron, new Vector3(side * 42, 4, end * 42), new Vector3(18, 6, 18));
+                }
+            }
+            b.Box(Brass, new Vector3(0, 16, 57), new Vector3(24, 6, 23));
+            Crest(b, new Vector3(0, 40, 51));
         }
 
         private static void ExtractionRig(Architecture b, bool quarry)
@@ -100,6 +140,84 @@ namespace WH30K.Gameplay.Construction
             Manufactorum(b);
             b.Box(Brass,new Vector3(0,23,-43),new Vector3(75,5,8));
             for(var x=-2;x<=2;x++)b.Box(Cyan,new Vector3(x*14,30,-43),new Vector3(7,5,5));
+        }
+
+        private static void bFuelPump(Architecture b)
+        {
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Cylinder(Brass,new Vector3(side*37,12,36),12,12,38,12);
+                b.Cylinder(Dark,new Vector3(side*37,50,36),13,10,4,12);
+                b.Box(Amber,new Vector3(side*37,31,25),new Vector3(4,8,2));
+            }
+        }
+        private static void PowerGenerator(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,31,0),new Vector3(84,38,70));
+            b.Gable(Roof,new Vector3(0,51,0),88,18,74);
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Cylinder(Iron,new Vector3(side*29,18,0),14,14,94,16);
+                b.Cylinder(Amber,new Vector3(side*29,67,0),15,15,4,16);
+                b.Box(Cyan,new Vector3(side*29,43,-12),new Vector3(4,20,3));
+            }
+            b.Cylinder(Brass,new Vector3(0,17,-28),18,18,62,14);
+            b.Cylinder(Dark,new Vector3(0,51,-28),20,20,5,14);
+            Crest(b,new Vector3(0,41,-37));
+        }
+        private static void Refinery(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,31,0),new Vector3(96,42,80));
+            b.Gable(Roof,new Vector3(0,53,0),100,20,84);
+            for(var x=-1;x<=1;x++)
+            {
+                b.Cylinder(Iron,new Vector3(x*32,17,14),14,14,78,14);
+                b.Cylinder(Brass,new Vector3(x*32,58,14),16,16,5,14);
+                b.Box(Amber,new Vector3(x*32,35,-29),new Vector3(14,12,3));
+            }
+            b.Box(Cyan,new Vector3(0,20,43),new Vector3(60,4,3));
+            Crest(b,new Vector3(0,40,-40));
+        }
+        private static void StorageDepot(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,27,0),new Vector3(94,34,82));
+            b.Gable(Roof,new Vector3(0,48,0),98,21,86);
+            for(var x=-1;x<=1;x++)for(var z=-1;z<=1;z++)
+            {
+                b.Box(Iron,new Vector3(x*30,22,z*22),new Vector3(22,28,20));
+                b.Box(Brass,new Vector3(x*30,37,z*22),new Vector3(23,3,21));
+                b.Box(Cyan,new Vector3(x*30,24,z*22-10),new Vector3(12,2,1));
+            }
+            Crest(b,new Vector3(0,44,-42));
+        }
+
+        private static void GroundwaterStation(Architecture b)
+        {
+            b.Box(Stone,new Vector3(-20,23,0),new Vector3(58,30,60));
+            b.Gable(Roof,new Vector3(-20,39,0),58,15,64);
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Cylinder(Iron,new Vector3(side*24,15,18),12,12,44,12);
+                b.Cylinder(Cyan,new Vector3(side*24,38,18),13,10,4,12);
+                b.Box(Brass,new Vector3(side*24,28,0),new Vector3(4,6,35));
+            }
+            b.Beam(Brass,new Vector3(20,22,-18),new Vector3(20,76,-18),4);
+            b.Beam(Iron,new Vector3(20,76,-18),new Vector3(36,24,-18),3);
+            b.Cylinder(Dark,new Vector3(20,21,-18),6,6,48,8);Crest(b,new Vector3(-20,33,-33));
+        }
+
+        private static void DesalinationPlant(Architecture b)
+        {
+            b.Box(Stone,new Vector3(0,22,0),new Vector3(82,30,68));
+            b.Gable(Roof,new Vector3(0,38,0),86,16,72);
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Cylinder(Iron,new Vector3(side*27,15,15),13,13,54,14);
+                b.Cylinder(Cyan,new Vector3(side*27,43,15),14,11,5,14);
+                for(var rib=0;rib<4;rib++)b.Box(Brass,new Vector3(side*27,26+rib*6,-3),new Vector3(28,2,4));
+            }
+            b.Box(Cyan,new Vector3(0,12,47),new Vector3(94,5,5));
+            b.Cylinder(Brass,new Vector3(0,13,41),8,8,24,10);Crest(b,new Vector3(0,35,-37));
         }
 
         private static void Foundation(Architecture b)
@@ -231,6 +349,37 @@ namespace WH30K.Gameplay.Construction
             Crest(b, new Vector3(0, 44, -43));
         }
 
+        private static void Cognitorium(Architecture b)
+        {
+            b.Box(Stone, new Vector3(0, 25, 0), new Vector3(98, 42, 94));
+            b.Box(Iron, new Vector3(0, 49, 0), new Vector3(88, 7, 84));
+            b.Gable(Roof, new Vector3(0, 54, 0), 78, 29, 76);
+            for(var side=-1;side<=1;side+=2)
+            {
+                b.Box(Stone,new Vector3(side*43,48,0),new Vector3(12,48,86));
+                for(var z=-1;z<=1;z+=2)
+                {
+                    b.Beam(Brass,new Vector3(side*41,12,z*36),new Vector3(side*46,64,z*40),3.4f);
+                    b.Box(Cyan,new Vector3(side*49,42,z*22),new Vector3(2,17,11));
+                }
+            }
+            b.Cylinder(Brass,new Vector3(0,81,0),25,4,38,8);
+            b.Cylinder(Iron,new Vector3(0,96,0),17,2,47,8);
+            b.Cylinder(Cyan,new Vector3(0,119,0),8,0,45,8);
+            for(var i=0;i<8;i++)
+            {
+                var angle=i*Mathf.PI/4;
+                var foot=new Vector3(Mathf.Cos(angle)*36,60,Mathf.Sin(angle)*36);
+                var tip=new Vector3(Mathf.Cos(angle)*46,132,Mathf.Sin(angle)*46);
+                b.Beam(Brass,foot,tip,2.7f);
+                b.Cylinder(Amber,tip,3,0,9,5);
+            }
+            b.Beam(Iron,new Vector3(0,143,-6),new Vector3(0,166,-6),1.7f);
+            b.Box(Brass,new Vector3(0,148,-6),new Vector3(20,3,8));
+            b.Arch(Dark,new Vector3(0,10,-46),19,25,3);
+            Crest(b,new Vector3(0,43,-47));
+        }
+
         private static void Outpost(Architecture b)
         {
             b.Box(Stone, new Vector3(0, 32, 0), new Vector3(81, 43, 73));
@@ -292,35 +441,64 @@ namespace WH30K.Gameplay.Construction
             if (materials != null && materials[0] != null) return materials;
             materials = new[]
             {
-                Surface("Weathered limestone", new Color(0.43f, 0.44f, 0.40f), 0.08f, 0.24f, 17),
-                Surface("Forged iron", new Color(0.16f, 0.19f, 0.20f), 0.75f, 0.40f, 29),
-                Surface("Oxide roof", new Color(0.27f, 0.075f, 0.055f), 0.5f, 0.32f, 43),
-                Surface("Aged brass", new Color(0.47f, 0.32f, 0.13f), 0.72f, 0.43f, 59),
+                Surface("Weathered limestone", Color.white, 0f, 0.22f, new Vector2(0, .5f), .16f, .012f),
+                Surface("Forged iron", Color.white, 0.82f, 0.38f, new Vector2(.5f, .5f), .24f, .003f),
+                Surface("Oxide roof", Color.white, 0.48f, 0.28f, Vector2.zero, .16f, .006f),
+                Surface("Aged brass", Color.white, 0.78f, 0.43f, new Vector2(.5f, 0), .32f, .002f),
                 Emissive("Amber lumen", new Color(1f, 0.52f, 0.14f)),
                 Emissive("Filter status lumen", new Color(0.15f, 0.78f, 0.74f)),
-                Surface("Recesses", new Color(0.035f, 0.043f, 0.045f), 0.25f, 0.15f, 71)
+                Surface("Recesses", new Color(.32f, .36f, .38f), 0.3f, 0.18f, new Vector2(.5f, .5f), .24f, .002f)
             };
             return materials;
         }
 
-        private static Material Surface(string name, Color color, float metal, float gloss, int seed)
+        private static Material[] GetShipMaterials()
         {
-            var material = new Material(Shader.Find("Standard")) { name = name, color = color, enableInstancing = true };
+            if (shipMaterials != null && shipMaterials[0] != null) return shipMaterials;
+            var atlas = UnityEngine.Resources.Load<Texture2D>("Architecture/ExploratorSurfaceAtlas");
+            var template = UnityEngine.Resources.Load<Material>("Architecture/BuildingSurface");
+            if (atlas == null || template == null)
+                throw new System.InvalidOperationException("Missing Explorator photographic surface atlas or architecture shader material.");
+            shipMaterials = new[]
+            {
+                ShipSurface(template, atlas, "Voidship armour", new Vector2(0, .5f), .006f, .003f, .72f, .24f),
+                ShipSurface(template, atlas, "Scorched voidship iron", new Vector2(.5f, .5f), .008f, .002f, .82f, .28f),
+                ShipSurface(template, atlas, "Oxblood cathedral plating", Vector2.zero, .008f, .003f, .42f, .24f),
+                ShipSurface(template, atlas, "Tarnished voidship brass", new Vector2(.5f, 0), .012f, .001f, .76f, .32f),
+                GetMaterials()[Amber], GetMaterials()[Cyan],
+                ShipSurface(template, atlas, "Deep recesses", new Vector2(.5f, .5f), .008f, .002f, .6f, .2f)
+            };
+            return shipMaterials;
+        }
+
+        private static Material ShipSurface(Material template, Texture2D atlas, string name, Vector2 quadrant,
+            float scale, float relief, float metal, float smoothness)
+        {
+            var material = new Material(template) { name = name, enableInstancing = true };
+            material.SetTexture("_MainTex", atlas);
+            material.SetVector("_AtlasOffset", new Vector4(quadrant.x, quadrant.y, 0, 0));
+            material.SetFloat("_SurfaceScale", scale);
+            material.SetFloat("_Relief", relief);
+            material.SetFloat("_Metallic", metal);
+            material.SetFloat("_Glossiness", smoothness);
+            material.SetFloat("_TintStrength", 0);
+            return material;
+        }
+
+        private static Material Surface(string name, Color color, float metal, float gloss,
+            Vector2 quadrant, float repeatsPerMetre, float relief)
+        {
+            // An asset reference under Resources retains the custom shader and atlas in players.
+            var template = UnityEngine.Resources.Load<Material>("Architecture/BuildingSurface");
+            if (template == null)
+                throw new System.InvalidOperationException("Missing Resources/Architecture/BuildingSurface material.");
+            var material = new Material(template) { name = name, color = color, enableInstancing = true };
             material.SetFloat("_Metallic", metal);
             material.SetFloat("_Glossiness", gloss);
-            var texture = new Texture2D(128, 128, TextureFormat.RGB24, true) { name = name + " grain", wrapMode = TextureWrapMode.Repeat };
-            var pixels = new Color[128 * 128];
-            var random = new System.Random(seed);
-            for (var y = 0; y < 128; y++)
-                for (var x = 0; x < 128; x++)
-                {
-                    var grain = 0.78f + (float)random.NextDouble() * 0.2f;
-                    var joint = y % 32 == 0 || (x + (y / 32 % 2) * 32) % 64 == 0;
-                    pixels[x + y * 128] = Color.white * (joint ? grain * 0.63f : grain);
-                }
-            texture.SetPixels(pixels);
-            texture.Apply(true, true);
-            material.mainTexture = texture;
+            material.SetVector("_AtlasOffset", new Vector4(quadrant.x, quadrant.y, 0, 0));
+            material.SetFloat("_SurfaceScale", repeatsPerMetre);
+            material.SetFloat("_Relief", relief);
+            material.SetFloat("_TintStrength", color == Color.white ? 0 : 1);
             return material;
         }
 
@@ -328,8 +506,8 @@ namespace WH30K.Gameplay.Construction
         {
             var material = new Material(Shader.Find("Standard")) { name = name, color = color * 0.24f, enableInstancing = true };
             material.EnableKeyword("_EMISSION");
-            material.SetColor("_EmissionColor", color * 1.1f);
-            material.SetFloat("_Glossiness", 0.65f);
+            material.SetColor("_EmissionColor", color * 0.65f);
+            material.SetFloat("_Glossiness", 0.78f);
             return material;
         }
 
@@ -342,7 +520,16 @@ namespace WH30K.Gameplay.Construction
             public Architecture() { for (var i = 0; i < 7; i++) triangles[i] = new List<int>(); }
             private static Vector3 Unit(Vector3 p) => Vector3.Scale(p, new Vector3(0.01f, 1f / 166f, 0.01f));
 
-            private void Quad(int material, Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+            public void Triangle(int material, Vector3 a, Vector3 b, Vector3 c)
+            {
+                a=Unit(a); b=Unit(b); c=Unit(c);
+                var start=vertices.Count; var normal=Vector3.Cross(b-a,c-a).normalized;
+                vertices.AddRange(new[] { a,b,c }); normals.AddRange(new[] { normal,normal,normal });
+                uvs.AddRange(new[] { Vector2.zero,Vector2.up,Vector2.one });
+                triangles[material].AddRange(new[] { start,start+1,start+2 });
+            }
+
+            public void Quad(int material, Vector3 a, Vector3 b, Vector3 c, Vector3 d)
             {
                 var start = vertices.Count;
                 a = Unit(a); b = Unit(b); c = Unit(c); d = Unit(d);
@@ -360,6 +547,11 @@ namespace WH30K.Gameplay.Construction
                 => OrientedBox(material, (a + b) * 0.5f, new Vector3(width, (b - a).magnitude, width), Quaternion.FromToRotation(Vector3.up, b - a));
             private void OrientedBox(int material, Vector3 center, Vector3 size, Quaternion rotation)
             {
+                if (material <= Iron && Mathf.Min(size.x, Mathf.Min(size.y, size.z)) > 14)
+                {
+                    ArchitectureGeometry.BevelBox(material, center, size, rotation, 0.7f, Quad);
+                    return;
+                }
                 var p = new Vector3[8];
                 for (var i = 0; i < 8; i++)
                     p[i] = center + rotation * Vector3.Scale(size * 0.5f,
@@ -396,12 +588,25 @@ namespace WH30K.Gameplay.Construction
 
             public void Cylinder(int material, Vector3 p, float bottom, float top, float height, int sides = 16)
             {
+                // Round tanks and stacks retain their silhouette at close colony zoom.
+                // Keep intentionally angular stone towers and pyramidal roof spires.
+                var round = sides >= 8 && material != Stone && material != Roof;
+                if (round) sides = Mathf.Max(sides, 24);
                 for (var i = 0; i < sides; i++)
                 {
                     var a = i * Mathf.PI * 2 / sides; var c = (i + 1) * Mathf.PI * 2 / sides;
                     var v = new Vector3(Mathf.Cos(a), 0, Mathf.Sin(a)); var w = new Vector3(Mathf.Cos(c), 0, Mathf.Sin(c));
                     Quad(material, p + v * bottom, p + v * top + Vector3.up * height,
                         p + w * top + Vector3.up * height, p + w * bottom);
+                    if (round)
+                    {
+                        var slope = (bottom - top) / Mathf.Max(height, .001f);
+                        var n0 = new Vector3(v.x * 100, slope * 166, v.z * 100).normalized;
+                        var n1 = new Vector3(w.x * 100, slope * 166, w.z * 100).normalized;
+                        var start = normals.Count - 4;
+                        normals[start] = normals[start + 1] = n0;
+                        normals[start + 2] = normals[start + 3] = n1;
+                    }
                     Quad(material, p, p + v * bottom, p + w * bottom, p + w * bottom);
                     var peak = p + Vector3.up * height;
                     Quad(material, peak, peak + w * top, peak + v * top, peak + v * top);
@@ -410,8 +615,42 @@ namespace WH30K.Gameplay.Construction
 
             public Mesh Build(string id)
             {
+                if (id == "ColonyShip")
+                {
+                    // Bake the asymmetric crash into the mesh so the game's tangent-aligned
+                    // placement anchor, footprint and colony services remain stable.
+                    var dimensions = ShipDimensions;
+                    var impactPose = Quaternion.Euler(.65f, 0, -5.5f);
+                    var sink = Vector3.down * 65f;
+                    for (var i = 0; i < vertices.Count; i++)
+                    {
+                        var metres = Vector3.Scale(vertices[i], dimensions);
+                        metres = impactPose * metres + sink;
+                        vertices[i] = new Vector3(metres.x / dimensions.x, metres.y / dimensions.y,
+                            metres.z / dimensions.z);
+                        // Vertices use normalised construction axes with a non-uniform
+                        // metre scale. Apply the matching inverse-transpose to authored
+                        // normals, retaining the rounded engine/pipe shading.
+                        var n = normals[i];
+                        n = impactPose * new Vector3(n.x / dimensions.x, n.y / dimensions.y, n.z / dimensions.z);
+                        n = Vector3.Scale(n, dimensions);
+                        normals[i] = n.sqrMagnitude > .000001f ? n.normalized : Vector3.up;
+                    }
+                    // Fit the posed longitudinal silhouette to the agreed 3 km length. This
+                    // includes engine lips and bow details, and keeps preview/clearance aligned.
+                    var minZ = float.PositiveInfinity; var maxZ = float.NegativeInfinity;
+                    foreach (var vertex in vertices) { minZ = Mathf.Min(minZ, vertex.z); maxZ = Mathf.Max(maxZ, vertex.z); }
+                    var extent = maxZ - minZ; var middle = (maxZ + minZ) * .5f;
+                    for (var i = 0; i < vertices.Count; i++)
+                    {
+                        var vertex = vertices[i]; vertex.z = (vertex.z - middle) / extent; vertices[i] = vertex;
+                        var normal = normals[i]; normal.z *= extent; normals[i] = normal.normalized;
+                    }
+                }
                 var mesh = new Mesh { name = id + " gothic architecture", indexFormat = IndexFormat.UInt32 };
-                mesh.SetVertices(vertices); mesh.SetNormals(normals); mesh.SetUVs(0, uvs); mesh.subMeshCount = 7;
+                mesh.SetVertices(vertices);
+                mesh.SetNormals(normals);
+                mesh.SetUVs(0, uvs); mesh.subMeshCount = 7;
                 for (var i = 0; i < 7; i++) mesh.SetTriangles(triangles[i], i);
                 mesh.RecalculateBounds();
                 return mesh;

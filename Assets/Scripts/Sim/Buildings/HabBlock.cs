@@ -6,7 +6,7 @@ namespace WH30K.Sim.Buildings
     public class HabBlock : SettlementBuilding
     {
         public override string Id => "HabBlock";
-        public override string DisplayName => "Hab Block";
+        public override string DisplayName => "Residential Block";
         public override float PopulationCapacity => 320f;
         public override float WorkforceSlots => 40f;
         public override float ProductionPerWorker => 0.15f;

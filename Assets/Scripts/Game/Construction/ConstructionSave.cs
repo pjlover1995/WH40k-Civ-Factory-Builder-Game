@@ -23,7 +23,7 @@ namespace WH30K.Gameplay.Construction
             ISet<string> knownIds, out string error)
         {
             error = null;
-            if (resolution < 8 || resolution > 256)
+            if (resolution < 8 || resolution > WH30K.Planet.PlanetScale.MaximumGridResolution)
             {
                 error = "Unsupported construction grid resolution.";
                 return false;
@@ -39,11 +39,11 @@ namespace WH30K.Gameplay.Construction
             {
                 if (string.IsNullOrEmpty(structure.id) || !knownIds.Contains(structure.id)
                     || !WH30K.Sim.BuildingOperationRules.Valid(structure.operation)
-                    || structure.hasElevation && (!WH30K.Sim.ColonyRules.IsFinite(structure.elevation) || structure.elevation<100 || structure.elevation>100000)
+                    || structure.hasElevation && (!WH30K.Sim.ColonyRules.IsFinite(structure.elevation) || structure.elevation<100 || structure.elevation>WH30K.Planet.PlanetScale.MaximumSurfaceRadius)
                     || structure.face < 0 || structure.face > 5 || structure.x < 0 || structure.x >= resolution
                     || structure.y < 0 || structure.y >= resolution
                     || (structure.freePlacement ? !ValidDirection(structure.nx, structure.ny, structure.nz)
-                        || !occupied.Add($"p:{Math.Round(structure.nx,6)}:{Math.Round(structure.ny,6)}:{Math.Round(structure.nz,6)}")
+                        || !occupied.Add($"p:{structure.nx:R}:{structure.ny:R}:{structure.nz:R}")
                         : !occupied.Add($"{structure.face}:{structure.x}:{structure.y}")))
                 {
                     error = "Save contains an unknown building, invalid cell, or duplicate placement.";

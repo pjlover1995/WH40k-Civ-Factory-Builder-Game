@@ -13,12 +13,16 @@ MonoBehaviour:
   m_Name: FrontierOutpost
   m_EditorClassIdentifier: 
   id: Outpost
-  displayName: Frontier Outpost
+  displayName: Frontier Survey Outpost
   constructionCost: 250
+  constructionSupplies: 10
+  advancedSupplies: 0
+  developerOnly: 0
   populationCapacity: 160
   workforceSlots: 60
   productionPerWorker: 1.4
   upkeepPerCycle: 8
+  surveyRadius: 1800
   environmentImpact: {co2Delta: 0.2, o2Delta: -0.001, waterDelta: 0.015, temperatureDelta: 0.0001}
   dimensions: {x: 110, y: 170, z: 105}
   previewColor: {r: 0.45, g: 0.95, b: 0.45, a: 0.6}

@@ -1,4 +1,42 @@
-# Runtime performance review — 2026-10-24
+# Runtime performance review
+
+## Incremental routes and generator accounting — 2026-10-29
+
+The code review prioritized a reproducible economy defect, the previously measured Routes hitch, and recurring farm scratch allocations. Existing uncommitted work was retained. See [the review record](CODE_REVIEW.md) for scope and remaining priorities.
+
+Routes now examines at most **2,048 candidate pairs** and generates at most **256 segments per game frame**. It reuses vertex/index buffers, samples shared segment endpoints once, publishes a complete mesh, cancels hidden work and restarts after geometry/registry changes. A **65,536-segment / 262,144-vertex display limit** bounds mesh/buffer memory; logical logistics, power and cargo are unaffected. The HUD distinguishes pending geometry from a capped display. Final mesh upload remains synchronous but is bounded by that display limit.
+
+In graphics-enabled Unity 2022.3.2f1 / DX11 on the GTX 1660 Ti at 1280×800, the **189-facility / 184,676-vertex** fixture built over **181 frames**, with **181.044 ms total measured builder CPU time** and a **4.075 ms maximum slice**, including final mesh upload. Wall time was **2,314.3 ms**, including rendering and intervening frames: the tradeoff is a delayed complete overlay. The earlier review recorded **324.6 ms** for one synchronous build. These are separate observations, not a controlled whole-game speedup comparison or an FPS guarantee.
+
+| Rendered scenario | Mean interval | p99 | Maximum |
+| --- | ---: | ---: | ---: |
+| Orbit | 2.024 ms | 3.761 ms | 7.520 ms |
+| Close surface | 10.235 ms | 14.173 ms | 14.482 ms |
+| Surface traversal | 10.490 ms | 27.449 ms | 34.707 ms |
+| 189 facilities | 10.523 ms | 15.060 ms | 18.010 ms |
+
+Raw data: [rendered review run](Performance/2026-10-29-incremental-routes.csv). These short Editor measurements exclude overlay UI. Do not infer a general draw-call reduction from the dense-case counter: its rendering/animation timing varies, and this change targets route generation rather than steady rendering. Allocation-counter zeros remain unavailable measurements. Farm simulation removes an explicit per-step dictionary allocation and per-farm fertilizer array; no measured whole-game GC reduction is claimed.
+
+Generator regression coverage includes trace fuel, multiple generators, insufficient total fuel, staffing, elapsed time, pause and exact save compatibility. The supplied second generator now pays for demand the exhausted first generator cannot meet. This intentionally changes fuel consumption in affected multi-generator colonies without refilling stocks or migrating saves.
+
+## Reliability and current-world measurement — 2026-10-28
+
+The current half-Earth world was measured with explicit **1280×800 offscreen rendering** in graphics-enabled Unity 2022.3.2f1, DX11, NVIDIA GTX 1660 Ti. Batch Play Mode does not automatically render Game view: an initial run with zero draw calls was discarded as a rendering benchmark. `PerformanceChecks.RunBatch` now renders the distant and foreground cameras explicitly; screen-space overlay UI is not included in that offscreen image. These are short Editor frame intervals, not standalone FPS guarantees or a comparison against October 24's different world and fixture.
+
+| Scenario | Mean | p99 | Maximum | Mean draw calls |
+| --- | ---: | ---: | ---: | ---: |
+| Orbit | 2.673 ms | 4.802 ms | 10.032 ms | 89 |
+| Close surface | 10.266 ms | 14.118 ms | 16.358 ms | 490 |
+| Surface traversal | 10.518 ms | 28.828 ms | 42.666 ms | 337 |
+| 189 constructed facilities | 10.587 ms | 14.822 ms | 24.430 ms | 997 |
+
+Raw report: [rendered current-world measurement](Performance/2026-10-28-rendered-current.csv). The fixture supplies actual construction materials, attempts 192 unrestricted facilities around the colony and confirms at least 180 succeed; 189 succeeded in this run. It no longer assumes that credits fund buildings or that a mine can be placed away from a compatible deposit. Allocation-counter zeros still mean unavailable, not zero allocation. The single-run traversal tail remains a visible limit; no ten-minute soak, standalone target or before/after speedup is claimed.
+
+The dense Routes regression generated **184,676 vertices** with 32-bit indices. Its first on-demand build took **324.6 ms** in the initial non-rendered fixture, separate from steady-state rendering. The October 29 incremental builder above replaces this synchronous path. Hidden routes do not repeat mesh generation when a building registry changes; logical power/cargo connectivity remains independent. Route meshes do not cast shadows.
+
+Five distinct forest tiles plus overlapping rebuilds retained **1,320 trees** at the end and peaked at **2,643** during replacement. The completed-tile limit is 1,681; two incremental tiles can coexist. Retired objects are destroyed, overlapping trees retain their instance and position, and full grid addresses avoid identity collisions. Metre-scale cell spacing now holds on continental worlds. Stationary dozers avoid repeated height samples, and exact direction comparisons prevent small local camera moves from being skipped. See [verification](VERIFICATION.md) for scene and visual results.
+
+## Historical comparison — 2026-10-24
 
 Target: Unity 2022.3.2f1, built-in renderer, `WH30K_VS01`. Baseline source: `91267428ba2a92b01d584873b6d8866cfd86dd7d`.
 

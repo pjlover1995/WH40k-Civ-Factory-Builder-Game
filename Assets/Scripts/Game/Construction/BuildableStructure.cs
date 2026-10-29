@@ -17,10 +17,14 @@ namespace WH30K.Gameplay.Construction
 
         [Header("Economy")]
         [SerializeField] private float constructionCost = 250f;
+        [SerializeField, Min(0)] private float constructionSupplies = 10f;
+        [SerializeField, Min(0)] private float advancedSupplies;
+        [SerializeField] private bool developerOnly;
         [SerializeField] private float populationCapacity = 160f;
         [SerializeField] private float workforceSlots = 60f;
         [SerializeField] private float productionPerWorker = 1.4f;
         [SerializeField] private float upkeepPerCycle = 8f;
+        [SerializeField] private float surveyRadius;
         [SerializeField] private EnvironmentImpact environmentImpact = new EnvironmentImpact
         {
             co2Delta = 0.2f, o2Delta = -0.001f, waterDelta = 0.015f, temperatureDelta = 0.0001f
@@ -41,12 +45,16 @@ namespace WH30K.Gameplay.Construction
         /// </summary>
         public string DisplayName => string.IsNullOrWhiteSpace(displayName) ? Id : displayName;
         public float ConstructionCost => Mathf.Max(0f, constructionCost);
+        public float ConstructionSupplies => Mathf.Max(0f, constructionSupplies);
+        public float AdvancedSupplies => Mathf.Max(0f, advancedSupplies);
+        public bool DeveloperOnly => developerOnly;
         public BuildingEconomy Economy => new BuildingEconomy
         {
             capacity = Mathf.Max(0f, populationCapacity), jobs = Mathf.Max(0f, workforceSlots),
             outputPerWorker = Mathf.Max(0f, productionPerWorker), upkeep = Mathf.Max(0f, upkeepPerCycle)
         };
         public EnvironmentImpact IndustryImpact => environmentImpact;
+        public float SurveyRadius => Mathf.Max(0f, surveyRadius);
 
         /// <summary>
         /// Returns the structure's dimensions, clamped to a sensible minimum to avoid degenerate visuals.

@@ -81,7 +81,7 @@ namespace WH30K.UI
             var deposit=Industry.DepositFor(plannedMine);
             for(var s=0;s<8;s++)
             {
-                miningSectors[s].gameObject.SetActive(deposit!=null);
+                miningSectors[s].gameObject.SetActive(deposit!=null && deposit.Excavation.layoutVersion==0);
                 if(deposit==null)continue;
                 var state=deposit.Excavation;var limited=(state.blocked&1<<s)!=0;
                 miningSectors[s].GetComponentInChildren<Text>().text=$"{(char)('A'+s)}  /  {Mathf.Repeat(state.bearing+s*45,360):0} deg   {(limited?"LIMITED":"OPEN")}   {state.capacity[s]-state.removed[s]:0} lots";
@@ -107,7 +107,7 @@ namespace WH30K.UI
         {
             inspectingConflict=false;if(miningReturn!=null)miningReturn.gameObject.SetActive(false);
             if(miningPanel!=null)miningPanel.SetActive(false);
-            if(clock!=null)clock.DecisionPending=eventPanel!=null&&eventPanel.activeSelf || newGamePanel!=null&&newGamePanel.activeSelf;
+            if(clock!=null)clock.DecisionPending=HasOpenEvent || newGamePanel!=null&&newGamePanel.activeSelf;
         }
     }
 }

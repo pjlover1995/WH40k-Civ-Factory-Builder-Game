@@ -15,6 +15,9 @@ MonoBehaviour:
   id: Quarry
   displayName: Stone Quarry
   constructionCost: 200
+  constructionSupplies: 8
+  advancedSupplies: 0
+  developerOnly: 0
   populationCapacity: 0
   workforceSlots: 14
   productionPerWorker: 0

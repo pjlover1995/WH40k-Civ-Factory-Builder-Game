@@ -13,8 +13,11 @@ MonoBehaviour:
   m_Name: HabBlock
   m_EditorClassIdentifier:
   id: HabBlock
-  displayName: Hab Block
+  displayName: Residential Block
   constructionCost: 180
+  constructionSupplies: 7.2
+  advancedSupplies: 0
+  developerOnly: 0
   populationCapacity: 320
   workforceSlots: 40
   productionPerWorker: 0.15

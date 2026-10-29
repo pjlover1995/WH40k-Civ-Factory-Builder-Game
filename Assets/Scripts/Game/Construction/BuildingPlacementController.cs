@@ -5,6 +5,8 @@ using UnityEngine.EventSystems;
 using WH30K.Gameplay;
 using WH30K.Planet;
 using WH30K.UI;
+using WH30K.CameraSystem;
+using WH30K.Sim;
 using WH30K.Sim.Resources;
 using WH30K.Sim.Settlements;
 
@@ -51,6 +53,10 @@ namespace WH30K.Gameplay.Construction
         private GameObject previewInstance;
         private MeshRenderer previewRenderer;
         private Material previewMaterial;
+        private Mesh previewFarmMesh;
+        private int previewFarmSeed, previewFarmRevision = -1;
+        private Vector3 previewFarmPosition;
+        private Quaternion previewFarmRotation;
         private Material gridAllowedMaterial;
         private Material gridBlockedMaterial;
         private Transform structureRoot;
@@ -58,32 +64,42 @@ namespace WH30K.Gameplay.Construction
         private Camera mainCamera;
         private ResourceSystem resources;
         private Settlement settlement;
+        private IndustrySystem industry;
 
         private bool isPlacing;
 
         public bool IsPlacing => isPlacing;
         public string ActiveStructureId => activeStructure != null ? activeStructure.Id : "";
+        public string PlacementIssue { get; private set; } = "Select DEPLOY, then click green terrain.";
         public string ActiveStructureName => activeStructure != null
-            ? $"{activeStructure.DisplayName} ({activeStructure.ConstructionCost:0})" : "Structure";
+            ? $"{activeStructure.DisplayName} ({activeStructure.ConstructionSupplies:0.#} supplies / {activeStructure.AdvancedSupplies:0.#} advanced)" : "Structure";
         public int GridResolution => grid != null ? grid.CellsPerFace : cellsPerFace;
         public string ActiveStructureDetails
         {
             get
             {
                 if (activeStructure == null) return string.Empty;
-                var economy = activeStructure.Economy;
-                return $"Housing +{economy.capacity:0} | Jobs +{economy.jobs:0}\n" +
-                       $"Output/worker {economy.outputPerWorker:0.0} | Upkeep {economy.upkeep:0}\n" +
-                       $"CO2/s at full staffing: {activeStructure.IndustryImpact.co2Delta:+0.00;-0.00;0}";
+                var role = activeStructure.Id == "Farm" ? $"Food {WH30K.Sim.FarmRules.BaseFoodPerMonth:0}/month; needs supplies + waste."
+                    : activeStructure.Id == "GroundwaterPump" ? "Water 180/month; place on dry land."
+                    : activeStructure.Id == "Manufactorum" ? "Iron + stone + biomass -> build supplies."
+                    : activeStructure.Id == "Mine" ? "Place beside iron, copper or crystal."
+                    : activeStructure.Id == "Quarry" ? "Place beside a stone deposit."
+                    : activeStructure.Id == "Harvester" ? "Place beside a biomass deposit."
+                    : $"Housing +{activeStructure.Economy.capacity:0}; jobs +{activeStructure.Economy.jobs:0}.";
+                return role + (isPlacing ? "\n" + PlacementIssue : "\nConnect nearby facilities for power/cargo.");
             }
         }
 
         private void Awake()
         {
-            cellsPerFace = Mathf.Clamp(cellsPerFace, 8, 256);
+            cellsPerFace = Mathf.Clamp(cellsPerFace, 8, PlanetScale.MaximumGridResolution);
             resources = GetComponent<ResourceSystem>();
             settlement = GetComponent<Settlement>();
+            industry = GetComponent<IndustrySystem>();
             availableStructures = Resources.LoadAll<BuildableStructure>("Buildings");
+#if !UNITY_EDITOR
+            availableStructures = Array.FindAll(availableStructures, definition => !definition.DeveloperOnly);
+#endif
             if (availableStructures == null || availableStructures.Length == 0)
             {
                 Debug.LogWarning("No BuildableStructure assets found in Resources/Buildings. Using default runtime definition.");
@@ -111,7 +127,8 @@ namespace WH30K.Gameplay.Construction
 
         public void AttachToPlanet(LODPlanet newPlanet, int resolution = 0)
         {
-            if (resolution != 0) cellsPerFace = Mathf.Clamp(resolution, 8, 256);
+            cellsPerFace = resolution != 0 ? Mathf.Clamp(resolution, 8, PlanetScale.MaximumGridResolution)
+                : PlanetScale.ConstructionResolution(newPlanet != null ? newPlanet.Radius : 6000f);
             planet = newPlanet;
             grid = planet != null ? new PlanetGrid(planet, Mathf.Max(8, cellsPerFace)) : null;
             RebuildVisualizer();
@@ -150,6 +167,7 @@ namespace WH30K.Gameplay.Construction
         {
             var definition = Array.Find(availableStructures, item => item.Id == id);
             if (definition == null) return false;
+            GetComponent<EarthworksController>()?.Close();
             CancelPlacement();
             ClearPreviewInstance();
             activeStructure = definition;
@@ -166,7 +184,7 @@ namespace WH30K.Gameplay.Construction
                     id = entry.Definition.Id, face = entry.Cell.Face, x = entry.Cell.X, y = entry.Cell.Y,
                     operation = entry.Instance.GetComponent<ManagedBuilding>().State,
                     freePlacement = entry.FreePlacement, nx = entry.Direction.x, ny = entry.Direction.y, nz = entry.Direction.z,
-                    hasElevation=true, elevation=planet.transform.InverseTransformPoint(entry.Instance.transform.position).magnitude
+                    hasElevation=true, elevation=entry.Elevation
                 });
             return snapshots.ToArray();
         }
@@ -192,7 +210,8 @@ namespace WH30K.Gameplay.Construction
                         var n=planet.transform.InverseTransformPoint(frame.Center).normalized;
                         frame=new CellFrame(cell,planet.transform.TransformPoint(n*snapshot.elevation),frame.Normal,frame.Right,frame.Forward,10,10);
                     }
-                    SpawnStructure(frame, definition, snapshot.freePlacement).Restore(snapshot.operation);
+                    SpawnStructure(frame, definition, snapshot.freePlacement,
+                        new Vector3(snapshot.nx, snapshot.ny, snapshot.nz), snapshot.hasElevation ? (float?)snapshot.elevation : null).Restore(snapshot.operation);
                 }
             RefreshEconomy();
         }
@@ -204,6 +223,7 @@ namespace WH30K.Gameplay.Construction
 
         public void BeginPlacement()
         {
+            GetComponent<EarthworksController>()?.Close();
             if (planet == null || grid == null)
             {
                 Debug.LogWarning("Cannot begin placement without an active planet.");
@@ -290,7 +310,7 @@ namespace WH30K.Gameplay.Construction
         private bool TrySamplePlacementCell(out CellFrame frame)
         {
             frame = default;
-            var ray = mainCamera.ScreenPointToRay(Input.mousePosition);
+            if (!SimpleOrbitCamera.TryScreenRay(mainCamera, Input.mousePosition, out var ray)) return false;
             if (!TryRaycastPlanet(ray, out var direction))
             {
                 return false;
@@ -301,24 +321,25 @@ namespace WH30K.Gameplay.Construction
             return true;
         }
 
-        private bool TryRaycastPlanet(Ray ray, out Vector3 direction)
+        public bool TryRaycastPlanet(Ray ray, out Vector3 direction)
         {
             direction = Vector3.zero;
             var center = planet.transform.position;
-            var adjustedRadius = planet.Radius + 1600f;
+            var adjustedRadius = Math.Max((double)planet.SeaLevel + 80,
+                (double)planet.Radius + Mathf.Max(1600f, 1500f * PlanetScale.ReliefScale(planet.Radius) + 80f));
             var oc = ray.origin - center;
-            var a = Vector3.Dot(ray.direction, ray.direction);
-            var b = 2f * Vector3.Dot(oc, ray.direction);
-            var c = Vector3.Dot(oc, oc) - adjustedRadius * adjustedRadius;
+            var a = (double)ray.direction.x * ray.direction.x + (double)ray.direction.y * ray.direction.y + (double)ray.direction.z * ray.direction.z;
+            var b = 2d * ((double)oc.x * ray.direction.x + (double)oc.y * ray.direction.y + (double)oc.z * ray.direction.z);
+            var c = (double)oc.x * oc.x + (double)oc.y * oc.y + (double)oc.z * oc.z - adjustedRadius * adjustedRadius;
             var discriminant = b * b - 4f * a * c;
             if (discriminant < 0f)
             {
                 return false;
             }
 
-            var sqrt = Mathf.Sqrt(discriminant);
-            var start = Mathf.Max(0f, (-b - sqrt) / (2f * a));
-            var end = (-b + sqrt) / (2f * a);
+            var sqrt = Math.Sqrt(discriminant);
+            var start = (float)Math.Max(0d, (-b - sqrt) / (2d * a));
+            var end = (float)((-b + sqrt) / (2d * a));
             if (end <= start) return false;
             var previous = start;
             // Intersect the generated height field, rather than an oversized imaginary sphere.
@@ -328,7 +349,7 @@ namespace WH30K.Gameplay.Construction
                 var local = planet.transform.InverseTransformPoint(ray.GetPoint(t));
                 if (local.magnitude <= Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude))
                 {
-                    for (var j = 0; j < 14; j++)
+                    for (var j = 0; j < 28; j++)
                     {
                         var mid = (previous + t) * 0.5f;
                         local = planet.transform.InverseTransformPoint(ray.GetPoint(mid));
@@ -345,14 +366,22 @@ namespace WH30K.Gameplay.Construction
 
         private bool ValidatePlacement(CellFrame frame)
         {
-            if (placedStructures.Count >= 4096 || activeStructure == null || resources == null
-                || !resources.CanAfford(activeStructure.ConstructionCost)
-                || settlement.OverlapsStartingBuildings(frame.Center, activeStructure.Dimensions)) return false;
-            var radius = FootprintRadius(activeStructure);
-            foreach (var entry in placedStructures)
-                if (Vector3.Distance(frame.Center, entry.Instance.transform.position)
-                    < radius + FootprintRadius(entry.Definition)) return false;
-            return true;
+            var rotation=Quaternion.LookRotation(frame.Forward,frame.Normal);
+            if(placedStructures.Count>=4096 || activeStructure==null || resources==null || industry==null)
+            { PlacementIssue="Construction unavailable."; return false; }
+            if(!industry.CanAffordConstruction(activeStructure.ConstructionSupplies,activeStructure.AdvancedSupplies))
+            { PlacementIssue="Need supplies: connect extraction to a Manufactorum."; return false; }
+            if(!industry.CanPlaceExtractor(activeStructure.Id,frame.Center))
+            { PlacementIssue="Place beside a matching surveyed deposit."; return false; }
+            if(!industry.CanPlaceWaterPump(activeStructure.Id,frame.Center))
+            { PlacementIssue="Pump needs dry land; desalination needs a coast."; return false; }
+            if(!industry.ClearOfMineralVeins(frame.Center,FootprintRadius(activeStructure)))
+            { PlacementIssue="Move clear of the reserved mineral workings."; return false; }
+            EnsurePreviewInstance();previewInstance.transform.SetPositionAndRotation(frame.Center,rotation);previewInstance.transform.localScale=activeStructure.Dimensions;
+            var clear=activeStructure.Id=="Farm" ? industry.CanFarmLayout(previewInstance.transform,0)
+                : settlement.TerritoryClear(previewInstance.transform,Settlement.LandRect(new Bounds(Vector3.zero,Vector3.one)));
+            PlacementIssue=clear?"READY: left click to build / Esc cancels.":"Blocked: move clear of buildings, water or steep ground.";
+            return clear;
         }
 
         private static float FootprintRadius(BuildableStructure definition)
@@ -361,13 +390,18 @@ namespace WH30K.Gameplay.Construction
         // Industry remaps inventory and cargo before removing an entry from this ordered list.
         public bool Demolish(ManagedBuilding building)
         {
-            var index = placedStructures.FindIndex(p => p.Instance.GetComponent<ManagedBuilding>() == building);
-            if (index < 0) return false;
-            var instance = placedStructures[index].Instance;
-            placedStructures.RemoveAt(index);
-            cachedBuildings = null;
-            instance.SetActive(false); Destroy(instance);
-            RefreshEconomy(); return true;
+            if(building==null)return false;
+            var targets=building.Id=="Farm"?new System.Collections.Generic.List<ManagedBuilding>(GetComponent<IndustrySystem>().FarmSites(building))
+                :new System.Collections.Generic.List<ManagedBuilding>{building};
+            if(!targets.TrueForAll(b=>placedStructures.Exists(p=>p.Instance.GetComponent<ManagedBuilding>()==b)))return false;
+            foreach(var target in targets)
+            {
+                var index=placedStructures.FindIndex(p=>p.Instance.GetComponent<ManagedBuilding>()==target);
+                var instance=placedStructures[index].Instance;placedStructures.RemoveAt(index);instance.SetActive(false);Destroy(instance);
+            }
+            cachedBuildings=null;
+            if(targets.Contains(GetComponent<BuildingSelection>()?.Selected))GetComponent<BuildingSelection>().Select(null);
+            RefreshEconomy();GetComponent<IndustrySystem>()?.RefreshAfterDemolition();return true;
         }
 
         private void UpdatePreview(CellFrame frame, bool placementValid)
@@ -394,6 +428,26 @@ namespace WH30K.Gameplay.Construction
             var rotation = Quaternion.LookRotation(forward.normalized, frame.Normal);
             previewInstance.transform.SetPositionAndRotation(frame.Center, rotation);
             previewInstance.transform.localScale = dimensions;
+            if (activeStructure.Id == "Farm")
+            {
+                var anchor = planet.transform.InverseTransformPoint(frame.Center).normalized;
+                var seed = WH30K.Sim.FarmLayoutRules.Seed(planet.Seed, anchor.x, anchor.y, anchor.z);
+                if (previewFarmMesh == null || seed != previewFarmSeed || previewFarmRevision != planet.SurfaceRevision
+                    || previewFarmPosition != frame.Center || previewFarmRotation != rotation)
+                {
+                    float Ground(float x, float z)
+                    {
+                        var direction = planet.transform.InverseTransformPoint(previewInstance.transform.TransformPoint(new Vector3(x, 0, z))).normalized;
+                        return previewInstance.transform.InverseTransformPoint(planet.transform.TransformPoint(planet.EvaluateSurfacePoint(direction))).y;
+                    }
+                    var previous = previewFarmMesh;
+                    previewFarmMesh = BuildingVisuals.FarmMesh(0, Ground, seed);
+                    previewInstance.GetComponent<MeshFilter>().sharedMesh = previewFarmMesh;
+                    if (previous != null) Destroy(previous);
+                    previewFarmSeed = seed; previewFarmRevision = planet.SurfaceRevision;
+                    previewFarmPosition = frame.Center; previewFarmRotation = rotation;
+                }
+            }
             var validColor = activeStructure != null ? activeStructure.PreviewColor : validPreviewColor;
             previewRenderer.sharedMaterial.color = placementValid ? validColor : invalidPreviewColor;
             previewInstance.SetActive(true);
@@ -404,10 +458,13 @@ namespace WH30K.Gameplay.Construction
             if (grid == null || cell.X < 0 || cell.Y < 0
                 || cell.X >= grid.CellsPerFace || cell.Y >= grid.CellsPerFace) return false;
             var frame = grid.CalculateFrame(cell);
-            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            if(activeStructure!=null && (activeStructure.Id=="Mine" || activeStructure.Id=="Quarry"))
+                return TryPlaceDirection(planet.transform.InverseTransformPoint(frame.Center).normalized);
+            if (!ValidatePlacement(frame) || !industry.TrySpendConstruction(activeStructure.ConstructionSupplies, activeStructure.AdvancedSupplies)) return false;
             SpawnStructure(frame, activeStructure);
+            menu?.RecordGuideConstruction(activeStructure.Id);
             RefreshEconomy();
-            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionSupplies:0.#} construction supplies, -{activeStructure.AdvancedSupplies:0.#} advanced).");
             return true;
         }
 
@@ -415,15 +472,19 @@ namespace WH30K.Gameplay.Construction
         {
             if (grid == null || direction.sqrMagnitude < 0.001f || activeStructure == null) return false;
             var frame = FrameAt(direction.normalized);
-            if (!ValidatePlacement(frame) || !resources.TrySpend(activeStructure.ConstructionCost)) return false;
+            if (!ValidatePlacement(frame) || !industry.TrySpendConstruction(activeStructure.ConstructionSupplies, activeStructure.AdvancedSupplies)) return false;
             SpawnStructure(frame, activeStructure, true);
+            menu?.RecordGuideConstruction(activeStructure.Id);
             RefreshEconomy();
-            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionCost:0} stockpile).");
+            menu?.AppendEventLog($"Built {activeStructure.DisplayName} (-{activeStructure.ConstructionSupplies:0.#} construction supplies, -{activeStructure.AdvancedSupplies:0.#} advanced).");
             return true;
         }
 
         private CellFrame FrameAt(Vector3 direction, BuildableStructure definition = null)
         {
+            var snapToRim=definition==null;
+            definition = definition != null ? definition : activeStructure;
+            if(snapToRim && definition!=null && industry!=null)direction=industry.MineRimDirection(definition.Id,direction,FootprintRadius(definition));
             var n = direction.normalized;
             var radial = planet.transform.TransformDirection(n);
             var right = Vector3.Cross(radial, Mathf.Abs(radial.y) > 0.95f ? Vector3.forward : Vector3.up).normalized;
@@ -439,7 +500,7 @@ namespace WH30K.Gameplay.Construction
             return new CellFrame(grid.GetCellFromDirection(n), planet.transform.TransformPoint(n * height), radial, right, forward, 10, 10);
         }
 
-        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition, bool freePlacement = false)
+        private ManagedBuilding SpawnStructure(CellFrame frame, BuildableStructure definition, bool freePlacement = false, Vector3? savedDirection = null, float? savedElevation = null)
         {
             var dimensions = definition.Dimensions;
             var instance = BuildingVisuals.Create(definition.Id, definition.DisplayName,
@@ -457,12 +518,15 @@ namespace WH30K.Gameplay.Construction
             instance.transform.localScale = dimensions;
 
             var managed = instance.AddComponent<ManagedBuilding>();
-            managed.Configure(definition.Id, definition.DisplayName, definition.Economy, definition.IndustryImpact, resources, settlement);
+            managed.Configure(definition.Id, definition.DisplayName, definition.Economy, definition.IndustryImpact, resources, settlement,
+                state: new BuildingOperationState { focus = industry != null ? industry.DefaultExtractionFocus(definition.Id, frame.Center) : 0 },
+                surveyRadius: definition.SurveyRadius);
 
             placedStructures.Add(new PlacedStructure(frame.Cell, definition, instance,
-                planet.transform.InverseTransformPoint(frame.Center).normalized, freePlacement));
+                savedDirection ?? planet.transform.InverseTransformPoint(frame.Center).normalized, freePlacement,
+                savedElevation ?? planet.transform.InverseTransformPoint(frame.Center).magnitude));
             cachedBuildings = null;
-            if (freePlacement) AddSupports(instance, frame, dimensions);
+            if (freePlacement && definition.Id!="HabBlock" && definition.Id!="Farm") AddSupports(instance, frame, dimensions);
             return managed;
         }
 
@@ -512,6 +576,7 @@ namespace WH30K.Gameplay.Construction
 
         private void ClearPreviewInstance()
         {
+            if (previewFarmMesh != null) { Destroy(previewFarmMesh); previewFarmMesh = null; }
             if (previewInstance != null)
             {
                 Destroy(previewInstance);
@@ -587,13 +652,15 @@ namespace WH30K.Gameplay.Construction
             public readonly GameObject Instance;
             public readonly Vector3 Direction;
             public readonly bool FreePlacement;
+            public readonly float Elevation;
 
-            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance, Vector3 direction, bool freePlacement)
+            public PlacedStructure(PlanetGridCell cell, BuildableStructure definition, GameObject instance, Vector3 direction, bool freePlacement, float elevation)
             {
                 Cell = cell;
                 Definition = definition;
                 Instance = instance;
                 Direction = direction; FreePlacement = freePlacement;
+                Elevation = elevation;
             }
         }
     }

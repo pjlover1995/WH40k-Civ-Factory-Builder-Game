@@ -26,8 +26,9 @@ namespace WH30K.Planet
         private bool surfaceDirty;
         private Vector3[] vertices, normals;
         private Color[] colors;
-        private Vector2[] uvs;
+        private Vector2[] uvs, climateData;
         private int[] triangles, edge;
+        private int countedTriangles;
 
         public void RefreshSurface(Vector3 center, float range)
         {
@@ -63,6 +64,7 @@ namespace WH30K.Planet
             mesh = new Mesh { name = $"PatchMesh_{depth}" };
             mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
             meshFilter.sharedMesh = mesh;
+            planet.LiveMeshCount++;
 
             Regenerate();
         }
@@ -157,7 +159,10 @@ namespace WH30K.Planet
             {
                 if (children[i] != null)
                 {
-                    Destroy(children[i].gameObject);
+                    children[i].ReleaseGeneratedMeshes();
+                    children[i].gameObject.SetActive(false);
+                    if (Application.isPlaying) Destroy(children[i].gameObject);
+                    else DestroyImmediate(children[i].gameObject);
                 }
             }
 
@@ -190,6 +195,7 @@ namespace WH30K.Planet
             {
                 vertices = new Vector3[vertexCount]; normals = new Vector3[vertexCount];
                 colors = new Color[vertexCount]; uvs = new Vector2[vertexCount];
+                climateData = new Vector2[vertexCount];
                 triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
                 edge = new int[edgeCount];
             }
@@ -209,7 +215,7 @@ namespace WH30K.Planet
                     // Match boundary normals across different LODs; reuse rendered neighbours inside.
                     if(x==0 || y==0 || x==resolution-1 || y==resolution-1)
                         normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
-                    colors[i] = planet.BiomeColor(pointOnSphere, vertex.magnitude);
+                    if (planet.TerrainVersion < 3) colors[i] = planet.BiomeColor(pointOnSphere, vertex.magnitude);
                     uvs[i] = new Vector2(percentX, percentY);
 
                     if (x == resolution - 1 || y == resolution - 1)
@@ -234,6 +240,15 @@ namespace WH30K.Planet
                 var normal=Vector3.Cross(vertices[i+1]-vertices[i-1],vertices[i+resolution]-vertices[i-resolution]).normalized;
                 normals[i]=Vector3.Dot(normal,vertices[i])<0?-normal:normal;
             }
+            if (planet.TerrainVersion >= 3)
+                for (var i = 0; i < surfaceCount; i++)
+                {
+                    var radial = vertices[i].normalized;
+                    var slope = 1 - Mathf.Clamp01(Vector3.Dot(normals[i], radial));
+                    var climate = planet.Climate(radial, vertices[i].magnitude, slope);
+                    colors[i] = LODPlanet.ClimateColor(climate);
+                    climateData[i] = new Vector2(climate.snow, (float)climate.Dominant / 5f);
+                }
             var e = 0;
             for (var x = 0; x < resolution - 1; x++) edge[e++] = x;
             for (var y = 0; y < resolution - 1; y++) edge[e++] = y * resolution + resolution - 1;
@@ -243,9 +258,10 @@ namespace WH30K.Planet
             {
                 var a = edge[i]; var b = edge[(i + 1) % edgeCount];
                 var lower = surfaceCount + i; var nextLower = surfaceCount + (i + 1) % edgeCount;
-                vertices[lower] = vertices[a] - vertices[a].normalized * 12f;
+                vertices[lower] = vertices[a].normalized * planet.SkirtFloor;
                 normals[lower] = normals[a]; uvs[lower] = uvs[a];
                 colors[lower] = colors[a];
+                climateData[lower] = climateData[a];
                 triangles[triIndex++] = a; triangles[triIndex++] = lower; triangles[triIndex++] = b;
                 triangles[triIndex++] = b; triangles[triIndex++] = lower; triangles[triIndex++] = nextLower;
             }
@@ -254,8 +270,11 @@ namespace WH30K.Planet
             mesh.vertices = vertices;
             mesh.normals = normals;
             mesh.colors = colors;
+            mesh.uv2 = climateData;
             if(newTopology){mesh.uv = uvs;mesh.triangles = triangles;}
             else mesh.RecalculateBounds();
+            planet.LiveTriangleCount += triangles.Length / 3 - countedTriangles;
+            countedTriangles = triangles.Length / 3;
         }
 
         private Vector3 GetCenterWorld()
@@ -274,12 +293,24 @@ namespace WH30K.Planet
             return transform.TransformPoint(cachedCenter);
         }
 
-        private void OnDestroy()
+        // Edit-mode comparison patches never receive a Play Mode Awake/OnDestroy
+        // lifecycle. Release owned meshes explicitly before replacing their objects.
+        internal void ReleaseGeneratedMeshes()
+        {
+            if(children!=null)foreach(var child in children)if(child!=null)child.ReleaseGeneratedMeshes();
+            ReleaseMesh();
+        }
+        private void ReleaseMesh()
         {
             if (mesh != null)
             {
-                Destroy(mesh);
+                var owned=mesh;mesh=null;
+                if (planet != null) { planet.LiveMeshCount--; planet.LiveTriangleCount -= countedTriangles; }
+                countedTriangles=0;
+                if(meshFilter!=null && meshFilter.sharedMesh==owned)meshFilter.sharedMesh=null;
+                if (Application.isPlaying) Destroy(owned); else DestroyImmediate(owned);
             }
         }
+        private void OnDestroy() => ReleaseMesh();
     }
 }
