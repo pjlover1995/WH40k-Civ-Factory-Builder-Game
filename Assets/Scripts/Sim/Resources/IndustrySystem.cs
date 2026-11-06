@@ -40,6 +40,33 @@ namespace WH30K.Sim.Resources
         private readonly List<SurfaceDiscovery> discoveries=new List<SurfaceDiscovery>();
         private readonly List<FacilityStock> stocks=new List<FacilityStock>();
         private float[] expeditionCargo;
+        private FoundingProgress founding;
+        private float foundingFoodDelivery;
+        public FoundingProgress Founding => founding;
+        public void SetFoundingObjectives(bool enabled) { founding.enabled = enabled; }
+        public float RecoverFoundingCanister()
+        {
+            if (!founding.completed) return 0;
+            var remaining = FoundingObjectives.Reward - founding.rewardRecovered;
+            var recovered = 0f;
+            if (expeditionCargo != null)
+            {
+                var reserved = 0f;
+                foreach (var flight in flights)
+                    if (!flight.state.food && flight.state.target == -3 && flight.state.kind == (int)MaterialKind.Components)
+                        reserved += flight.state.amount;
+                recovered = StoreOnShip(MaterialKind.Components, Mathf.Min(remaining, Mathf.Max(0, ShipStorageRoom(MaterialKind.Components)-reserved)));
+            }
+            remaining -= recovered;
+            for (var i=0; i<stocks.Count && remaining>0; i++)
+            {
+                var added = Mathf.Min(remaining, Mathf.Max(0, DeliveryRoom(i, MaterialKind.Components)));
+                stocks[i].quantities[(int)MaterialKind.Components] += added;
+                recovered += added; remaining -= added;
+            }
+            founding.rewardRecovered += recovered;
+            return recovered;
+        }
         public bool HasExpeditionCargo => expeditionCargo != null;
         public float ShipCargo(MaterialKind kind) => expeditionCargo != null ? expeditionCargo[(int)kind] : 0;
         // The landed vessel acts as a shared logistics store with a finite 1,920-unit
@@ -235,7 +262,7 @@ namespace WH30K.Sim.Resources
         {
             GetComponent<NewGameMenu>()?.CloseFacilityPanel();
             GetComponent<NewGameMenu>()?.ResetDiscoveryPanel();
-            Clear();planet=world;placement=GetComponent<BuildingPlacementController>();settlement=GetComponent<Settlement>();resources=GetComponent<ResourceSystem>();
+            Clear();founding=saved!=null?saved.founding:default;planet=world;placement=GetComponent<BuildingPlacementController>();settlement=GetComponent<Settlement>();resources=GetComponent<ResourceSystem>();
             environment=GetComponent<WH30K.Sim.Environment.EnvironmentState>();
             research=GetComponent<ResearchSystem>();
             profiles.Clear();foreach(var profile in UResources.LoadAll<IndustrialBuildingProfile>("Industry"))if(profile!=null&&!string.IsNullOrEmpty(profile.BuildingId))profiles[profile.BuildingId]=profile;
@@ -767,6 +794,9 @@ namespace WH30K.Sim.Resources
             if(planet==null || !ColonyRules.IsFinite(dt) || dt<0 || conflict.active) return;Synchronize();RefreshFarmEntities();
             if(dt>0)
             {
+                foundingFoodDelivery=0;
+                var foundingComponentsBefore=producedTotals[(int)MaterialKind.Components];
+                var foundingReservesHealthy=resources.Water>0 && resources.Food>0;
                 ResetPitOperations();
                 rateWindowSeconds+=dt;
                 DepositUsageSeconds += dt;
@@ -829,6 +859,7 @@ namespace WH30K.Sim.Resources
                 if(settlement!=null&&resources!=null)
                     resources.ConsumeWater(WaterRules.Demand(settlement.Population)*dt);
                 SimulateFarms(dt, staffing);
+                foundingReservesHealthy &= resources.Water>0 && resources.Food>0;
                 for(var i=0;i<buildings.Length;i++)
                 {
                     if(buildings[i].Id!="PromethiumGenerator"||buildings[i].State.offline)continue;
@@ -914,6 +945,14 @@ namespace WH30K.Sim.Resources
                 if(environment!=null&&(policyImpact.co2Delta!=0||policyImpact.o2Delta!=0||policyImpact.waterDelta!=0||policyImpact.temperatureDelta!=0))
                     environment.ApplyIndustryImpact(policyImpact,dt);
                 AdvanceCargo(dt);dispatchTimer+=dt;if(dispatchTimer>=1){dispatchTimer%=1;Dispatch();}
+                var wasEstablished=founding.completed;
+                FoundingObjectives.Observe(ref founding,dt,waterProduced,WaterRules.Demand(settlement.Population)*dt,
+                    foundingFoodDelivery,FarmRules.MonthlyDemand(settlement.Population)*dt/(float)ColonyCalendar.SecondsPerMonth,
+                    producedTotals[(int)MaterialKind.Components]-foundingComponentsBefore,founding.pendingComponentUse,
+                    foundingReservesHealthy && !HasInfiniteConstructionSupplies);
+                founding.pendingComponentUse=0;
+                if(!wasEstablished && founding.completed && founding.enabled)
+                    GetComponent<NewGameMenu>()?.AppendEventLog("Colony established. Orbital cargo canister located: open COLONY GUIDE to recover 20 components.");
                 if(rateWindowSeconds>=5)
                 {
                     for(var k=0;k<IndustryRules.MaterialCount;k++)
@@ -933,7 +972,7 @@ namespace WH30K.Sim.Resources
             }
         }
         private void RecordProduction(int kind,float amount){if(amount<=0)return;producedWindow[kind]+=amount;producedTotals[kind]+=amount;}
-        private void RecordConsumption(int kind,float amount){if(amount<=0)return;consumedWindow[kind]+=amount;consumedTotals[kind]+=amount;}
+        private void RecordConsumption(int kind,float amount){if(amount<=0)return;consumedWindow[kind]+=amount;consumedTotals[kind]+=amount;if(kind==(int)MaterialKind.Components && FoundingObjectives.Stage(founding)==3)founding.pendingComponentUse+=amount;}
         private IndustrialBuildingProfile Profile(string id)=>profiles.TryGetValue(id,out var profile)?profile:null;
         private bool AcceptsInput(int index, MaterialKind kind)
         {
@@ -1112,7 +1151,7 @@ namespace WH30K.Sim.Resources
                 if(state.progress<1 || (state.target==-1 && CoreFactory()==null)) continue;
                 if(state.food)
                 {
-                    state.amount-=resources.AddFood(state.amount);
+                    var delivered=resources.AddFood(state.amount);state.amount-=delivered;foundingFoodDelivery+=delivered;
                     if(state.amount>.0001f){flight.state=state;continue;}
                     ReleaseFlight(flight);flights.RemoveAt(i);continue;
                 }
@@ -1178,7 +1217,7 @@ namespace WH30K.Sim.Resources
                 excavation=CloneExcavation(deposits[i].Excavation),x=deposits[i].Direction.x,y=deposits[i].Direction.y,z=deposits[i].Direction.z};
             var savedDiscoveries=new DiscoveryRecord[discoveries.Count];for(var i=0;i<discoveries.Count;i++)savedDiscoveries[i]=discoveries[i].State;
             return new IndustrySnapshot{facilities=savedStocks,deposits=savedDeposits,cargo=flights.ConvertAll(f=>f.state).ToArray(),geologyVersion=4,materialVersion=2,facilityVersion=1,
-                expeditionCargo=expeditionCargo != null ? (float[])expeditionCargo.Clone() : null,
+                founding=founding,expeditionCargo=expeditionCargo != null ? (float[])expeditionCargo.Clone() : null,
                 discoveries=savedDiscoveries,explorationVersion=ExplorationRules.LayoutVersion,exploredCells=(bool[])exploredCells.Clone(),
                 producedTotals=(float[])producedTotals.Clone(),consumedTotals=(float[])consumedTotals.Clone(),
                 productionRates=(float[])productionRates.Clone(),consumptionRates=(float[])consumptionRates.Clone(),
@@ -1187,6 +1226,7 @@ namespace WH30K.Sim.Resources
         private void Clear()
         {
             CancelLogisticsBuild();LogisticsVisualTruncated=false;
+            founding=default;foundingFoodDelivery=0;
             expeditionCargo = null; farmEntityRevision=-1;farmInputPools.Clear();farmOperations.Clear();
             ClearExcavation();ClearSurveyPresentation();if(visualRoot!=null)Destroy(visualRoot.gameObject);
             foreach(var material in materials)if(material!=null)Destroy(material);

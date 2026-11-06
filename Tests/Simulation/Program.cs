@@ -60,6 +60,7 @@ internal static class Program
                 && Math.Abs(WH30K.Planet.PlanetScale.DefaultRadius*2/TreeEcologyRules.CellResolution(WH30K.Planet.PlanetScale.DefaultRadius)-6000f*2/1024)<.001f,
                 "continental forests retain metre-scale tree spacing and historical small-world cell identities");
             ShipChecks.Run(Check);
+            FoundingChecks.Run(Check);
             DepositUsageChecks.Run(Check);
             FarmOwnershipChecks.Run(Check);
             FarmChecks.Run(Check);

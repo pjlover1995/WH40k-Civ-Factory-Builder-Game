@@ -10,6 +10,7 @@ namespace WH30K.Sim
     [Serializable] public struct CargoStock { public bool food; public int source, target, kind; public float amount, progress; }
     [Serializable] public class IndustrySnapshot
     {
+        public FoundingProgress founding;
         public FacilityStock[] facilities; public DepositStock[] deposits; public CargoStock[] cargo;
         public float[] producedTotals, consumedTotals, productionRates, consumptionRates;
         public DiscoveryRecord[] discoveries;
@@ -137,6 +138,7 @@ namespace WH30K.Sim
         public static bool Valid(IndustrySnapshot snapshot, int buildingCount)
         {
             if(snapshot==null) return true;
+            if(!FoundingObjectives.Valid(snapshot.founding)) return false;
             if(snapshot.expeditionCargo != null && snapshot.expeditionCargo.Length > 0 && !ValidStock(snapshot.expeditionCargo)) return false;
             if(snapshot.facilities==null || snapshot.facilities.Length!=buildingCount || snapshot.deposits==null || snapshot.deposits.Length>4096
                 || snapshot.cargo==null || snapshot.cargo.Length>64) return false;

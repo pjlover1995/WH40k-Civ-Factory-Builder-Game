@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="FoundingChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FoundingObjectives.cs" />
     <Compile Include="DepositUsageChecks.cs" />
     <Compile Include="../../Assets/Scripts/Sim/DepositUsage.cs" />
     <Compile Include="ShipChecks.cs" />

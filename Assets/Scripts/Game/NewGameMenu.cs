@@ -404,7 +404,7 @@ namespace WH30K.UI
 #endif
             }
             refreshTimer += Time.unscaledDeltaTime;
-            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); RefreshOutputTooltip(); RefreshFacilityPanel(); RefreshResearchPanel(); RefreshResourceDepositsPane(); }
+            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); RefreshOutputTooltip(); RefreshFacilityPanel(); RefreshResearchPanel(); RefreshResourceDepositsPane(); RefreshFoundingObjectives(); }
             UpdateColonyMarker();
         }
 

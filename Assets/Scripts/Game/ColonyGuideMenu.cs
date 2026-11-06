@@ -13,10 +13,22 @@ namespace WH30K.UI
         private Text guideStepText, guideTitleText, guideBodyText, guideStatusText;
         private Button guideBuildButton, guidePreviousButton, guideNextButton;
         private int guidePage;
+        private GameObject foundingTracker;
+        private Text foundingTrackerTitle, foundingTrackerDetail, foundingToggleLabel;
+        private string guideRecoveryNotice;
         private readonly HashSet<string> guideBuiltThisSession = new HashSet<string>();
 
         private void BuildColonyGuide(Transform parent)
         {
+            foundingTracker=Panel("FoundingObjectivesTracker",hudPanel.transform,new Vector2(470,92),new Vector2(0,-116),TextAnchor.UpperCenter);
+            var trackerRect=foundingTracker.GetComponent<RectTransform>();
+            trackerRect.anchorMin=trackerRect.anchorMax=trackerRect.pivot=new Vector2(.5f,1);
+            Accent(foundingTracker,Gold);
+            foundingTrackerTitle=Label("FoundingObjectiveTitle",foundingTracker.transform,"",12,new Vector2(12,-9),444,22,Gold);
+            foundingTrackerDetail=Label("FoundingObjectiveDetail",foundingTracker.transform,"",11,new Vector2(12,-33),444,24,Ivory);
+            Button("ReviewFoundingObjectives",foundingTracker.transform,new Vector2(12,-62),"OBJECTIVES / DETAILS",out _,266,23).onClick.AddListener(()=>{guidePage=0;ShowGuide();});
+            Button("HideFoundingObjectives",foundingTracker.transform,new Vector2(290,-62),"HIDE",out _,166,23).onClick.AddListener(()=>{Industry?.SetFoundingObjectives(false);RefreshFoundingObjectives();});
+            foundingTracker.SetActive(false);
             var commandHeader = hudPanel.transform.Find("CommandHeader");
             if (commandHeader != null)
             {
@@ -34,9 +46,11 @@ namespace WH30K.UI
             Label("GuideTag", card.transform, "EXPEDITION AUTHORITY  /  COLONY ESTABLISHMENT", 11, new Vector2(28, -18), 600, 22, Gold);
             Button("CloseColonyGuide", card.transform, new Vector2(644, -12), "X", out _, 30, 28).onClick.AddListener(CloseGuide);
             guideStepText = Label("GuideProgress", card.transform, "", 10, new Vector2(28, -48), 620, 20, Muted);
+            Button("ToggleFoundingObjectives",card.transform,new Vector2(422,-44),"TRACK OBJECTIVES",out foundingToggleLabel,218,25)
+                .onClick.AddListener(()=>{if(Industry!=null)Industry.SetFoundingObjectives(!Industry.Founding.enabled);RefreshFoundingObjectives();});
             guideTitleText = Label("GuideTitle", card.transform, "", 24, new Vector2(28, -76), 640, 38, Ivory);
-            guideBodyText = Label("GuideBody", card.transform, "", 15, new Vector2(28, -126), 640, 240, Ivory);
-            guideBodyText.verticalOverflow = VerticalWrapMode.Overflow;
+            guideBodyText = Label("GuideBody", card.transform, "", 14, new Vector2(28, -126), 640, 220, Ivory);
+            guideBodyText.verticalOverflow = VerticalWrapMode.Truncate;
             guideStatusText = Label("GuideStatus", card.transform, "", 11, new Vector2(28, -354), 640, 24, Gold);
 
             guideOfferControls = new GameObject("GuideOfferControls", typeof(RectTransform));
@@ -70,7 +84,7 @@ namespace WH30K.UI
             guideWalkthroughControls.SetActive(false);
             guideStepText.text = "OPTIONAL FIELD INSTRUCTION";
             guideTitleText.text = "Would you like a guided colony?";
-            guideBodyText.text = "The Explorator carries a reactor, food and construction cargo, but water and supplies are finite. This walkthrough explains the founding sequence, shows how all 18 facilities work, and lets you select a building directly from each page. You can close it at any time and reopen COLONY GUIDE from the command bar.";
+            guideBodyText.text = "The Explorator carries a reactor, food and construction cargo, but water and supplies are finite. Optional live objectives recognise working water supply, delivered farm food and manufactured components, then a full month of balanced supplies. Complete the route to locate an orbital cargo canister.\n\nBEGIN enables a small objective tracker during play. Browse all 18 facilities and select buildings from their reference pages. Hide the tracker or close the guide at any time; reopen COLONY GUIDE from the command bar.";
             guideStatusText.text = "The guide pauses the simulation while open. It does not spend resources or place buildings.";
             guidePanel.SetActive(true);
             HideOutputTooltip();
@@ -80,6 +94,7 @@ namespace WH30K.UI
         private void ShowGuide()
         {
             if (!GameSettings.HasActiveGame || guidePanel == null) return;
+            guideRecoveryNotice=null;
             guideOfferControls.SetActive(false);
             guideWalkthroughControls.SetActive(true);
             SetGuidePage(Mathf.Clamp(guidePage, 0, ColonyGuideContent.PageCount - 1));
@@ -90,6 +105,7 @@ namespace WH30K.UI
 
         private void BeginGuide()
         {
+            Industry?.SetFoundingObjectives(true);
             guideOfferControls.SetActive(false);
             guideWalkthroughControls.SetActive(true);
             SetGuidePage(0);
@@ -105,23 +121,16 @@ namespace WH30K.UI
         {
             guidePage = Mathf.Clamp(page, 0, ColonyGuideContent.PageCount - 1);
             var finalPage = ColonyGuideContent.PageCount - 1;
-            guideStepText.text = guidePage == 0 ? "FOUNDING ROUTE  /  0 OF 18 FACILITIES" :
-                guidePage == finalPage ? "FOUNDING ROUTE  /  COMPLETE" :
+            guideStepText.text = guidePage == 0 || guidePage == finalPage ? "LIVE FOUNDING OBJECTIVES" :
                 $"BUILDING REFERENCE  /  {guidePage} OF 18";
             var entry = ColonyGuideContent.EntryAtPage(guidePage);
             if (guidePage == 0)
             {
-                guideTitleText.text = "Begin with the ship";
-                guideBodyText.text = "Your landed Explorator is the colony's first home and power station: 6,000 crew, 10,000 berths, an 18 MW reactor and 120,000 food. Keep its reactor active while demand fits the grid. Food and water are shared colony reserves, and both continue to run down during normal play.\n\nFounding order: one connected groundwater pump, then one connected farm (6,000 food/month at full operation). Ship components and reclaimed crew waste feed the farm. Next connect an iron mine + stone quarry + biomass harvester to a Manufactorum on its default components recipe. This replaces construction supplies without smelting. Place linked facilities within logistics range; use their inspector to check staffing and power. Add generation before power demand exceeds the reactor; use housing, depots, outposts and scrubbers as your colony grows.";
-                guideStatusText.text = "Use NEXT to begin the route, or browse every player-buildable facility in order.";
-                guideBuildButton.gameObject.SetActive(false);
+                SetFoundingGuideSummary();
             }
             else if (guidePage == finalPage)
             {
-                guideTitleText.text = "A functioning colony";
-                guideBodyText.text = "Watch FOOD, WATER and BUILD SUPPLIES in the top banner. Growth needs housing, healthy conditions and reserves: full growth requires at least 3 months food and 1 month water. Health is fixed at 100% for now. For material independence: iron mine + stone quarry + biomass harvester -> Manufactorum -> construction supplies. Smelter/Works is an optional longer route. Add fuel extraction and generation before the ship reactor becomes a bottleneck.\n\nUse the planetary vitals, material inventory, power, staffing and cargo readouts to find the next constraint. Survey outposts, scrubbers, desalination, refining and depots address specific needs as the settlement expands.";
-                guideStatusText.text = "You can revisit any page with PREVIOUS / NEXT or select BUILD THIS to start placement.";
-                guideBuildButton.gameObject.SetActive(false);
+                SetFoundingGuideSummary();
             }
             else
             {
@@ -151,6 +160,13 @@ namespace WH30K.UI
 
         private void BuildGuideStructure()
         {
+            if(guidePage==0 || guidePage==ColonyGuideContent.PageCount-1)
+            {
+                var recovered=Industry!=null?Industry.RecoverFoundingCanister():0;
+                guideRecoveryNotice=recovered>0?$"Recovered {recovered:0.##} components from the orbital canister.":"Storage is full. Contents remain in the canister; make room and recover again.";
+                SetGuidePage(guidePage);
+                return;
+            }
             var entry = ColonyGuideContent.EntryAtPage(guidePage);
             if (entry == null || buildingPlacement == null) return;
             SetCatalogGroup(entry.CatalogGroup);
@@ -169,6 +185,30 @@ namespace WH30K.UI
             if (guidePanel != null && guidePanel.activeSelf && !guideOfferControls.activeSelf) SetGuidePage(guidePage);
         }
 
-        public void ResetGuideForNewExpedition() => guideBuiltThisSession.Clear();
+        public void ResetGuideForNewExpedition() {guideBuiltThisSession.Clear();guideRecoveryNotice=null;}
+
+        private void SetFoundingGuideSummary()
+        {
+            var p=Industry!=null?Industry.Founding:default;
+            guideTitleText.text=p.completed?"Colony established":"Establish your colony";
+            string Mark(bool done)=>done?"[DONE]":"[  ]";
+            guideBodyText.fontSize=14;
+            guideBodyText.text=$"{Mark(p.waterEstablished)} Produce water   {Mark(p.foodDelivered)} Deliver farm food\n{Mark(p.componentsMade)} Make components   {Mark(p.completed)} Balance supplies for a month\n\n{FoundingObjectives.Title(p)}\n{FoundingObjectives.Detail(p)}";
+            guideStatusText.text=guideRecoveryNotice??"Progress is saved. Close the guide to let simulation run. NEXT browses building instructions.";
+            guideBuildButton.gameObject.SetActive(p.completed && p.rewardRecovered<FoundingObjectives.Reward);
+            guideBuildButton.GetComponentInChildren<Text>().text="RECOVER CANISTER CONTENTS";
+        }
+
+        private void RefreshFoundingObjectives()
+        {
+            if(foundingTracker==null)return;
+            var p=Industry!=null?Industry.Founding:default;
+            foundingTracker.SetActive(GameSettings.HasActiveGame && bootstrap!=null && !bootstrap.ChoosingLanding && p.enabled);
+            foundingTrackerTitle.text=FoundingObjectives.Title(p);
+            foundingTrackerDetail.text=p.completed?(p.rewardRecovered<FoundingObjectives.Reward?"A balanced month achieved. Review objectives for the canister reward.":"Canister recovered. Keep monitoring supplies as your colony grows."):
+                FoundingObjectives.Stage(p)==3?$"Month observation: {p.seconds:0}/{FoundingObjectives.Duration:0}s. Open details for supply balances.":"Requires actual production/delivery. Open details for the next step.";
+            if(foundingToggleLabel!=null)foundingToggleLabel.text=p.enabled?"HIDE OBJECTIVE TRACKER":"TRACK OBJECTIVES";
+            if(guidePanel!=null && guidePanel.activeSelf && !guideOfferControls.activeSelf && (guidePage==0 || guidePage==ColonyGuideContent.PageCount-1))SetGuidePage(guidePage);
+        }
     }
 }
