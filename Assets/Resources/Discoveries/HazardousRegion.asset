@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 26b5bc59e6824d379b4464f82a57e928, type: 3}
+  m_Name: HazardousRegion
+  m_EditorClassIdentifier:
+  kind: 2
+  displayName: "Toxic vent field"
+  description: "Volatile seeps contaminate the surrounding ground. Seal the vents to improve planetary conditions or attempt to recover valuable samples."
+  cautiousAction: SEAL THE VENTS
+  rapidAction: RECOVER SAMPLES
+  markerColor: {r: 0.8, g: 0.32, b: 0.2, a: 1}
+  rewards:
+    cautiousMultiplier: 0
+    rapidMultiplier: 0.5
+    hazardChance: 0.45
+    cautiousImpact: {co2Delta: -4, o2Delta: 0, waterDelta: -3, temperatureDelta: -0.02}
+    rapidImpact: {co2Delta: 0, o2Delta: 0, waterDelta: 0, temperatureDelta: 0}
+    hazardImpact: {co2Delta: 10, o2Delta: 0, waterDelta: 5, temperatureDelta: 0.04}

@@ -3,6 +3,8 @@
 # Get latest from https://github.com/github/gitignore/blob/main/Unity.gitignore
 #
 .utmp/
+/.dotnet-cli/
+/.dotnet-cli-home/
 /[Ll]ibrary/
 /[Tt]emp/
 /[Oo]bj/
@@ -41,6 +43,8 @@
 ExportedObj/
 .consulo/
 *.csproj
+!Tests/Simulation/SimulationChecks.csproj
+/Tests/Simulation/obj/
 *.unityproj
 *.sln
 *.suo

@@ -7,6 +7,8 @@ using UnityEditor;
 
 namespace WH40kCivFactoryBuilderGame
 {
+    // Historical SampleScene demonstration. The shipped WH30K_VS01 scene uses
+    // PlanetBootstrap/LODPlanet and TerrainGeneration; add terrain features there.
     [ExecuteAlways]
     [DisallowMultipleComponent]
     [RequireComponent(typeof(LODGroup))]

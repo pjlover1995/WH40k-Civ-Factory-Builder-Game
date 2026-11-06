@@ -4,5 +4,8 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/Prototype/WH30K_VS01.unity
+    guid: 1ed1ec2fe8904b9ba135ce3faf9e64ba
   m_configObjects: {}

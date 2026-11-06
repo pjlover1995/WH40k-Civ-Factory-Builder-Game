@@ -1,0 +1,3366 @@
+{
+  "administrationShare": 0.18,
+  "leadershipShare": 0.04,
+  "demandHeadroom": 1.12,
+  "creditMultiplier": 1,
+  "workMultiplier": 1,
+  "upkeepPerResident": 0.0125,
+  "serviceRadius": 250,
+  "basicServices": 0.35,
+  "maxFoundationDepth": 0.9,
+  "excavationClearance": 14,
+  "moduleLimit": 32,
+  "radiusLimit": 12,
+  "heightLimit": 12,
+  "designs": [
+    {
+      "id": "worker-01",
+      "name": "Gallery court",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 40,
+      "cost": 73,
+      "work": 42,
+      "enclosure": 0.95,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 0,
+      "wallColor": "#B7A48B",
+      "roofColor": "#713B32",
+      "trimColor": "#C6A15C"
+    },
+    {
+      "id": "worker-02",
+      "name": "Paired tenements",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 60,
+      "cost": 87,
+      "work": 48,
+      "enclosure": 0.8,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 0,
+      "wallColor": "#A5664F",
+      "roofColor": "#334E54",
+      "trimColor": "#8CADA4"
+    },
+    {
+      "id": "worker-03",
+      "name": "Longhouse",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 40,
+      "cost": 73,
+      "work": 42,
+      "enclosure": 0.2,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 0,
+      "wallColor": "#718988",
+      "roofColor": "#765137",
+      "trimColor": "#B49C72"
+    },
+    {
+      "id": "worker-04",
+      "name": "Corner apartments",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 30,
+      "cost": 66,
+      "work": 39,
+      "enclosure": 0.9,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 0,
+      "wallColor": "#8B9472",
+      "roofColor": "#454960",
+      "trimColor": "#C8B58A"
+    },
+    {
+      "id": "worker-05",
+      "name": "Shared kitchen wing",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 40,
+      "cost": 73,
+      "work": 42,
+      "enclosure": 0.65,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 0,
+      "wallColor": "#B9AE98",
+      "roofColor": "#496457",
+      "trimColor": "#B6A577"
+    },
+    {
+      "id": "worker-06",
+      "name": "Communal hall",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 40,
+      "cost": 73,
+      "work": 42,
+      "enclosure": 0.85,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 1,
+      "wallColor": "#6D7A92",
+      "roofColor": "#744937",
+      "trimColor": "#B59A78"
+    },
+    {
+      "id": "worker-07",
+      "name": "Laundry court",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 50,
+      "cost": 80,
+      "work": 45,
+      "enclosure": 0.3,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 1,
+      "wallColor": "#AD8A55",
+      "roofColor": "#3A5157",
+      "trimColor": "#C0B5A3"
+    },
+    {
+      "id": "worker-08",
+      "name": "Cloister housing",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 80,
+      "cost": 101,
+      "work": 54,
+      "enclosure": 0.9,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 1,
+      "wallColor": "#997887",
+      "roofColor": "#694056",
+      "trimColor": "#AD9275"
+    },
+    {
+      "id": "worker-09",
+      "name": "Stepped apartments",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 60,
+      "cost": 87,
+      "work": 48,
+      "enclosure": 0.75,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 1,
+      "wallColor": "#8A938E",
+      "roofColor": "#535F43",
+      "trimColor": "#C6AB79"
+    },
+    {
+      "id": "worker-10",
+      "name": "Enclosed quadrangle",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 100,
+      "cost": 115,
+      "work": 60,
+      "enclosure": 0.9,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 1,
+      "wallColor": "#B6A27A",
+      "roofColor": "#805A3F",
+      "trimColor": "#B8C0B5"
+    },
+    {
+      "id": "worker-11",
+      "name": "Interlocking wings",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 80,
+      "cost": 101,
+      "work": 54,
+      "enclosure": 0.6,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 2,
+      "wallColor": "#788998",
+      "roofColor": "#4D3E52",
+      "trimColor": "#C2A565"
+    },
+    {
+      "id": "worker-12",
+      "name": "Cross gallery",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 70,
+      "cost": 94,
+      "work": 51,
+      "enclosure": 0.85,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 2,
+      "wallColor": "#B3927A",
+      "roofColor": "#325F58",
+      "trimColor": "#B8AC88"
+    },
+    {
+      "id": "worker-13",
+      "name": "Refectories",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 70,
+      "cost": 94,
+      "work": 51,
+      "enclosure": 0.25,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 2,
+      "wallColor": "#7F9A8A",
+      "roofColor": "#783F38",
+      "trimColor": "#B1A17A"
+    },
+    {
+      "id": "worker-14",
+      "name": "Staggered flats",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 70,
+      "cost": 94,
+      "work": 51,
+      "enclosure": 0.6,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 2,
+      "wallColor": "#B2A49F",
+      "roofColor": "#4F5670",
+      "trimColor": "#9EBAAE"
+    },
+    {
+      "id": "worker-15",
+      "name": "Dense maisonettes",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 80,
+      "cost": 101,
+      "work": 54,
+      "enclosure": 0.8,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 2,
+      "wallColor": "#937253",
+      "roofColor": "#47654E",
+      "trimColor": "#C6B493"
+    },
+    {
+      "id": "worker-16",
+      "name": "Assembly court",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 120,
+      "cost": 129,
+      "work": 66,
+      "enclosure": 0.15,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 3,
+      "wallColor": "#6E858B",
+      "roofColor": "#65423C",
+      "trimColor": "#B6A276"
+    },
+    {
+      "id": "worker-17",
+      "name": "Bathhouse wing",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 70,
+      "cost": 94,
+      "work": 51,
+      "enclosure": 0.95,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 3,
+      "wallColor": "#AC9B6D",
+      "roofColor": "#345466",
+      "trimColor": "#C1A28C"
+    },
+    {
+      "id": "worker-18",
+      "name": "Double gallery",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 90,
+      "cost": 108,
+      "work": 57,
+      "enclosure": 0.9,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 3,
+      "wallColor": "#958A9A",
+      "roofColor": "#794F40",
+      "trimColor": "#B2B9A8"
+    },
+    {
+      "id": "worker-19",
+      "name": "Workshop lodgings",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 80,
+      "cost": 101,
+      "work": 54,
+      "enclosure": 0.7,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 3,
+      "wallColor": "#A78272",
+      "roofColor": "#475E60",
+      "trimColor": "#CCA969"
+    },
+    {
+      "id": "worker-20",
+      "name": "Union hall residences",
+      "residentClass": 0,
+      "role": "Apartments with shared kitchens",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 120,
+      "cost": 129,
+      "work": 66,
+      "enclosure": 0.9,
+      "serviceNeed": 0.15,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 5,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 5,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 3,
+      "wallColor": "#7F8874",
+      "roofColor": "#624C6F",
+      "trimColor": "#ADC0AD"
+    },
+    {
+      "id": "admin-01",
+      "name": "Registry apartments",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 85,
+      "work": 46,
+      "enclosure": 0.95,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 0,
+      "wallColor": "#CEC5A6",
+      "roofColor": "#88614B",
+      "trimColor": "#DDD07E"
+    },
+    {
+      "id": "admin-02",
+      "name": "Office maisonettes",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 36,
+      "cost": 105,
+      "work": 54,
+      "enclosure": 0.8,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 0,
+      "wallColor": "#BC936E",
+      "roofColor": "#495E6B",
+      "trimColor": "#A6C4C2"
+    },
+    {
+      "id": "admin-03",
+      "name": "Records gallery",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 85,
+      "work": 46,
+      "enclosure": 0.2,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 0,
+      "wallColor": "#8A9CA0",
+      "roofColor": "#8D7651",
+      "trimColor": "#CBC28F"
+    },
+    {
+      "id": "admin-04",
+      "name": "Clerk corner",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 18,
+      "cost": 75,
+      "work": 42,
+      "enclosure": 0.9,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 0,
+      "wallColor": "#9CAB8C",
+      "roofColor": "#5E5C77",
+      "trimColor": "#DFDAA8"
+    },
+    {
+      "id": "admin-05",
+      "name": "Meeting wing",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 85,
+      "work": 46,
+      "enclosure": 0.65,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 0,
+      "wallColor": "#D0CCB2",
+      "roofColor": "#607B74",
+      "trimColor": "#CDCA94"
+    },
+    {
+      "id": "admin-06",
+      "name": "Council hall",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 85,
+      "work": 46,
+      "enclosure": 0.85,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 1,
+      "wallColor": "#878CA9",
+      "roofColor": "#8B6E50",
+      "trimColor": "#CCBF95"
+    },
+    {
+      "id": "admin-07",
+      "name": "Archive court",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 30,
+      "cost": 95,
+      "work": 50,
+      "enclosure": 0.3,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 1,
+      "wallColor": "#C4B574",
+      "roofColor": "#51626E",
+      "trimColor": "#D7D3BD"
+    },
+    {
+      "id": "admin-08",
+      "name": "Secretariat cloister",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 48,
+      "cost": 125,
+      "work": 62,
+      "enclosure": 0.9,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 1,
+      "wallColor": "#B09299",
+      "roofColor": "#805865",
+      "trimColor": "#C4B691"
+    },
+    {
+      "id": "admin-09",
+      "name": "Stepped offices",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 36,
+      "cost": 105,
+      "work": 54,
+      "enclosure": 0.75,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 1,
+      "wallColor": "#A2AAA7",
+      "roofColor": "#64765A",
+      "trimColor": "#DDD398"
+    },
+    {
+      "id": "admin-10",
+      "name": "Civic quadrangle",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 60,
+      "cost": 145,
+      "work": 70,
+      "enclosure": 0.9,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 1,
+      "wallColor": "#CDC697",
+      "roofColor": "#97805A",
+      "trimColor": "#CED7CD"
+    },
+    {
+      "id": "admin-11",
+      "name": "Paired bureaus",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 48,
+      "cost": 125,
+      "work": 62,
+      "enclosure": 0.6,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 2,
+      "wallColor": "#919BAF",
+      "roofColor": "#685469",
+      "trimColor": "#D9D086"
+    },
+    {
+      "id": "admin-12",
+      "name": "Dispatch cross",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 42,
+      "cost": 115,
+      "work": 58,
+      "enclosure": 0.85,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 2,
+      "wallColor": "#CAB797",
+      "roofColor": "#497476",
+      "trimColor": "#CFCDA4"
+    },
+    {
+      "id": "admin-13",
+      "name": "Lecture residence",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 42,
+      "cost": 115,
+      "work": 58,
+      "enclosure": 0.25,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 2,
+      "wallColor": "#98B1A7",
+      "roofColor": "#8F6552",
+      "trimColor": "#C8C496"
+    },
+    {
+      "id": "admin-14",
+      "name": "Garden apartments",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 42,
+      "cost": 115,
+      "work": 58,
+      "enclosure": 0.6,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 2,
+      "wallColor": "#C9C0B8",
+      "roofColor": "#676787",
+      "trimColor": "#B8D1CB"
+    },
+    {
+      "id": "admin-15",
+      "name": "Records tower",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 48,
+      "cost": 125,
+      "work": 62,
+      "enclosure": 0.8,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 2,
+      "wallColor": "#AA986F",
+      "roofColor": "#5E7C6C",
+      "trimColor": "#DDD6AF"
+    },
+    {
+      "id": "admin-16",
+      "name": "Tribunal court",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 72,
+      "cost": 165,
+      "work": 78,
+      "enclosure": 0.15,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 3,
+      "wallColor": "#8797A2",
+      "roofColor": "#7C6254",
+      "trimColor": "#CDC793"
+    },
+    {
+      "id": "admin-17",
+      "name": "Library wing",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 42,
+      "cost": 115,
+      "work": 58,
+      "enclosure": 0.95,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 3,
+      "wallColor": "#C3C08A",
+      "roofColor": "#4C617D",
+      "trimColor": "#D8C6A9"
+    },
+    {
+      "id": "admin-18",
+      "name": "Meeting galleries",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 54,
+      "cost": 135,
+      "work": 66,
+      "enclosure": 0.9,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 3,
+      "wallColor": "#AFA2B1",
+      "roofColor": "#90735A",
+      "trimColor": "#C6D0C1"
+    },
+    {
+      "id": "admin-19",
+      "name": "Department lodgings",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 48,
+      "cost": 125,
+      "work": 62,
+      "enclosure": 0.7,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 3
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 3,
+      "wallColor": "#BEA68E",
+      "roofColor": "#5E7077",
+      "trimColor": "#E3D68B"
+    },
+    {
+      "id": "admin-20",
+      "name": "Administrative forum",
+      "residentClass": 1,
+      "role": "Apartments with offices and meeting rooms",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 72,
+      "cost": 165,
+      "work": 78,
+      "enclosure": 0.9,
+      "serviceNeed": 0.35,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 5,
+          "z": 0,
+          "height": 3
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 3
+        },
+        {
+          "x": 5,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 3
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 3
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 3,
+      "wallColor": "#939F8C",
+      "roofColor": "#806486",
+      "trimColor": "#C6D7CA"
+    },
+    {
+      "id": "leader-01",
+      "name": "Terrace apartments",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 12,
+      "cost": 109,
+      "work": 50,
+      "enclosure": 0.95,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 0,
+      "wallColor": "#9D7E6F",
+      "roofColor": "#611F26",
+      "trimColor": "#AA693B"
+    },
+    {
+      "id": "leader-02",
+      "name": "Paired villas",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 18,
+      "cost": 141,
+      "work": 60,
+      "enclosure": 0.8,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 0,
+      "wallColor": "#8E3634",
+      "roofColor": "#264846",
+      "trimColor": "#729583"
+    },
+    {
+      "id": "leader-03",
+      "name": "Reception residence",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 12,
+      "cost": 109,
+      "work": 50,
+      "enclosure": 0.2,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 0,
+      "wallColor": "#5D766F",
+      "roofColor": "#652F23",
+      "trimColor": "#9B7156"
+    },
+    {
+      "id": "leader-04",
+      "name": "Private corner",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 9,
+      "cost": 93,
+      "work": 45,
+      "enclosure": 0.9,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 0,
+      "wallColor": "#7E7F5C",
+      "roofColor": "#364153",
+      "trimColor": "#AC886B"
+    },
+    {
+      "id": "leader-05",
+      "name": "Audience wing",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 12,
+      "cost": 109,
+      "work": 50,
+      "enclosure": 0.65,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 0,
+      "wallColor": "#9F8B7C",
+      "roofColor": "#3A5642",
+      "trimColor": "#9D7B5A"
+    },
+    {
+      "id": "leader-06",
+      "name": "Banquet house",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 12,
+      "cost": 109,
+      "work": 50,
+      "enclosure": 0.85,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 1,
+      "wallColor": "#576E7E",
+      "roofColor": "#642724",
+      "trimColor": "#9C705C"
+    },
+    {
+      "id": "leader-07",
+      "name": "Guarded court",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 15,
+      "cost": 125,
+      "work": 55,
+      "enclosure": 0.3,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 1,
+      "wallColor": "#955A38",
+      "roofColor": "#2C4B4A",
+      "trimColor": "#A59287"
+    },
+    {
+      "id": "leader-08",
+      "name": "Palatial cloister",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 173,
+      "work": 70,
+      "enclosure": 0.9,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 1,
+      "wallColor": "#846179",
+      "roofColor": "#5A2F51",
+      "trimColor": "#956A5A"
+    },
+    {
+      "id": "leader-09",
+      "name": "Stepped terraces",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 18,
+      "cost": 141,
+      "work": 60,
+      "enclosure": 0.75,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 1,
+      "wallColor": "#757E77",
+      "roofColor": "#4C5234",
+      "trimColor": "#AA7B59"
+    },
+    {
+      "id": "leader-10",
+      "name": "Reception quadrangle",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 30,
+      "cost": 205,
+      "work": 80,
+      "enclosure": 0.9,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 1,
+      "wallColor": "#9D785E",
+      "roofColor": "#6E362A",
+      "trimColor": "#9FA59A"
+    },
+    {
+      "id": "leader-11",
+      "name": "Guest wings",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 173,
+      "work": 70,
+      "enclosure": 0.6,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 2,
+      "wallColor": "#617B83",
+      "roofColor": "#3C3247",
+      "trimColor": "#A77145"
+    },
+    {
+      "id": "leader-12",
+      "name": "Processional cross",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 21,
+      "cost": 157,
+      "work": 65,
+      "enclosure": 0.85,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 2,
+      "wallColor": "#9A695E",
+      "roofColor": "#22523F",
+      "trimColor": "#9E866C"
+    },
+    {
+      "id": "leader-13",
+      "name": "Chapel residence",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 21,
+      "cost": 157,
+      "work": 65,
+      "enclosure": 0.25,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 2,
+      "wallColor": "#68846D",
+      "roofColor": "#67242D",
+      "trimColor": "#987A5F"
+    },
+    {
+      "id": "leader-14",
+      "name": "Winter garden",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 21,
+      "cost": 157,
+      "work": 65,
+      "enclosure": 0.6,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 2,
+      "wallColor": "#998685",
+      "roofColor": "#3E4D60",
+      "trimColor": "#83A08C"
+    },
+    {
+      "id": "leader-15",
+      "name": "Residential keep",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 173,
+      "work": 70,
+      "enclosure": 0.8,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 2,
+      "wallColor": "#7E4C3B",
+      "roofColor": "#385737",
+      "trimColor": "#AA8B75"
+    },
+    {
+      "id": "leader-16",
+      "name": "Ceremonial court",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Accessible parapet terrace",
+      "upper": true,
+      "lift": true,
+      "capacity": 36,
+      "cost": 237,
+      "work": 90,
+      "enclosure": 0.15,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 0,
+      "facadeStyle": 3,
+      "wallColor": "#597877",
+      "roofColor": "#572C30",
+      "trimColor": "#9D7759"
+    },
+    {
+      "id": "leader-17",
+      "name": "Bathing pavilion",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Gabled roof bays",
+      "upper": true,
+      "lift": true,
+      "capacity": 21,
+      "cost": 157,
+      "work": 65,
+      "enclosure": 0.95,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        }
+      ],
+      "roofStyle": 1,
+      "facadeStyle": 3,
+      "wallColor": "#947252",
+      "roofColor": "#235158",
+      "trimColor": "#A6786E"
+    },
+    {
+      "id": "leader-18",
+      "name": "Audience galleries",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Hipped pavilions",
+      "upper": true,
+      "lift": true,
+      "capacity": 27,
+      "cost": 189,
+      "work": 75,
+      "enclosure": 0.9,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 0,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 2,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 2,
+      "facadeStyle": 3,
+      "wallColor": "#7B7484",
+      "roofColor": "#682E2C",
+      "trimColor": "#9C9F8D"
+    },
+    {
+      "id": "leader-19",
+      "name": "Retinue residence",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Sawtooth clerestories",
+      "upper": true,
+      "lift": true,
+      "capacity": 24,
+      "cost": 173,
+      "work": 70,
+      "enclosure": 0.7,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 4
+        }
+      ],
+      "roofStyle": 3,
+      "facadeStyle": 3,
+      "wallColor": "#905B58",
+      "roofColor": "#38534E",
+      "trimColor": "#AF7248"
+    },
+    {
+      "id": "leader-20",
+      "name": "Governor complex",
+      "residentClass": 2,
+      "role": "Apartments with reception and private terraces",
+      "roof": "Stepped roof garden",
+      "upper": true,
+      "lift": true,
+      "capacity": 36,
+      "cost": 237,
+      "work": 90,
+      "enclosure": 0.9,
+      "serviceNeed": 0.65,
+      "columns": [
+        {
+          "x": 0,
+          "z": 0,
+          "height": 4
+        },
+        {
+          "x": 1,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 5,
+          "z": 0,
+          "height": 2
+        },
+        {
+          "x": 0,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 1,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 2,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 3,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 4,
+          "z": 1,
+          "height": 4
+        },
+        {
+          "x": 5,
+          "z": 1,
+          "height": 2
+        },
+        {
+          "x": 2,
+          "z": 2,
+          "height": 4
+        },
+        {
+          "x": 3,
+          "z": 2,
+          "height": 2
+        }
+      ],
+      "roofStyle": 4,
+      "facadeStyle": 3,
+      "wallColor": "#717560",
+      "roofColor": "#493B5F",
+      "trimColor": "#96A591"
+    }
+  ],
+  "spacing": 2,
+  "galleryCost": 12,
+  "galleryWork": 6,
+  "neighbourClearance": 2
+}

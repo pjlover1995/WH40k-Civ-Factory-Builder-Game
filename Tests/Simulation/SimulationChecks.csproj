@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RestoreSources></RestoreSources>
+    <OutputPath>../../.utmp/simulation/bin/</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="FoundingChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FoundingObjectives.cs" />
+    <Compile Include="DepositUsageChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/DepositUsage.cs" />
+    <Compile Include="ShipChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ShipRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ColonyGuideContent.cs" />
+    <Compile Include="FarmChecks.cs" />
+    <Compile Include="FarmOwnershipChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FacilityIdentityRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/TerritoryRules.cs" />
+    <Compile Include="FarmLayoutChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FarmLayoutRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FarmRules.cs" />
+    <Compile Include="OutputChecks.cs" />
+    <Compile Include="FacilityChecks.cs" />
+    <Compile Include="ManufactorumChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ManufactorumRules.cs" />
+    <Compile Include="ResearchChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ResearchRules.cs" />
+    <Compile Include="MiningChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/FacilityRules.cs" />
+    <Compile Include="TerrainChecks.cs" />
+    <Compile Include="EarthworksChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/EarthworksRules.cs" />
+    <Compile Include="ResidentialChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ResidentialRules.cs" />
+    <Compile Include="../../Assets/Scripts/Planet/TerrainGeneration.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ColonyRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ColonyOutputExplanation.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/WaterRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ExpeditionRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/BuildingOperationRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/AdaptiveBuildingRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ColonyCalendar.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/TreeEcologyRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/IndustryRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/MiningRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/ExplorationRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/Environment/EnvironmentRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/Events/EventSchedule.cs" />
+    <Compile Include="../../Assets/Scripts/Game/Construction/ConstructionSave.cs" />
+    <Reference Include="Microsoft.CodeAnalysis">
+      <HintPath>$(MSBuildSDKsPath)/../Roslyn/bincore/Microsoft.CodeAnalysis.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.CodeAnalysis.CSharp">
+      <HintPath>$(MSBuildSDKsPath)/../Roslyn/bincore/Microsoft.CodeAnalysis.CSharp.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+</Project>

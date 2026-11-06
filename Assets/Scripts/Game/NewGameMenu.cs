@@ -1,15 +1,13 @@
 using System;
 using System.Collections.Generic;
-using System.Text;
-#if UNITY_EDITOR
-using System.Globalization;
-#endif
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
 using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Gameplay.Construction;
+using WH30K.CameraSystem;
+using WH30K.Sim;
 using WH30K.Sim.Environment;
 using WH30K.Sim.Events;
 using WH30K.Sim.Resources;
@@ -17,773 +15,695 @@ using WH30K.Sim.Settlements;
 
 namespace WH30K.UI
 {
-    /// <summary>
-    /// Runtime generated UI that exposes a lightweight "New Game" menu along with HUD readouts.
-    /// Programmatic creation keeps the scene authoring burden low while still enabling designer tweaking
-    /// by editing this single script.
-    /// </summary>
     [RequireComponent(typeof(PlanetBootstrap))]
-    public class NewGameMenu : MonoBehaviour
+    public partial class NewGameMenu : MonoBehaviour
     {
-        private const float PanelWidth = 320f;
-        private const float PanelHeight = 210f;
-        private const float HudPanelWidth = 260f;
-#if UNITY_EDITOR
-        private const float DebugPanelWidth = 260f;
-#endif
-
+        private static readonly Color Gold = new Color(0.80f, 0.65f, 0.38f);
+        private static readonly Color Ivory = new Color(0.88f, 0.90f, 0.87f);
+        private static readonly Color Muted = new Color(0.49f, 0.57f, 0.60f);
+        private static readonly Color Surface = new Color(0.025f, 0.040f, 0.052f, 0.96f);
+        private static readonly Color ButtonBase = new Color(0.065f, 0.092f, 0.108f, 1f);
+        private static readonly Color ForgeRed = new Color(0.48f, 0.105f, 0.075f, 1f);
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
         private ColonyEventSystem colonyEventSystem;
         private Settlement settlement;
         private BuildingPlacementController buildingPlacement;
-
+        private BuildingSelection selection;
+        private ColonyClock clock;
         private Canvas canvas;
-        private GameObject newGamePanel;
+        private Font font;
+        private GameObject newGamePanel, hudPanel, eventPanel, inspector, discoveryPanel;
         private InputField seedInput;
-        private Button startButton;
-        private Button saveButton;
-        private Button loadButton;
-        private Button difficultyButton;
-        private Text difficultyLabel;
-        private GameObject hudPanel;
-        private Text resourceText;
-        private Text environmentText;
-        private Text eventLogText;
-        private GameObject eventPanel;
-        private Text eventTitleText;
-        private Text eventBodyText;
-        private Text eventChoiceALabel;
-        private Text eventChoiceBLabel;
-        private Button eventChoiceAButton;
-        private Button eventChoiceBButton;
-        private Button buildButton;
-        private Text buildButtonLabel;
-
-        private readonly List<string> eventLogEntries = new List<string>();
-        private GameSettings.Difficulty selectedDifficulty = GameSettings.Difficulty.Standard;
-
-        private Action eventChoiceAHandler;
-        private Action eventChoiceBHandler;
-
-        private Font defaultFont;
-
+        private Text difficultyLabel, stockpileValue, populationValue, netValue, workforceValue, waterSupplyValue;
+        private Text dateText, clockText, environmentText, eventLogText, buildButtonLabel, structureDetails;
+        private Text eventTitleText, eventBodyText, choiceALabel, choiceBLabel, buildingTitle, buildingStats, focusDescription;
+        private Text upgradeLabel, operationLabel, statusText, growthPlanLabel, growthModeLabel;
+        private Text materialText, surveyLabel;
+        private Button discoveryButton, discoveryActionButton, discoveryLocateButton;
+        private Text discoveryTitleText, discoveryBodyText, discoveryActionLabel;
+        private Action discoveryAction, discoveryLocateAction;
+        private Button saveButton, loadButton, buildButton, upgradeButton, operationButton, pauseButton, colonyMarker, growthPlanButton, growthModeButton;
+        private Button choiceA, choiceB;
+        private readonly Button[] focuses = new Button[3];
+        private readonly Button[] catalog = new Button[4];
+        private readonly Button[] speedButtons = new Button[3];
+        private readonly List<string> log = new List<string>();
+        private readonly string[] catalogIds = { "Outpost", "HabBlock", "Factory", "Utility" };
+        private string[] visibleIds = { "Outpost", "HabBlock", "Factory", "Utility" };
+        private readonly string[][] catalogGroups = { new[] { "Outpost", "HabBlock", "Factory", "Utility" }, new[] { "Mine", "Quarry", "Harvester", "PromethiumExtractor" }, new[] { "PromethiumGenerator", "StorageDepot", "GroundwaterPump", "DesalinationPump" }, new[] { "Smelter", "Works", "Refinery", "Manufactorum" }, new[] { "Farm" }, new[] { "Cognitorium" } };
+        private IndustrySystem industry;
+        private IndustrySystem Industry => industry!=null?industry:industry=GetComponent<IndustrySystem>();
+        private SimpleOrbitCamera orbit;
+        private readonly float[] materialTotals=new float[IndustryRules.MaterialCount];
+        private readonly float[] materialProduced=new float[IndustryRules.MaterialCount],materialConsumed=new float[IndustryRules.MaterialCount];
+        private static readonly int[] Speeds={1,3,10};
+        private static readonly string[] SurveyLabels={"OFF","ALL / ROUTES","IRON (RUST)","COPPER (GOLD)","STONE (GREY)","BIOMASS (GREEN)","CRYSTAL (BLUE)","PROMETHIUM (OCHRE)"};
+        private readonly Dictionary<Button,bool> buttonTones=new Dictionary<Button,bool>();
+        private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
+        private InputField buildingNameInput;
+        private bool refreshingBuildingName;
+        private ManagedBuilding selectedBuilding;
+        private Action choiceAHandler, choiceBHandler;
+        private Image habitabilityFill;
+        private float refreshTimer;
 #if UNITY_EDITOR
         private GameObject debugPanel;
-        private Button debugMarkersToggleButton;
-        private Text debugMarkersToggleLabel;
-        private InputField debugMarkerCountInput;
-        private InputField debugMarkerScaleInput;
-        private Button debugMarkersRespawnButton;
-        private Button debugMarkersClearButton;
-        private Button debugAdvanceTickButton;
-        private Button debugAddStockpileButton;
-        private Button debugTriggerEventButton;
 #endif
+        public bool HasOpenEvent => bootstrap != null && bootstrap.ChoosingLanding || eventPanel != null && eventPanel.activeSelf || discoveryPanel!=null&&discoveryPanel.activeSelf || guidePanel!=null&&guidePanel.activeSelf || researchPanel!=null&&researchPanel.activeSelf || MiningPanelOpen || FacilityPanelOpen;
+        public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
+        public ManagedBuilding InspectedBuilding => selectedBuilding;
+        private SimpleOrbitCamera Orbit => orbit!=null?orbit:orbit=Camera.main!=null?Camera.main.GetComponent<SimpleOrbitCamera>():null;
 
         private void Awake()
         {
             bootstrap = GetComponent<PlanetBootstrap>();
-            resourceSystem = GetComponent<ResourceSystem>();
-            environmentState = GetComponent<EnvironmentState>();
-            colonyEventSystem = GetComponent<ColonyEventSystem>();
-            settlement = GetComponent<Settlement>();
+            resourceSystem = GetComponent<ResourceSystem>(); environmentState = GetComponent<EnvironmentState>();
+            colonyEventSystem = GetComponent<ColonyEventSystem>(); settlement = GetComponent<Settlement>();
             buildingPlacement = GetComponent<BuildingPlacementController>();
-
-            EnsureEventSystemExists();
+            clock = GetComponent<ColonyClock>() ?? gameObject.AddComponent<ColonyClock>();
+            selection = GetComponent<BuildingSelection>() ?? gameObject.AddComponent<BuildingSelection>();
+            if (FindObjectOfType<EventSystem>() == null)
+                new GameObject("UnityEventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
+            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
-            ConfigureDefaultValues();
+            seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString();
+            ShowNewGamePanel(true); ShowHud(false); ShowEventPanel(false);
             ConfigureSystems();
         }
 
         public void ConfigureSystems()
         {
-            bootstrap.ConfigureMenu(this);
-            resourceSystem.ConfigureMenu(this);
-            environmentState.ConfigureMenu(this);
-            colonyEventSystem.ConfigureMenu(this);
-            settlement.ConfigureMenu(this);
-            buildingPlacement?.ConfigureMenu(this);
-        }
-
-        private void EnsureEventSystemExists()
-        {
-            if (FindObjectOfType<EventSystem>() != null)
-            {
-                return;
-            }
-
-            var eventSystemGO = new GameObject("EventSystem", typeof(EventSystem), typeof(StandaloneInputModule));
-            eventSystemGO.name = "UnityEventSystem";
+            bootstrap.ConfigureMenu(this); resourceSystem.ConfigureMenu(this);
+            environmentState.ConfigureMenu(this); colonyEventSystem.ConfigureMenu(this);
+            settlement.ConfigureMenu(this); buildingPlacement.ConfigureMenu(this);
         }
 
         private void BuildUI()
         {
-            defaultFont = Resources.GetBuiltinResource<Font>("Arial.ttf");
-
-            var canvasGO = new GameObject("UI");
-            canvasGO.transform.SetParent(transform, false);
-            canvas = canvasGO.AddComponent<Canvas>();
-            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            canvas.pixelPerfect = false;
-            canvasGO.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            canvasGO.AddComponent<GraphicRaycaster>();
-
-            BuildNewGamePanel(canvas.transform);
-            BuildHudPanel(canvas.transform);
-            BuildEventPanel(canvas.transform);
+            var root = new GameObject("UI", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+            root.transform.SetParent(transform, false);
+            canvas = root.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            var scaler = root.GetComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1280, 800); scaler.matchWidthOrHeight = 1;
+            hudPanel = new GameObject("HudPanel", typeof(RectTransform)); hudPanel.transform.SetParent(root.transform, false);
+            var hudRect = hudPanel.GetComponent<RectTransform>();
+            hudRect.anchorMin = Vector2.zero; hudRect.anchorMax = Vector2.one;
+            hudRect.offsetMin = hudRect.offsetMax = Vector2.zero;
+            BuildHeader(hudPanel.transform);
+            BuildPlanetPanel(hudPanel.transform);
+            BuildConstruction(hudPanel.transform);
+            BuildInspector(hudPanel.transform);
+            BuildShipHud(hudPanel.transform);
+            BuildEarthworks(hudPanel.transform);
+            var footer = Panel("NavigationBar", hudPanel.transform, new Vector2(0, 28), Vector2.zero, TextAnchor.LowerCenter);
+            StretchWidth(footer, 0);
+            statusText = Label("NavigationHelp", footer.transform,
+                "WASD MOVE   MMB PAN   RMB ROTATE   WHEEL ZOOM   SHIFT FAST   F COLONY   HOME ORBIT   SPACE PAUSE   |   30 MIN / YEAR AT 1x",
+                10, new Vector2(18, -7), 1220, 20, Muted);
+            colonyMarker = Button("ColonyLocator", hudPanel.transform, Vector2.zero, "COLONY PRIMUS  [F]", out _, 160, 30);
+            var markerRect = colonyMarker.GetComponent<RectTransform>();
+            markerRect.anchorMin = markerRect.anchorMax = new Vector2(0.5f, 0.5f); markerRect.pivot = new Vector2(0.5f, 0.5f);
+            colonyMarker.onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
+            BuildOutputTooltip();
+            BuildNewGame(root.transform);
+            BuildLanding(root.transform);
+            BuildEvent(root.transform);
+            BuildDiscovery(root.transform);
+            BuildMiningPanel(root.transform);
+            BuildFacilityPanel(root.transform);
+            BuildColonyGuide(root.transform);
+            BuildResearchPanel(root.transform);
+            BuildResourceDepositsPane();
 #if UNITY_EDITOR
-            BuildDebugPanel(canvas.transform);
+            BuildDebug(root.transform);
 #endif
         }
 
-        private void ConfigureDefaultValues()
+        private void BuildHeader(Transform parent)
         {
-            var randomSeed = UnityEngine.Random.Range(0, int.MaxValue);
-            seedInput.text = randomSeed.ToString();
-            selectedDifficulty = GameSettings.Difficulty.Standard;
-            UpdateDifficultyButtonLabel();
-            ShowNewGamePanel(true);
-            ShowHud(false);
-            ShowEventPanel(false);
-#if UNITY_EDITOR
-            UpdateDebugPanelState();
-#endif
-        }
-
-        private void BuildNewGamePanel(Transform parent)
-        {
-            newGamePanel = CreatePanel("NewGamePanel", parent, new Vector2(PanelWidth, PanelHeight),
-                new Vector2(10f, -10f), TextAnchor.UpperLeft);
-
-            CreateLabel("Title", newGamePanel.transform, "New Game", 20, TextAnchor.UpperLeft,
-                new Vector2(0f, -10f), PanelWidth - 30f);
-
-            CreateLabel("SeedLabel", newGamePanel.transform, "Seed", 14, TextAnchor.UpperLeft,
-                new Vector2(0f, -50f), PanelWidth - 30f);
-            seedInput = CreateInputField("SeedInput", newGamePanel.transform, new Vector2(0f, -80f));
-
-            CreateLabel("DifficultyLabel", newGamePanel.transform, "Difficulty", 14, TextAnchor.UpperLeft,
-                new Vector2(0f, -120f), PanelWidth - 30f);
-            difficultyButton = CreateButton("DifficultyButton", newGamePanel.transform, new Vector2(0f, -150f),
-                "Standard", out difficultyLabel, PanelWidth - 40f);
-            difficultyButton.onClick.AddListener(CycleDifficulty);
-
-            startButton = CreateButton("StartButton", newGamePanel.transform, new Vector2(0f, -190f),
-                "Begin", out _, (PanelWidth - 50f) * 0.5f);
-            startButton.onClick.AddListener(OnStartClicked);
-
-            saveButton = CreateButton("SaveButton", newGamePanel.transform,
-                new Vector2((PanelWidth * 0.5f) + 5f, -190f), "Save", out _, (PanelWidth - 50f) * 0.5f);
-            saveButton.onClick.AddListener(OnSaveClicked);
-
-            loadButton = CreateButton("LoadButton", newGamePanel.transform,
-                new Vector2((PanelWidth * 0.5f) + 5f, -150f), "Load", out _, (PanelWidth - 50f) * 0.5f);
-            loadButton.onClick.AddListener(OnLoadClicked);
-        }
-
-        private void BuildHudPanel(Transform parent)
-        {
-            hudPanel = CreatePanel("HudPanel", parent, new Vector2(HudPanelWidth, 320f),
-                new Vector2(-10f, -10f), TextAnchor.UpperRight);
-
-            resourceText = CreateLabel("ResourceReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -20f), HudPanelWidth - 20f);
-
-            environmentText = CreateLabel("EnvironmentReadout", hudPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -120f), HudPanelWidth - 20f);
-
-            eventLogText = CreateLabel("EventLog", hudPanel.transform, "Log:\n", 12, TextAnchor.UpperLeft,
-                new Vector2(-HudPanelWidth + 10f, -200f), HudPanelWidth - 20f, 120f);
-
-            buildButton = CreateButton("BuildButton", hudPanel.transform, new Vector2(-HudPanelWidth + 10f, -260f),
-                "Place Structure", out buildButtonLabel, HudPanelWidth - 20f);
-            buildButton.onClick.AddListener(OnBuildButtonClicked);
-        }
-
-        private void BuildEventPanel(Transform parent)
-        {
-            eventPanel = CreatePanel("EventPanel", parent, new Vector2(460f, 200f), new Vector2(0f, 0f), TextAnchor.MiddleCenter);
-
-            eventTitleText = CreateLabel("EventTitle", eventPanel.transform, string.Empty, 18, TextAnchor.UpperCenter,
-                new Vector2(0f, -15f), 420f);
-            eventBodyText = CreateLabel("EventBody", eventPanel.transform, string.Empty, 14, TextAnchor.UpperLeft,
-                new Vector2(-220f, -60f), 420f, 120f);
-
-            eventChoiceAButton = CreateButton("ChoiceA", eventPanel.transform, new Vector2(-140f, -150f),
-                "Choice A", out eventChoiceALabel, 180f);
-            eventChoiceBButton = CreateButton("ChoiceB", eventPanel.transform, new Vector2(140f, -150f),
-                "Choice B", out eventChoiceBLabel, 180f);
-
-            eventChoiceAButton.onClick.AddListener(() => eventChoiceAHandler?.Invoke());
-            eventChoiceBButton.onClick.AddListener(() => eventChoiceBHandler?.Invoke());
-        }
-
-        private GameObject CreatePanel(string name, Transform parent, Vector2 size, Vector2 anchoredPosition, TextAnchor anchor)
-        {
-            var panel = new GameObject(name, typeof(RectTransform), typeof(Image));
-            panel.transform.SetParent(parent, false);
-            var rect = panel.GetComponent<RectTransform>();
-            rect.sizeDelta = size;
-            switch (anchor)
+            var header = Panel("CommandHeader", parent, new Vector2(0, 88), new Vector2(0, -12), TextAnchor.UpperLeft);
+            StretchWidth(header, 16);
+            Accent(header, ForgeRed);
+            Label("IdentityTag", header.transform, "ADEPTUS MECHANICUS  /  M31", 10, new Vector2(18, -13), 205, 18, Gold);
+            Label("Identity", header.transform, "FORGE WORLD", 18, new Vector2(18, -34), 205, 28, Ivory);
+            Metric(header.transform, "Stockpile", "FOOD / RESERVE", 218, out stockpileValue, 136);
+            Metric(header.transform, "WaterSupply", "WATER / RESERVE", 358, out waterSupplyValue, 136);
+            Metric(header.transform, "Net", "BUILD SUPPLIES [?]", 498, out netValue, 158);
+            Metric(header.transform, "Population", "POPULATION [?]", 660, out populationValue, 130);
+            Metric(header.transform, "Workforce", "WORKERS / HEALTH", 794, out workforceValue, 112);
+            stockpileValue.fontSize = waterSupplyValue.fontSize = netValue.fontSize = 15;
+            workforceValue.fontSize = 14;
+            AddOutputHover(header.transform, "Population", 660, 130);
+            AddOutputHover(header.transform, "Net", 498, 158);
+            AddOutputHover(header.transform, "Workforce", 794, 112);
+            var time = Panel("TimeControl", header.transform, new Vector2(326, 76), new Vector2(-8, -6), TextAnchor.UpperRight, false);
+            dateText = Label("CalendarDate", time.transform, "", 16, new Vector2(8, -2), 234, 23, Ivory);
+            clockText = Label("PlayedTime", time.transform, "", 10, new Vector2(8, -25), 238, 17, Muted);
+            pauseButton = Button("PauseSimulation", time.transform, new Vector2(8, -45), "II", out _, 43, 25);
+            pauseButton.onClick.AddListener(() => clock.TogglePause());
+            var speeds = Speeds;
+            for (var i = 0; i < speeds.Length; i++)
             {
-                case TextAnchor.UpperLeft:
-                    rect.anchorMin = new Vector2(0f, 1f);
-                    rect.anchorMax = new Vector2(0f, 1f);
-                    rect.pivot = new Vector2(0f, 1f);
-                    break;
-                case TextAnchor.UpperRight:
-                    rect.anchorMin = new Vector2(1f, 1f);
-                    rect.anchorMax = new Vector2(1f, 1f);
-                    rect.pivot = new Vector2(1f, 1f);
-                    break;
-                case TextAnchor.MiddleCenter:
-                    rect.anchorMin = new Vector2(0.5f, 0.5f);
-                    rect.anchorMax = new Vector2(0.5f, 0.5f);
-                    rect.pivot = new Vector2(0.5f, 0.5f);
-                    break;
-                default:
-                    rect.anchorMin = new Vector2(0.5f, 0.5f);
-                    rect.anchorMax = new Vector2(0.5f, 0.5f);
-                    rect.pivot = new Vector2(0.5f, 0.5f);
-                    break;
+                var speed = speeds[i];
+                speedButtons[i] = Button("Speed" + speed, time.transform, new Vector2(58 + i * 54, -45), speed + "x", out _, 47, 25);
+                speedButtons[i].onClick.AddListener(() => clock.SetSpeed(speed));
             }
-
-            rect.anchoredPosition = anchoredPosition;
-            panel.GetComponent<Image>().color = new Color(0f, 0f, 0f, 0.5f);
-            return panel;
+            saveButton = Button("SaveButton", time.transform, new Vector2(248, -4), "SAVE", out _, 68, 27);
+            saveButton.onClick.AddListener(() => bootstrap.SaveToFile());
+            loadButton = Button("HudLoadButton", time.transform, new Vector2(248, -42), "LOAD", out _, 68, 27);
+            loadButton.onClick.AddListener(() => bootstrap.LoadFromFile());
         }
 
-        private Text CreateLabel(string name, Transform parent, string content, int fontSize, TextAnchor alignment,
-            Vector2 anchoredPosition, float width, float height = 60f)
+        private void Metric(Transform header, string name, string title, float x, out Text value, float width)
         {
-            var labelGO = new GameObject(name, typeof(RectTransform));
-            labelGO.transform.SetParent(parent, false);
-            var rect = labelGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, height);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var text = labelGO.AddComponent<Text>();
-            text.text = content;
-            text.fontSize = fontSize;
-            text.color = Color.white;
-            text.font = defaultFont;
-            text.alignment = alignment;
-            text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate;
-            return text;
+            Label(name + "Title", header, title, 10, new Vector2(x, -18), width, 16, Gold);
+            value = Label(name + "Value", header, "0", 23, new Vector2(x, -41), width, 35, Ivory);
         }
 
-        private InputField CreateInputField(string name, Transform parent, Vector2 anchoredPosition, float width = PanelWidth - 40f,
-            InputField.ContentType contentType = InputField.ContentType.IntegerNumber, string placeholderText = "Random")
+        private void BuildPlanetPanel(Transform parent)
         {
-            var inputGO = new GameObject(name, typeof(RectTransform), typeof(Image));
-            inputGO.transform.SetParent(parent, false);
-            var rect = inputGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, 32f);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var image = inputGO.GetComponent<Image>();
-            image.color = new Color(0.15f, 0.15f, 0.15f, 0.9f);
-
-            var textGO = new GameObject("Text", typeof(RectTransform));
-            textGO.transform.SetParent(inputGO.transform, false);
-            var textRect = textGO.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = new Vector2(10f, 6f);
-            textRect.offsetMax = new Vector2(-10f, -6f);
-
-            var text = textGO.AddComponent<Text>();
-            text.font = defaultFont;
-            text.fontSize = 14;
-            text.color = Color.white;
-            text.alignment = TextAnchor.MiddleLeft;
-
-            var placeholderGO = new GameObject("Placeholder", typeof(RectTransform));
-            placeholderGO.transform.SetParent(inputGO.transform, false);
-            var placeholderRect = placeholderGO.GetComponent<RectTransform>();
-            placeholderRect.anchorMin = Vector2.zero;
-            placeholderRect.anchorMax = Vector2.one;
-            placeholderRect.offsetMin = new Vector2(10f, 6f);
-            placeholderRect.offsetMax = new Vector2(-10f, -6f);
-
-            var placeholder = placeholderGO.AddComponent<Text>();
-            placeholder.font = defaultFont;
-            placeholder.fontSize = 14;
-            placeholder.color = new Color(1f, 1f, 1f, 0.35f);
-            placeholder.alignment = TextAnchor.MiddleLeft;
-            placeholder.text = placeholderText;
-
-            var inputField = inputGO.AddComponent<InputField>();
-            inputField.textComponent = text;
-            inputField.placeholder = placeholder;
-            inputField.contentType = contentType;
-            return inputField;
+            var panel = Panel("PlanetStatus", parent, new Vector2(248, 236), new Vector2(16, -116), TextAnchor.UpperLeft);
+            Accent(panel, Gold);
+            Label("PlanetStatusTitle", panel.transform, "PLANETARY VITALS", 10, new Vector2(16, -17), 150, 20, Gold);
+            environmentText = Label("EnvironmentReadout", panel.transform, "", 14, new Vector2(16, -49), 202, 119, Ivory);
+            var track = Panel("HabitabilityTrack", panel.transform, new Vector2(200, 4), new Vector2(16, -176), TextAnchor.UpperLeft, false);
+            track.GetComponent<Image>().color = ButtonBase;
+            var fill = Panel("HabitabilityFill", track.transform, new Vector2(200, 4), Vector2.zero, TextAnchor.UpperLeft, false);
+            habitabilityFill = fill.GetComponent<Image>(); habitabilityFill.color = Gold;
+            Button("ViewColony", panel.transform, new Vector2(16, -198), "COLONY  [F]", out _, 96, 26)
+                .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
+            Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
+                .onClick.AddListener(() => Orbit?.FrameTarget());
+            var journal = Panel("OperationsLog", parent, new Vector2(248, 230), new Vector2(16, -366), TextAnchor.UpperLeft);
+            Accent(journal, ForgeRed);
+            Label("JournalTitle", journal.transform, "LOGISTICA / MANIFEST", 11, new Vector2(16, -13), 212, 20, Gold);
+            materialText = Label("MaterialInventory", journal.transform, "", 10, new Vector2(16, -37), 206, 70, Ivory);
+            Button("SurveyOverlay", journal.transform, new Vector2(16, -108), "SURVEY: OFF", out surveyLabel, 200, 23)
+                .onClick.AddListener(() => { if(Industry!=null) Industry.SetOverlay((Industry.Overlay+1)%8); });
+            Button("VisitDeposit", journal.transform, new Vector2(16, -135), "VISIT NEAREST DEPOSIT", out _, 200, 23)
+                .onClick.AddListener(VisitDeposit);
+            discoveryButton=Button("DiscoveryStatus",journal.transform,new Vector2(16,-162),"SITES 0 / 0",out _,200,23);
+            discoveryButton.onClick.AddListener(OpenDiscoveries);
+            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -218), 200, 14, Muted);
+            Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out var expeditionLabel, 87, 24)
+                .onClick.AddListener(() => ShowNewGamePanel(true));
+            expeditionLabel.fontSize=11;
         }
 
-        private Button CreateButton(string name, Transform parent, Vector2 anchoredPosition, string label,
-            out Text labelText, float width)
+        private void BuildConstruction(Transform parent)
         {
-            var buttonGO = new GameObject(name, typeof(RectTransform), typeof(Image));
-            buttonGO.transform.SetParent(parent, false);
-            var rect = buttonGO.GetComponent<RectTransform>();
-            rect.sizeDelta = new Vector2(width, 36f);
-            rect.anchorMin = rect.anchorMax = new Vector2(0f, 1f);
-            rect.pivot = new Vector2(0f, 1f);
-            rect.anchoredPosition = anchoredPosition;
-
-            var image = buttonGO.GetComponent<Image>();
-            image.color = new Color(0.2f, 0.2f, 0.2f, 0.9f);
-
-            var button = buttonGO.AddComponent<Button>();
-            var colors = button.colors;
-            colors.normalColor = image.color;
-            colors.highlightedColor = new Color(0.3f, 0.3f, 0.3f, 0.95f);
-            colors.pressedColor = new Color(0.1f, 0.1f, 0.1f, 1f);
-            button.colors = colors;
-
-            var textGO = new GameObject("Label", typeof(RectTransform));
-            textGO.transform.SetParent(buttonGO.transform, false);
-            var textRect = textGO.GetComponent<RectTransform>();
-            textRect.anchorMin = Vector2.zero;
-            textRect.anchorMax = Vector2.one;
-            textRect.offsetMin = Vector2.zero;
-            textRect.offsetMax = Vector2.zero;
-
-            labelText = textGO.AddComponent<Text>();
-            labelText.font = defaultFont;
-            labelText.fontSize = 16;
-            labelText.color = Color.white;
-            labelText.alignment = TextAnchor.MiddleCenter;
-            labelText.text = label;
-
-            return button;
-        }
-
-        private void CycleDifficulty()
-        {
-            var order = GameSettings.GetAllDefinitions();
-            var index = 0;
-            for (var i = 0; i < order.Count; i++)
+            var deck = Panel("ConstructionDeck", parent, new Vector2(1000, 166), new Vector2(0, 38), TextAnchor.LowerCenter);
+            Accent(deck, ForgeRed);
+            Label("ConstructionTitle", deck.transform, "PRODUCTION & CONSTRUCTION", 10, new Vector2(16, -11), 300, 18, Gold);
+            Button("OpenEarthworks",deck.transform,new Vector2(710,-9),"EARTHWORKS",out var earthworkLabel,132,27)
+                .onClick.AddListener(()=>Earthworks.Open(EarthworkMode.Move));
+            earthworkLabel.color=EarthworksController.ColorFor(EarthworkMode.Flatten);
+            Button("OpenBulldoze",deck.transform,new Vector2(850,-9),"BULLDOZE",out var bulldozeLabel,132,27)
+                .onClick.AddListener(()=>Earthworks.Open(EarthworkMode.Demolish));
+            bulldozeLabel.color=EarthworksController.ColorFor(EarthworkMode.Demolish);
+            var categoryNames=new[]{"COLONY","EXTRACTION","UTILITIES","PROCESSING","FOOD","RESEARCH"};
+            for(var g=0;g<catalogGroups.Length;g++)
             {
-                if (order[i].difficulty == selectedDifficulty)
+                var group=g;Button("CatalogGroup"+g,deck.transform,new Vector2(210+g*82,-9),categoryNames[g],out var categoryLabel,78,27)
+                    .onClick.AddListener(()=>SetCatalogGroup(group));
+                categoryLabel.fontSize=10;
+            }
+            for (var i = 0; i < 4; i++)
+            {
+                var index=i;
+                var id = catalogIds[i];
+                catalog[i] = Button("BuildCard" + id, deck.transform, new Vector2(16 + i * 171, -49),
+                    ConstructionCard(id), out var label, 161, 80);
+                label.fontSize = 12; label.lineSpacing = 1.1f;
+                catalog[i].onClick.AddListener(() => { selection.Select(null); buildingPlacement.SelectStructure(visibleIds[index]); });
+            }
+            structureDetails = Label("StructureDetails", deck.transform, "", 11, new Vector2(710, -44), 272, 68, Muted);
+            buildButton = Button("BuildButton", deck.transform, new Vector2(710, -122), "DEPLOY STRUCTURE", out buildButtonLabel, 272, 29);
+            buildButton.onClick.AddListener(() =>
+            {
+                selection.Select(null);
+                if (buildingPlacement.IsPlacing) buildingPlacement.CancelPlacement();
+                else buildingPlacement.BeginPlacement();
+            });
+        }
+
+        private void BuildInspector(Transform parent)
+        {
+            inspector = Panel("BuildingInspector", parent, new Vector2(310, 558), new Vector2(-16, -104), TextAnchor.UpperRight);
+            Accent(inspector, Gold);
+            Label("InspectorTag", inspector.transform, "MAGOS / STRUCTURE DATA", 10, new Vector2(18, -16), 260, 20, Gold);
+            Button("CloseInspector", inspector.transform, new Vector2(252, -12), "X", out _, 26, 26)
+                .onClick.AddListener(() => selection.Select(null));
+            Label("BuildingNameCaption",inspector.transform,"NAME / EDIT",10,new Vector2(18,-42),260,16,Gold);
+            var nameBox=Panel("BuildingName",inspector.transform,new Vector2(258,38),new Vector2(18,-60),TextAnchor.UpperLeft);
+            buildingNameInput=nameBox.AddComponent<InputField>();buildingNameInput.characterLimit=FacilityIdentityRules.NameLimit;
+            buildingTitle=Label("SelectedBuildingTitle",nameBox.transform,"",19,new Vector2(6,-4),246,30,Ivory);
+            buildingTitle.supportRichText=false;buildingNameInput.textComponent=buildingTitle;
+            buildingNameInput.onEndEdit.AddListener(value=>{
+                if(refreshingBuildingName || selectedBuilding==null)return;
+                if(!selectedBuilding.Rename(value))AppendEventLog("Use a unique, non-empty building name (up to 40 characters).");
+                RefreshBuilding();
+            });
+            buildingStats = Label("SelectedBuildingStats", inspector.transform, "", 13, new Vector2(18, -110), 258, 160, Ivory);
+            var statsViewport=new GameObject("Building detail scroll (mouse wheel)",typeof(RectTransform),typeof(Image),typeof(RectMask2D),typeof(ScrollRect));
+            statsViewport.GetComponent<Image>().color=Color.clear;
+            statsViewport.transform.SetParent(inspector.transform,false);
+            var viewportRect=statsViewport.GetComponent<RectTransform>();viewportRect.anchorMin=viewportRect.anchorMax=new Vector2(0,1);
+            viewportRect.pivot=new Vector2(0,1);viewportRect.anchoredPosition=new Vector2(18,-110);viewportRect.sizeDelta=new Vector2(258,154);
+            buildingStats.transform.SetParent(statsViewport.transform,false);
+            var statsRect=buildingStats.rectTransform;statsRect.anchorMin=statsRect.anchorMax=new Vector2(0,1);statsRect.pivot=new Vector2(0,1);
+            statsRect.anchoredPosition=Vector2.zero;statsRect.sizeDelta=new Vector2(258,160);
+            buildingStats.gameObject.AddComponent<ContentSizeFitter>().verticalFit=ContentSizeFitter.FitMode.PreferredSize;
+            var statsScroll=statsViewport.GetComponent<ScrollRect>();statsScroll.viewport=viewportRect;statsScroll.content=statsRect;
+            statsScroll.horizontal=false;statsScroll.movementType=ScrollRect.MovementType.Clamped;statsScroll.scrollSensitivity=18;
+            Label("FocusTag", inspector.transform, "OPERATIONAL FOCUS", 10, new Vector2(18, -268), 258, 20, Gold);
+            for (var i = 0; i < 3; i++)
+            {
+                var focus = i;
+                focuses[i] = Button("BuildingFocus" + i, inspector.transform, new Vector2(18, -291 - i * 33), "", out _, 258, 28);
+                focuses[i].onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.SetFocus(focus); RefreshBuilding(); });
+            }
+            focusDescription = Label("FocusDescription", inspector.transform, "", 11, new Vector2(18, -386), 258, 38, Muted);
+            growthPlanButton = Button("GrowthPlan", inspector.transform, new Vector2(18, -424), "", out growthPlanLabel, 258, 27);
+            growthPlanButton.onClick.AddListener(() => { if (selectedBuilding != null && !selectedBuilding.State.improving) selectedBuilding.SetGrowthPlan(selectedBuilding.State.growthPlan == 0 ? 1 : selectedBuilding.State.growthPlan == 1 ? 2 : 0); RefreshBuilding(); });
+            growthModeButton = Button("GrowthMode", inspector.transform, new Vector2(18, -454), "", out growthModeLabel, 258, 27);
+            growthModeButton.onClick.AddListener(() => { selectedBuilding?.ToggleAutomaticImprovement(); RefreshBuilding(); });
+            upgradeButton = Button("UpgradeBuilding", inspector.transform, new Vector2(18, -485), "", out upgradeLabel, 124, 30);
+            upgradeButton.onClick.AddListener(() =>
+            {
+                if(selectedBuilding!=null)
                 {
-                    index = i;
-                    break;
+                    if(selectedBuilding.Upgrade())AppendEventLog(selectedBuilding.DisplayName+" expanded.");
+                    else if(selectedBuilding.Id=="Farm")AppendEventLog("No free, suitable expansion territory for "+selectedBuilding.DisplayName+".");
                 }
-            }
-
-            index = (index + 1) % order.Count;
-            selectedDifficulty = order[index].difficulty;
-            UpdateDifficultyButtonLabel();
+                RefreshBuilding();
+            });
+            operationButton = Button("ToggleBuildingOperation", inspector.transform, new Vector2(152, -485), "", out operationLabel, 124, 30);
+            operationButton.onClick.AddListener(() => { if (selectedBuilding != null) selectedBuilding.ToggleOperation(); RefreshBuilding(); });
+            excavationButton = Button("ExcavationPlan", inspector.transform, new Vector2(18, -519), "EXCAVATION PLAN", out _, 258, 26);
+            excavationButton.onClick.AddListener(() => {
+                if(selectedBuilding!=null && selectedBuilding.Residential!=null){selectedBuilding.Residential.SelectedModule=-1;RefreshBuilding();}
+                else if(selectedBuilding!=null && (selectedBuilding.Id=="Manufactorum" || selectedBuilding.Id=="StorageDepot")) OpenFacilityPanel(selectedBuilding);
+                else OpenExcavationPlan(selectedBuilding);
+            });
+            inspector.SetActive(false);
         }
 
-        private void UpdateDifficultyButtonLabel()
+        private void BuildNewGame(Transform parent)
         {
-            var definition = GameSettings.GetDefinition(selectedDifficulty);
-            difficultyLabel.text = definition.displayName;
+            newGamePanel = Panel("NewGamePanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
+            var backdrop = newGamePanel.GetComponent<RectTransform>();
+            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one;
+            backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
+            newGamePanel.GetComponent<Image>().color = new Color(0.009f, 0.017f, 0.025f, 1);
+            Label("MainIdentity", newGamePanel.transform, "WH30K  /  COLONY COMMAND", 20, new Vector2(34, -32), 600, 36, Ivory);
+            Label("MainSubtitle", newGamePanel.transform, "PLANETARY EXPEDITION AUTHORITY", 11, new Vector2(35, -78), 600, 24, Gold);
+            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(540, 408), Vector2.zero, TextAnchor.MiddleCenter);
+            Label("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY  /  M31", 11, new Vector2(34, -30), 470, 24, Gold);
+            Label("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 27, new Vector2(34, -67), 475, 46, Ivory);
+            Label("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 14, new Vector2(34, -119), 470, 30, Muted);
+            Label("SeedTag", card.transform, "GENERATION SEED", 10, new Vector2(34, -176), 470, 20, Gold);
+            var input = Panel("SeedInput", card.transform, new Vector2(472, 36), new Vector2(34, -203), TextAnchor.UpperLeft, false);
+            input.GetComponent<Image>().color = ButtonBase;
+            seedInput = input.AddComponent<InputField>();
+            var inputText = Label("SeedText", input.transform, "", 15, new Vector2(12, -8), 448, 26, Ivory);
+            seedInput.textComponent = inputText; seedInput.contentType = InputField.ContentType.IntegerNumber;
+            difficultyLabel = Label("LandingModeHint", card.transform,
+                "LANDING CATEGORY AND STARTING CONDITIONS ARE SELECTED ON THE PLANET",
+                11, new Vector2(34, -255), 472, 36, Gold);
+            Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
+                .onClick.AddListener(() =>
+                {
+                    if(GameSettings.HasActiveGame) {ShowNewGamePanel(false);ShowHud(true);}
+                    else bootstrap.LoadFromFile();
+                });
+            Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44)
+                .onClick.AddListener(() =>
+                {
+                    var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
+                    bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
+                });
         }
 
-        private void OnStartClicked()
+        private void BuildEvent(Transform parent)
         {
-            var seed = UnityEngine.Random.Range(0, int.MaxValue);
-            if (!string.IsNullOrWhiteSpace(seedInput.text) && int.TryParse(seedInput.text, out var parsedSeed))
+            eventPanel = new GameObject("EventPanel", typeof(RectTransform), typeof(Image));
+            eventPanel.transform.SetParent(parent, false);
+            var rect = eventPanel.GetComponent<RectTransform>();
+            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
+            eventPanel.GetComponent<Image>().color = new Color(0.005f, 0.008f, 0.012f, 0.62f);
+            var modal = Panel("DecisionCard", eventPanel.transform, new Vector2(620, 330), Vector2.zero, TextAnchor.MiddleCenter);
+            Label("DecisionTag", modal.transform, "PRIORITY TRANSMISSION  /  DECISION REQUIRED", 11, new Vector2(26, -22), 566, 25, Gold);
+            eventTitleText = Label("EventTitle", modal.transform, "", 26, new Vector2(26, -63), 566, 42, Ivory);
+            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 98, Ivory);
+            choiceA = Button("ChoiceA", modal.transform, new Vector2(26, -239), "", out choiceALabel, 273, 64);
+            choiceB = Button("ChoiceB", modal.transform, new Vector2(321, -239), "", out choiceBLabel, 273, 64);
+            choiceALabel.fontSize = choiceBLabel.fontSize = 13;
+            choiceA.onClick.AddListener(() => choiceAHandler?.Invoke()); choiceB.onClick.AddListener(() => choiceBHandler?.Invoke());
+        }
+
+        private void BuildDiscovery(Transform parent)
+        {
+            discoveryPanel=new GameObject("DiscoveryPanel",typeof(RectTransform),typeof(Image));discoveryPanel.transform.SetParent(parent,false);
+            var rect=discoveryPanel.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
+            discoveryPanel.GetComponent<Image>().color=new Color(.005f,.008f,.012f,.62f);
+            var card=Panel("DiscoveryCard",discoveryPanel.transform,new Vector2(620,452),Vector2.zero,TextAnchor.MiddleCenter);
+            Label("DiscoveryTag",card.transform,"EXPEDITION RECORD  /  SURVEY INTELLIGENCE",11,new Vector2(28,-24),564,22,Gold);
+            discoveryTitleText=Label("DiscoveryTitle",card.transform,"",22,new Vector2(28,-57),564,58,Ivory);
+            discoveryBodyText=Label("DiscoveryDetails",card.transform,"",14,new Vector2(28,-123),564,204,Ivory);
+            Button("PreviousDiscovery",card.transform,new Vector2(28,-340),"< PREVIOUS",out _,162,30).onClick.AddListener(()=>Industry?.BrowseDiscoveredLocation(-1));
+            discoveryLocateButton=Button("LocateDiscovery",card.transform,new Vector2(205,-340),"LOCATE SITE",out _,210,30);
+            discoveryLocateButton.onClick.AddListener(()=>{var action=discoveryLocateAction;ResetDiscoveryPanel();action?.Invoke();});
+            Button("NextDiscovery",card.transform,new Vector2(430,-340),"NEXT >",out _,162,30).onClick.AddListener(()=>Industry?.BrowseDiscoveredLocation(1));
+            discoveryActionButton=Button("DiscoveryAction",card.transform,new Vector2(28,-388),"",out discoveryActionLabel,350,38);
+            discoveryActionButton.onClick.AddListener(()=>{var action=discoveryAction;ResetDiscoveryPanel();action?.Invoke();});
+            Button("CloseDiscovery",card.transform,new Vector2(394,-388),"CLOSE",out _,198,38).onClick.AddListener(CloseDiscoveryPanel);
+            discoveryPanel.SetActive(false);
+        }
+
+        private void Update()
+        {
+            RefreshLanding();
+            RefreshEarthworks();
+            if(FacilityPanelOpen && Input.GetKeyDown(KeyCode.Escape)){CloseFacilityPanel();return;}
+            var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+            var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
+            if (!typing)
             {
-                seed = parsedSeed;
+                if (Input.GetKeyDown(KeyCode.Escape) && researchPanel != null && researchPanel.activeSelf) { CloseResearchPanel(); return; }
+                if (Input.GetKeyDown(KeyCode.Escape) && guidePanel != null && guidePanel.activeSelf) { CloseGuide(); return; }
+                if (Input.GetKeyDown(KeyCode.Escape) && resourceDepositsPanel.activeSelf && !resourceDepositsPinned) { resourceDepositsPanel.SetActive(false); return; }
+                if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) bootstrap.SaveToFile();
+                if (Input.GetKeyDown(KeyCode.F9)) bootstrap.LoadFromFile();
+                if (Input.GetKeyDown(KeyCode.Space) && GameSettings.HasActiveGame && !bootstrap.ChoosingLanding) clock.TogglePause();
+#if UNITY_EDITOR
+                if (Input.GetKeyDown(KeyCode.F12)) debugPanel.SetActive(!debugPanel.activeSelf);
+#endif
             }
-
-            bootstrap.BeginNewGame(seed, selectedDifficulty);
+            refreshTimer += Time.unscaledDeltaTime;
+            if (refreshTimer >= 0.15f) { refreshTimer = 0; RefreshClock(); RefreshBuilding(); RefreshMaterials(); RefreshOutputTooltip(); RefreshFacilityPanel(); RefreshResearchPanel(); RefreshResourceDepositsPane(); RefreshFoundingObjectives(); }
+            UpdateColonyMarker();
         }
 
-        private void OnSaveClicked()
+        private void RefreshClock()
         {
-            bootstrap.SaveToFile();
+            var snapshot = clock.Snapshot;
+            dateText.text = $"{ColonyCalendar.Day(snapshot.simulationSeconds):00} {months[ColonyCalendar.Month(snapshot.simulationSeconds) - 1]}  /  YEAR {ColonyCalendar.Year(snapshot.simulationSeconds):000}";
+            var played = TimeSpan.FromSeconds(snapshot.playedSeconds);
+            var mode = clock.DecisionPending || clock.MiningDecisionPending ? "DECISION PENDING" : clock.Paused ? "PAUSED" : clock.Speed + "x SPEED";
+            clockText.text = $"{mode}   |   PLAYED {(int)played.TotalHours:00}:{played.Minutes:00}:{played.Seconds:00}";
+            Tone(pauseButton, clock.Paused);
+            var speeds = Speeds;
+            for (var i = 0; i < speeds.Length; i++) Tone(speedButtons[i], !clock.Paused && clock.Speed == speeds[i]);
         }
 
-        private void OnLoadClicked()
+        private void UpdateColonyMarker()
         {
-            bootstrap.LoadFromFile();
+            if (colonyMarker == null || !GameSettings.HasActiveGame || bootstrap.ActivePlanet == null || Orbit == null)
+            { if (colonyMarker != null) colonyMarker.gameObject.SetActive(false); return; }
+            var world = Orbit.ColonyWorldPosition;
+            var camera = Camera.main;
+            var screen = camera.WorldToScreenPoint(world);
+            var normal = (world - bootstrap.ActivePlanet.transform.position).normalized;
+            var visible = screen.z > 0 && Vector3.Dot(normal, camera.transform.position - world) > 0
+                && Vector3.Distance(camera.transform.position, world) > 1200;
+            colonyMarker.gameObject.SetActive(visible);
+            if (visible && RectTransformUtility.ScreenPointToLocalPointInRectangle(canvas.GetComponent<RectTransform>(), screen, null, out var local))
+                colonyMarker.GetComponent<RectTransform>().anchoredPosition = local;
         }
 
-        private void OnBuildButtonClicked()
+        public void ShowBuilding(ManagedBuilding building)
         {
-            if (buildingPlacement == null)
+            if (building != selectedBuilding && building != null && resourceDepositsPanel != null && !resourceDepositsPinned) resourceDepositsPanel.SetActive(false);
+            if(FacilityPanelOpen && facilityBuilding!=building)CloseFacilityPanel();
+            if(building!=null && building.Id=="Farm")building=building.EntityRoot??building;
+            selectedBuilding = building; inspector.SetActive(building != null); RefreshBuilding();
+            if(building!=null && (building.Id=="Manufactorum" || building.Id=="StorageDepot")) OpenFacilityPanel(building);
+        }
+        private void RefreshBuilding()
+        {
+            var selectingShip = selectedBuilding != null && selectedBuilding.Id == "ColonyShip";
+            if (shipPanel != null) shipPanel.SetActive(selectingShip);
+            if (selectingShip) { inspector.SetActive(false); RefreshShipHud(); return; }
+            if (selectedBuilding == null) { inspector.SetActive(false); return; }
+            inspector.SetActive(true);
+            var state = selectedBuilding.State; var e = selectedBuilding.Economy; var impact = selectedBuilding.Impact;
+            if(!buildingNameInput.isFocused){refreshingBuildingName=true;buildingNameInput.SetTextWithoutNotify(selectedBuilding.DisplayName);refreshingBuildingName=false;}
+            if(selectedBuilding.Residential==null)buildingStats.text = $"TIER {state.level + 1}   /   {(state.offline ? "OFFLINE" : "OPERATIONAL")}\nHousing {e.capacity:0}     Jobs {e.jobs:0}\nCO2 impact  {impact.co2Delta:+0.00;-0.00;0} / s at full staffing\n{selectedBuilding.ImprovementStatus}";
+            if(selectedBuilding.SurveyRadius>0)buildingStats.text+=$"\nSurvey radius {selectedBuilding.SurveyRadius:0} m\nRevealed sites {Industry?.DiscoveredCount??0}/{Industry?.DiscoveryCount??0}";
+            if(IndustryRules.Facility(selectedBuilding.Id) && Industry!=null)
+                buildingStats.text=$"TIER {state.level+1} / {(state.offline?"OFFLINE":"OPERATIONAL")}   Jobs {e.jobs:0}\n"+Industry.Status(selectedBuilding)+"\n"+selectedBuilding.ImprovementStatus;
+            if(selectedBuilding.Id=="Farm" && Industry!=null)buildingStats.text=Industry.Status(selectedBuilding);
+            if(selectedBuilding.Id=="DevSupply")
+                buildingStats.text=$"DEVELOPER TEST SOURCE / {(state.offline?"OFF":"ON")}\nUnlimited construction supplies and advanced supplies while active.\nUse { (state.offline?"RESUME":"SUSPEND") } below to toggle.";
+            for (var i = 0; i < 3; i++)
             {
-                return;
+                focuses[i].gameObject.SetActive(selectedBuilding.Id != "Mine");
+                focuses[i].GetComponentInChildren<Text>().text = BuildingOperationRules.FocusName(selectedBuilding.Id, i);
+                Tone(focuses[i], state.focus == i);
+                focuses[i].interactable = selectedBuilding.Id != "ColonyShip";
             }
-
-            if (buildingPlacement.IsPlacing)
+            focusDescription.text = selectedBuilding.Id == "Mine"
+                ? BuildingOperationRules.FocusName("Mine", state.focus) + "\nSet automatically at placement."
+                : BuildingOperationRules.FocusDescription(selectedBuilding.Id, state.focus);
+            upgradeButton.interactable = selectedBuilding.CanUpgrade;
+            upgradeLabel.text = state.level >= 2 ? "MAX TIER" : state.improving ? "IN PROGRESS" : $"IMPROVE  {selectedBuilding.UpgradeCost * ColonyRules.LegacyProjectSupplyScale:0.##} SUP";
+            growthPlanLabel.text = "EXPANSION: " + AdaptiveBuildingRules.PlanName(state.growthPlan) + "  [CHANGE]";
+            growthModeLabel.text = state.manualImprovements ? "MILESTONE: MANUAL" : "MILESTONE: AUTOMATIC";
+            growthPlanButton.interactable = state.level < 2 && !state.improving;
+            growthModeButton.interactable = state.level < 2 && !state.improving;
+            upgradeButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+#if UNITY_EDITOR
+            if(selectedBuilding.Id=="Farm") { upgradeButton.gameObject.SetActive(true); upgradeButton.interactable=Industry.HasFarmCapacity(selectedBuilding); upgradeLabel.text="DEV: ADD FIELD"; }
+#endif
+            growthPlanButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+            growthModeButton.gameObject.SetActive(selectedBuilding.Id != "ColonyShip" && selectedBuilding.Id != "Farm");
+            if(selectedBuilding.Residential!=null)
             {
-                buildingPlacement.CancelPlacement();
+                var residential=selectedBuilding.Residential;
+                buildingStats.fontSize=11;buildingStats.text=residential.Status;
+                upgradeLabel.text=residential.Data.project!=null?"CONSTRUCTING":"APPROVE";
+                growthPlanLabel.text="PREFER: "+(state.growthPlan==1?"UPWARD":state.growthPlan==2?"OUTWARD":"BALANCED");
+                growthModeLabel.text=state.manualImprovements?"DEVELOPMENT: MANUAL":"DEVELOPMENT: AUTOMATIC";
+                growthPlanButton.interactable=residential.Data.project==null;
+                growthModeButton.interactable=true;
             }
-            else
+            else buildingStats.fontSize=13;
+            if(selectedBuilding.Id=="Manufactorum")
             {
-                buildingPlacement.BeginPlacement();
+                upgradeLabel.text=state.manufactorum.project!=null?"CONSTRUCTING":"EXPAND";
+                growthPlanButton.gameObject.SetActive(false); growthModeButton.gameObject.SetActive(false);
             }
+            operationLabel.text = state.offline ? "RESUME" : "SUSPEND";
+            excavationButton.gameObject.SetActive(selectedBuilding.Id=="Mine" || selectedBuilding.Id=="Quarry" || selectedBuilding.Residential!=null || selectedBuilding.Id=="Manufactorum" || selectedBuilding.Id=="StorageDepot");
+            excavationButton.GetComponentInChildren<Text>().text=selectedBuilding.Id=="Manufactorum"?"SELECT PRODUCTION":selectedBuilding.Id=="StorageDepot"?"CONFIGURE STORAGE":selectedBuilding.Residential!=null?"WHOLE BLOCK DETAILS":"EXCAVATION PLAN";
         }
 
         internal void UpdateBuildButtonState(string displayName, bool placementActive)
         {
-            if (buildButtonLabel != null)
-            {
-                buildButtonLabel.text = placementActive ? "Cancel Placement" : $"Place: {displayName}";
-            }
-
-            if (buildButton == null)
-            {
-                return;
-            }
-
-            var image = buildButton.GetComponent<Image>();
-            if (image == null)
-            {
-                return;
-            }
-
-            var baseColor = placementActive
-                ? new Color(0.45f, 0.2f, 0.2f, 0.95f)
-                : new Color(0.2f, 0.2f, 0.2f, 0.9f);
-            image.color = baseColor;
-
-            var colors = buildButton.colors;
-            colors.normalColor = baseColor;
-            colors.highlightedColor = placementActive
-                ? new Color(0.55f, 0.3f, 0.3f, 1f)
-                : new Color(0.3f, 0.3f, 0.3f, 0.95f);
-            colors.pressedColor = placementActive
-                ? new Color(0.35f, 0.15f, 0.15f, 1f)
-                : new Color(0.1f, 0.1f, 0.1f, 1f);
-            buildButton.colors = colors;
+            if (buildButtonLabel != null) buildButtonLabel.text = placementActive ? "CANCEL DEPLOYMENT  [ESC]" : "DEPLOY STRUCTURE";
+            if (structureDetails != null && buildingPlacement != null) structureDetails.text = displayName + "\n" + buildingPlacement.ActiveStructureDetails;
+            Tone(buildButton, placementActive);
+            for (var i = 0; i < catalog.Length; i++)
+                if (catalog[i] != null) Tone(catalog[i], buildingPlacement != null && i<visibleIds.Length && buildingPlacement.ActiveStructureId==visibleIds[i]);
         }
-
-        public void ShowNewGamePanel(bool visible)
+        private void SetCatalogGroup(int group)
         {
-            newGamePanel.SetActive(visible);
-            saveButton.interactable = !visible;
-            loadButton.interactable = true;
+            visibleIds=catalogGroups[group];var definitions=Resources.LoadAll<BuildableStructure>("Buildings");
+            for(var i=0;i<4;i++)
+            {
+                catalog[i].gameObject.SetActive(i<visibleIds.Length);if(i>=visibleIds.Length)continue;
+                var definition=Array.Find(definitions,d=>d.Id==visibleIds[i]);
+                catalog[i].GetComponentInChildren<Text>().text=ConstructionCard(definition.Id);
+            }
+            selection.Select(null);buildingPlacement.SelectStructure(visibleIds[0]);
         }
-
-        public void ShowHud(bool visible)
+        private string ConstructionCard(string id)
         {
-            hudPanel.SetActive(visible);
-#if UNITY_EDITOR
-            UpdateDebugPanelState();
-#endif
+            var definition = Array.Find(Resources.LoadAll<BuildableStructure>("Buildings"), d => d.Id == id);
+            if (definition == null) return id;
+            return definition.DisplayName.ToUpperInvariant()+$"\n{definition.ConstructionSupplies:0.#} SUPPLIES"+
+                (definition.AdvancedSupplies > 0 ? $" / {definition.AdvancedSupplies:0.#} PLAS" : "") +
+                (Industry != null && !Industry.CanAffordConstruction(definition.ConstructionSupplies,definition.AdvancedSupplies) ? "\nNEED SUPPLIES" : "\nREADY TO PLACE");
         }
-
-        public void ShowEventPanel(bool visible)
+        private void RefreshMaterials()
         {
-            eventPanel.SetActive(visible);
+            if(materialText==null || Industry==null || bootstrap.ActivePlanet==null)return;
+            Industry.FillTotals(materialTotals);var total=materialTotals;var biome=Orbit!=null?bootstrap.ActivePlanet.Biome(Orbit.NavigationDirection):"";
+            Industry.FillRates(materialProduced,materialConsumed);
+            UpdateResourceReadout(resourceSystem.CreateSnapshot());
+            for(var i=0;i<catalog.Length && i<visibleIds.Length;i++)catalog[i].GetComponentInChildren<Text>().text=ConstructionCard(visibleIds[i]);
+            UpdateBuildButtonState(buildingPlacement.ActiveStructureName,buildingPlacement.IsPlacing);
+            materialText.text=$"FOOD {resourceSystem.Food:0}  NEED {FarmRules.MonthlyDemand(resourceSystem.CreateSnapshot().Population):0}/mo  W {resourceSystem.Water:0}\nFE {total[0]:0}  CU {total[1]:0}  ST {total[2]:0}  BIO {total[3]:0}\nMET {total[5]:0}  PART {total[6]:0}  PLAS {total[8]:0}  CRY {total[4]:0}\nFERT B {total[9]:0}  I {total[10]:0}  A {total[11]:0}  FUEL {total[7]:0}\nPOWER {Industry.PowerGenerated:0.#}/{Industry.PowerDemand:0.#}  STAFF {Industry.WorkersAvailable:0}/{Industry.WorkersRequired:0}\nCARGO {Industry.CargoCount} / FOOD {Industry.FoodTransportCount}  {biome}";
+            surveyLabel.text=Industry.Overlay==1 && Industry.LogisticsBuildPending ? "ROUTES: PREPARING"
+                : Industry.Overlay==1 && Industry.LogisticsVisualTruncated ? "ROUTES: DISPLAY LIMIT"
+                : "SURVEY: "+SurveyLabels[Industry.Overlay];
+            if(discoveryButton!=null){var label=discoveryButton.GetComponentInChildren<Text>();label.fontSize=11;label.text=$"SITES {Industry.DiscoveredCount}/{Industry.DiscoveryCount}  /  AREA {Industry.ExploredFraction:P0}";}
         }
-
-
+        private void VisitDeposit()
+        {
+            if(Industry==null || Orbit==null || bootstrap.ActivePlanet==null)return;
+            var kind=Industry.Overlay==7?MaterialKind.Promethium:(MaterialKind)Mathf.Clamp(Industry.Overlay-2,0,4);
+            var world=bootstrap.ActivePlanet.transform.TransformPoint(bootstrap.ActivePlanet.EvaluateSurfacePoint(Orbit.NavigationDirection));
+            var deposit=Industry.NearestDeposit(world,kind);
+            if(deposit!=null){Industry.SetOverlay(kind==MaterialKind.Promethium?7:(int)kind+2);Orbit.FocusLocation(deposit.Direction);AppendEventLog($"Survey: {IndustryRules.Name(kind)}, {deposit.Remaining:0} units.");}
+        }
+        private void OpenDiscoveries()
+        {
+            if(Industry==null)return;
+            Industry.SetOverlay(1);
+            Industry.BrowseDiscoveredLocation(1);
+        }
+        public void ShowDiscoveryPanel(string title,string body,string actionLabel,Action action,Action locate=null)
+        {
+            HideOutputTooltip();
+            discoveryTitleText.text=title;discoveryBodyText.text=body;discoveryActionLabel.text=actionLabel;
+            discoveryAction=action;discoveryActionButton.interactable=action!=null;discoveryPanel.SetActive(true);
+            discoveryLocateAction=locate;discoveryLocateButton.interactable=locate!=null;
+            if(clock!=null)clock.DecisionPending=true;
+        }
+        public void ResetDiscoveryPanel()
+        {
+            if(discoveryPanel!=null)discoveryPanel.SetActive(false);
+            discoveryAction=null;discoveryLocateAction=null;
+            if(clock!=null)clock.DecisionPending=HasOpenEvent||(newGamePanel!=null&&newGamePanel.activeSelf);
+        }
+        private void CloseDiscoveryPanel()=>ResetDiscoveryPanel();
+        // Session UI must not retain a modal, callback or selected object from a replaced world.
+        public void ResetSessionUi()
+        {
+            CloseResearchPanel(); CloseGuide(); CloseFacilityPanel(); CloseMiningPanel();
+            ResetDiscoveryPanel(); ShowEventPanel(false); HideOutputTooltip();
+            ShowLandingPanel(false); ResetGuideForNewExpedition();
+            selectedBuilding = null;
+            if (shipPanel != null) shipPanel.SetActive(false);
+            if (inspector != null) inspector.SetActive(false);
+        }
+        public void FocusLocation(Vector3 direction){Orbit?.FocusLocation(direction);}
+        public void ShowNewGamePanel(bool visible) { if (visible) { HideOutputTooltip(); CloseFacilityPanel(); } newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
+        public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) { selection.Select(null); RefreshResourceDepositsPane(); } }
+        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || (newGamePanel!=null && newGamePanel.activeSelf); }
+        public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
+        public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
         {
-            selectedDifficulty = difficulty;
-            UpdateDifficultyButtonLabel();
+            if (difficultyLabel != null)
+                difficultyLabel.text = "LAST EXPEDITION  /  " + GameSettings.GetDefinition(difficulty).displayName.ToUpperInvariant();
         }
-
-        public void SetSeed(int seed)
+        public void UpdateResourceReadout(ResourceSnapshot state)
         {
-            seedInput.text = seed.ToString();
-        }
-
-        public void UpdateResourceReadout(ResourceSnapshot snapshot)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("Resources");
-            builder.AppendLine($"Population: {snapshot.Population:0}");
-            builder.AppendLine($"Workforce: {snapshot.Workforce:0}");
-            builder.AppendLine($"Production: {snapshot.ProductionPerCycle:0.0}");
-            builder.AppendLine($"Upkeep: {snapshot.UpkeepPerCycle:0.0}");
-            builder.AppendLine($"Net: {snapshot.NetProduction:0.0}");
-            builder.Append($"Stockpile: {snapshot.Stockpile:0.0}");
-            resourceText.text = builder.ToString();
-        }
-
-        public void UpdateEnvironmentReadout(EnvironmentSnapshot snapshot)
-        {
-            var builder = new StringBuilder();
-            builder.AppendLine("Environment");
-            builder.AppendLine($"CO₂ Level: {snapshot.Co2:0.0}");
-            builder.AppendLine($"O₂ Level: {snapshot.O2:0.0}");
-            builder.AppendLine($"Water Pollution: {snapshot.WaterPollution:0.0}");
-            builder.Append($"Δ Global Temp: {snapshot.GlobalTemperatureOffset:0.00}°C");
-            environmentText.text = builder.ToString();
-        }
-
-        public void AppendEventLog(string logEntry)
-        {
-            eventLogEntries.Add(logEntry);
-            while (eventLogEntries.Count > 6)
+            stockpileValue.text = ColonyRules.SupplyLabel(state.Food, FarmRules.MonthlyDemand(state.Population)) + $" / {state.Food:0}";
+            waterSupplyValue.text = ColonyRules.SupplyLabel(state.Water, WaterRules.Demand(state.Population) * (float)ColonyCalendar.SecondsPerMonth) + $" / {state.Water:0}";
+            populationValue.text = state.Population.ToString("N0");
+            workforceValue.text = $"{state.Workforce:0} / {ColonyRules.PopulationHealth:P0}";
+            if (Industry != null)
             {
-                eventLogEntries.RemoveAt(0);
+                var supplies = Industry.ConstructionSupplyTotals();
+                Industry.FillRates(materialProduced, materialConsumed);
+                netValue.text = ColonyRules.SupplyLabel(supplies.basic, materialConsumed[6] * (float)ColonyCalendar.SecondsPerMonth)
+                    + $" / {supplies.basic:0.#}\n{ supplies.advanced:0.#} plasteel";
             }
-
-            var builder = new StringBuilder();
-            builder.AppendLine("Log:");
-            foreach (var entry in eventLogEntries)
-            {
-                builder.AppendLine(entry);
-            }
-
-            eventLogText.text = builder.ToString();
+            RefreshOutputTooltip();
         }
-
+        public void UpdateEnvironmentReadout(EnvironmentSnapshot state)
+        {
+            environmentText.text = $"Habitability   {environmentState.Habitability:P0}\n\nCO2   {state.Co2:0.0} ppm\nOxygen   {state.O2:0.0}%\nWater pollution   {state.WaterPollution:0.0}\nTemperature   {state.GlobalTemperatureOffset:+0.00;-0.00;0.00} C";
+            habitabilityFill.GetComponent<RectTransform>().sizeDelta = new Vector2(200 * environmentState.Habitability, 4);
+        }
+        public void AppendEventLog(string entry)
+        {
+            log.Add(entry); while (log.Count > 2) log.RemoveAt(0);
+            eventLogText.text = entry;
+        }
         public void PromptEvent(string title, string body, string optionAText, Action optionA, string optionBText, Action optionB)
         {
-            eventTitleText.text = title;
-            eventBodyText.text = body;
-            eventChoiceALabel.text = optionAText;
-            eventChoiceBLabel.text = optionBText;
-
-            eventChoiceAHandler = () =>
-            {
-                ShowEventPanel(false);
-                optionA?.Invoke();
-            };
-
-            eventChoiceBHandler = () =>
-            {
-                ShowEventPanel(false);
-                optionB?.Invoke();
-            };
-
+            choiceA.interactable=choiceB.interactable=true;
+            eventTitleText.text = title; eventBodyText.text = body; choiceALabel.text = optionAText; choiceBLabel.text = optionBText;
+            choiceAHandler = () => { ShowEventPanel(false); optionA?.Invoke(); };
+            choiceBHandler = () => { ShowEventPanel(false); optionB?.Invoke(); };
             ShowEventPanel(true);
         }
 
+        private GameObject Panel(string name, Transform parent, Vector2 size, Vector2 position, TextAnchor anchor, bool border = true)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Image)); go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>(); rect.sizeDelta = size;
+            var pivot = anchor == TextAnchor.UpperRight ? new Vector2(1, 1)
+                : anchor == TextAnchor.UpperLeft ? new Vector2(0, 1)
+                : anchor == TextAnchor.LowerCenter ? new Vector2(0.5f, 0) : new Vector2(0.5f, 0.5f);
+            rect.anchorMin = rect.anchorMax = rect.pivot = pivot; rect.anchoredPosition = position;
+            go.GetComponent<Image>().color = Surface;
+            if (border) { var edge = go.AddComponent<Outline>(); edge.effectColor = new Color(0.39f, 0.34f, 0.23f, 0.7f); edge.effectDistance = new Vector2(1, -1); }
+            return go;
+        }
+        private void Accent(GameObject panel, Color color)
+        {
+            var stripe = new GameObject("PanelAccent", typeof(RectTransform), typeof(Image));
+            stripe.transform.SetParent(panel.transform, false);
+            var rect = stripe.GetComponent<RectTransform>();
+            rect.anchorMin = new Vector2(0, 0); rect.anchorMax = new Vector2(0, 1);
+            rect.pivot = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(3, 0);
+            rect.anchoredPosition = new Vector2(2, 0);
+            var image = stripe.GetComponent<Image>(); image.color = color; image.raycastTarget = false;
+        }
+        private void StretchWidth(GameObject panel, float inset)
+        {
+            var rect = panel.GetComponent<RectTransform>();
+            var y = rect.anchorMin.y; rect.anchorMin = new Vector2(0, y); rect.anchorMax = new Vector2(1, y);
+            rect.pivot = new Vector2(0.5f, rect.pivot.y); rect.sizeDelta = new Vector2(-inset * 2, rect.sizeDelta.y);
+            rect.anchoredPosition = new Vector2(0, rect.anchoredPosition.y);
+        }
+        private Text Label(string name, Transform parent, string content, int size, Vector2 position, float width, float height, Color color)
+        {
+            var go = new GameObject(name, typeof(RectTransform), typeof(Text)); go.transform.SetParent(parent, false);
+            var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
+            rect.sizeDelta = new Vector2(width, height); rect.anchoredPosition = position;
+            var text = go.GetComponent<Text>(); text.font = font; text.fontSize = size; text.color = color; text.text = content;
+            text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap;
+            text.verticalOverflow = VerticalWrapMode.Truncate; text.supportRichText = true;
+            return text;
+        }
+        private Button Button(string name, Transform parent, Vector2 position, string content, out Text label, float width, float height = 34)
+        {
+            var go = Panel(name, parent, new Vector2(width, height), position, TextAnchor.UpperLeft);
+            go.GetComponent<Image>().color = Color.white;
+            var button = go.AddComponent<Button>();
+            button.navigation = new Navigation { mode = Navigation.Mode.None };
+            var colors = button.colors; colors.normalColor = ButtonBase;
+            colors.highlightedColor = new Color(0.16f, 0.20f, 0.21f); colors.pressedColor = new Color(0.26f, 0.23f, 0.16f);
+            colors.disabledColor = new Color(0.035f, 0.045f, 0.05f); colors.fadeDuration = 0.12f;
+            button.colors = colors;
+            label = Label("Label", go.transform, content, 14, Vector2.zero, width, height, Ivory);
+            label.alignment = TextAnchor.MiddleCenter;
+            return button;
+        }
+        private void Tone(Button button, bool selected)
+        {
+            if (button == null) return;
+            if(buttonTones.TryGetValue(button,out var priorTone)&&priorTone==selected)return;
+            buttonTones[button]=selected;
+            var colors = button.colors; colors.normalColor = selected ? new Color(0.24f, 0.20f, 0.12f) : ButtonBase;
+            button.colors = colors;
+            var edge = button.GetComponent<Outline>(); if (edge != null) edge.effectColor = selected ? Gold : new Color(0.2f, 0.27f, 0.29f, 0.65f);
+        }
 #if UNITY_EDITOR
-        private void BuildDebugPanel(Transform parent)
+        private void BuildDebug(Transform parent)
         {
-            debugPanel = CreatePanel("DebugPanel", parent, new Vector2(DebugPanelWidth, 320f),
-                new Vector2(10f, -PanelHeight - 30f), TextAnchor.UpperLeft);
-
-            CreateLabel("DebugTitle", debugPanel.transform, "Debug Tools", 18, TextAnchor.UpperLeft,
-                new Vector2(0f, -12f), DebugPanelWidth - 20f);
-
-            debugMarkersToggleButton = CreateButton("ToggleMarkers", debugPanel.transform, new Vector2(0f, -46f),
-                "Debug Markers", out debugMarkersToggleLabel, DebugPanelWidth - 40f);
-            debugMarkersToggleButton.onClick.AddListener(ToggleDebugMarkers);
-
-            debugMarkerCountInput = CreateInputField("MarkerCount", debugPanel.transform, new Vector2(0f, -86f),
-                DebugPanelWidth - 40f, InputField.ContentType.IntegerNumber, "Marker Count");
-            debugMarkerCountInput.onEndEdit.AddListener(OnDebugMarkerCountChanged);
-
-            debugMarkerScaleInput = CreateInputField("MarkerScale", debugPanel.transform, new Vector2(0f, -126f),
-                DebugPanelWidth - 40f, InputField.ContentType.DecimalNumber, "Marker Scale");
-            debugMarkerScaleInput.onEndEdit.AddListener(OnDebugMarkerScaleChanged);
-
-            debugMarkersRespawnButton = CreateButton("RespawnMarkers", debugPanel.transform, new Vector2(0f, -166f),
-                "Respawn Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
-            debugMarkersRespawnButton.onClick.AddListener(OnDebugMarkersRespawnClicked);
-
-            debugMarkersClearButton = CreateButton("ClearMarkers", debugPanel.transform,
-                new Vector2((DebugPanelWidth * 0.5f) + 5f, -166f), "Clear Markers", out _, (DebugPanelWidth - 50f) * 0.5f);
-            debugMarkersClearButton.onClick.AddListener(OnDebugMarkersClearClicked);
-
-            debugAdvanceTickButton = CreateButton("AdvanceTick", debugPanel.transform, new Vector2(0f, -206f),
-                "Advance Settlement Tick", out _, DebugPanelWidth - 40f);
-            debugAdvanceTickButton.onClick.AddListener(OnDebugAdvanceTickClicked);
-
-            debugAddStockpileButton = CreateButton("AddStockpile", debugPanel.transform, new Vector2(0f, -246f),
-                "Inject +100 Stockpile", out _, DebugPanelWidth - 40f);
-            debugAddStockpileButton.onClick.AddListener(OnDebugAddStockpileClicked);
-
-            debugTriggerEventButton = CreateButton("TriggerEvent", debugPanel.transform, new Vector2(0f, -286f),
-                "Trigger Event", out _, DebugPanelWidth - 40f);
-            debugTriggerEventButton.onClick.AddListener(OnDebugTriggerEventClicked);
-
-            UpdateDebugPanelState();
-        }
-
-        private void UpdateDebugPanelState()
-        {
-            if (debugPanel == null)
-            {
-                return;
-            }
-
-            var hasActiveGame = GameSettings.HasActiveGame;
-            var markersEnabled = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
-
-            if (debugMarkersToggleLabel != null)
-            {
-                var label = markersEnabled ? "Debug Markers: On" : "Debug Markers: Off";
-                if (debugMarkersToggleLabel.text != label)
-                {
-                    debugMarkersToggleLabel.text = label;
-                }
-            }
-
-            if (bootstrap != null)
-            {
-                var countText = bootstrap.DebugMarkerCount.ToString(CultureInfo.InvariantCulture);
-                if (debugMarkerCountInput != null && debugMarkerCountInput.text != countText)
-                {
-                    debugMarkerCountInput.text = countText;
-                }
-
-                var scaleText = bootstrap.DebugMarkerScale.ToString("0.##", CultureInfo.InvariantCulture);
-                if (debugMarkerScaleInput != null && debugMarkerScaleInput.text != scaleText)
-                {
-                    debugMarkerScaleInput.text = scaleText;
-                }
-            }
-
-            if (debugMarkersToggleButton != null)
-            {
-                debugMarkersToggleButton.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkerCountInput != null)
-            {
-                debugMarkerCountInput.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkerScaleInput != null)
-            {
-                debugMarkerScaleInput.interactable = hasActiveGame && bootstrap != null;
-            }
-
-            if (debugMarkersRespawnButton != null)
-            {
-                debugMarkersRespawnButton.interactable = hasActiveGame && bootstrap != null && bootstrap.DebugMarkersEnabled;
-            }
-
-            if (debugMarkersClearButton != null)
-            {
-                var hasMarkers = hasActiveGame && bootstrap != null && bootstrap.HasDebugMarkers;
-                debugMarkersClearButton.interactable = hasMarkers;
-            }
-
-            if (debugAdvanceTickButton != null)
-            {
-                debugAdvanceTickButton.interactable = hasActiveGame && settlement != null && settlement.HasActiveSimulation;
-            }
-
-            if (debugAddStockpileButton != null)
-            {
-                debugAddStockpileButton.interactable = hasActiveGame && resourceSystem != null;
-            }
-
-            if (debugTriggerEventButton != null)
-            {
-                debugTriggerEventButton.interactable = hasActiveGame && colonyEventSystem != null && colonyEventSystem.HasActiveSession;
-            }
-        }
-
-        private void ToggleDebugMarkers()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugMarkersEnabled = !bootstrap.DebugMarkersEnabled;
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkerCountChanged(string value)
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            if (int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var count))
-            {
-                bootstrap.DebugMarkerCount = count;
-            }
-
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkerScaleChanged(string value)
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            if (float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var scale))
-            {
-                bootstrap.DebugMarkerScale = scale;
-            }
-
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkersRespawnClicked()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugMarkersEnabled = true;
-            bootstrap.DebugRespawnMarkers();
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugMarkersClearClicked()
-        {
-            if (!GameSettings.HasActiveGame || bootstrap == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            bootstrap.DebugClearMarkers();
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugAdvanceTickClicked()
-        {
-            if (!GameSettings.HasActiveGame || settlement == null || !settlement.HasActiveSimulation)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            settlement.DebugRunImmediateTick();
-            AppendEventLog("[DEBUG] Advanced settlement tick.");
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugAddStockpileClicked()
-        {
-            if (!GameSettings.HasActiveGame || resourceSystem == null)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            resourceSystem.ModifyStockpile(100f);
-            AppendEventLog("[DEBUG] Injected +100 stockpile.");
-            UpdateDebugPanelState();
-        }
-
-        private void OnDebugTriggerEventClicked()
-        {
-            if (!GameSettings.HasActiveGame || colonyEventSystem == null || !colonyEventSystem.HasActiveSession)
-            {
-                UpdateDebugPanelState();
-                return;
-            }
-
-            colonyEventSystem.TriggerDebugEventNow();
-            AppendEventLog("[DEBUG] Manually triggered event.");
-            UpdateDebugPanelState();
+            debugPanel = Panel("DebugPanel", parent, new Vector2(232, 206), new Vector2(16, -132), TextAnchor.UpperLeft);
+            Label("DebugTitle", debugPanel.transform, "DEVELOPER TOOLS  [F12]", 11, new Vector2(16, -16), 206, 20, Gold);
+            Button("AdvanceTick", debugPanel.transform, new Vector2(16, -52), "ADVANCE SETTLEMENT TICK", out _, 200)
+                .onClick.AddListener(() => settlement.DebugRunImmediateTick());
+            Button("DevSupply", debugPanel.transform, new Vector2(16, -88), "PLACE INFINITE SUPPLY NEXUS", out _, 200)
+                .onClick.AddListener(() => buildingPlacement.SelectStructure("DevSupply"));
+            Button("AddStockpile", debugPanel.transform, new Vector2(16, -124), "+100 BUILD SUPPLIES", out _, 200)
+                .onClick.AddListener(() => resourceSystem.ModifyStockpile(100));
+            var triggerEvent = Button("TriggerEvent", debugPanel.transform, new Vector2(16, -160), "TRIGGER POLICY EVENT", out _, 200);
+            triggerEvent.interactable = EventSchedule.PriorityTransmissionsEnabled;
+            triggerEvent.onClick.AddListener(() => colonyEventSystem.TriggerDebugEventNow());
+            debugPanel.SetActive(false);
         }
 #endif
     }

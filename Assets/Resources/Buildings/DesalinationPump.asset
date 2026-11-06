@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c59ef5f4d9a44a3e9d0fc35283a6b2cb, type: 3}
+  m_Name: DesalinationPump
+  m_EditorClassIdentifier:
+  id: DesalinationPump
+  displayName: Desalination Pump
+  constructionCost: 220
+  constructionSupplies: 8
+  advancedSupplies: 1
+  developerOnly: 0
+  populationCapacity: 0
+  workforceSlots: 18
+  productionPerWorker: 0
+  upkeepPerCycle: 6
+  surveyRadius: 0
+  environmentImpact: {co2Delta: 0.01, o2Delta: 0, waterDelta: 0, temperatureDelta: 0}
+  dimensions: {x: 105, y: 62, z: 90}
+  previewColor: {r: 0.26, g: 0.78, b: 0.78, a: 0.6}
+  structureColor: {r: 0.28, g: 0.56, b: 0.59, a: 1}

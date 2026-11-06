@@ -9,16 +9,18 @@ namespace WH30K.Planet
     /// </summary>
     public class LODPlanet : MonoBehaviour
     {
-        [SerializeField] private float radius = 3000f;
+        [SerializeField] private float radius = PlanetScale.DefaultRadius;
         [SerializeField] private int baseResolution = 32;
         [SerializeField] private int maxDepth = 6;
         [SerializeField] private int maxPatchResolution = 1024;
         [SerializeField] private float targetTriangleArea = 10f;
-        [SerializeField] private float splitDistance = 2400f;
+        [SerializeField] private float splitDistance = 1200f;
         [SerializeField] private float splitFalloff = 1.8f;
         [SerializeField] private float lodUpdateInterval = 0.25f;
 
         public float Radius => radius;
+        public float SurfaceDistance(Vector3 a, Vector3 b)
+            => PlanetScale.SurfaceDistance(a.x, a.y, a.z, b.x, b.y, b.z, radius);
         public int BaseResolution => Mathf.Max(8, baseResolution);
         public int MaxDepth => Mathf.Max(0, computedMaxDepth);
         public int MaxPatchResolution => Mathf.Clamp(maxPatchResolution, BaseResolution, 4096);
@@ -28,7 +30,41 @@ namespace WH30K.Planet
         public float TargetTriangleArea => Mathf.Max(0.5f, targetTriangleArea);
         public int Seed { get; private set; }
         public Material TerrainMaterial { get; private set; }
-        public float SeaLevel => radius - 120f;
+        public int TerrainVersion { get; private set; } = 1;
+        public float SeaLevel => radius + (TerrainVersion >= 3 ? generationSettings.seaLevel : TerrainVersion == 0 ? -120f : -20f);
+        private TerrainSettings generationSettings = new TerrainSettings();
+        private TerrainSampler sampler;
+        public TerrainSettings GenerationSettings => generationSettings.Copy();
+        public TerrainOverlay DebugOverlay { get; private set; }
+        public double RootGenerationMilliseconds { get; private set; }
+        public double LastLodMilliseconds { get; private set; }
+        public int LiveMeshCount { get; internal set; }
+        public int LiveTriangleCount { get; internal set; }
+        // Skirts descend below the full terrain envelope, including a coarse face's chord.
+        // They seal unequal LODs without modifying the sampled construction surface.
+        internal float SkirtFloor => radius * .80f;
+
+        public void SetDebugOverlay(TerrainOverlay overlay)
+        {
+            DebugOverlay = overlay;
+            if (TerrainMaterial != null && TerrainMaterial.HasProperty("_DebugOverlay"))
+                TerrainMaterial.SetFloat("_DebugOverlay", (float)overlay);
+        }
+        public Func<Vector3, float, float> ExcavationHeight { get; set; }
+        public Func<Vector3, float, float> EarthworksHeight { get; set; }
+        public int SurfaceRevision { get; private set; }
+
+        public void RefreshExcavation(Vector3 direction, float range)
+        {
+            SurfaceRevision++;
+            if (rootPatches == null) return;
+            var center = transform.TransformPoint(direction.normalized * EvaluateBaseHeight(direction.normalized));
+            foreach (var patch in rootPatches) patch?.RefreshSurface(center, range);
+        }
+        public void RebuildExcavatedSurface()
+        {
+            if(rootPatches!=null)foreach(var patch in rootPatches)patch?.RebuildDirtySurface();
+        }
 
         private readonly Vector3[] faceDirections =
         {
@@ -43,6 +79,14 @@ namespace WH30K.Planet
         private LODPatch[] rootPatches;
         private Camera referenceCamera;
         private float elapsed;
+        private int splitBudget;
+        private bool pendingLod;
+        public int PatchesCreatedLastUpdate { get; private set; }
+        internal bool TrySplit()
+        {
+            if(splitBudget==0){pendingLod=true;return false;}
+            splitBudget--;PatchesCreatedLastUpdate+=4;return true;
+        }
 
         private int computedMaxDepth;
 
@@ -52,9 +96,21 @@ namespace WH30K.Planet
         private float ridgeScale;
         private float ridgeWeight;
 
-        public void BuildPlanet(int seed, Material material)
+        public void BuildPlanet(int seed, Material material, int terrainVersion = 3, TerrainSettings settings = null)
         {
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (terrainVersion < 0 || terrainVersion > 3) throw new ArgumentOutOfRangeException(nameof(terrainVersion));
+            if (terrainVersion >= 3)
+            {
+                generationSettings = (settings ?? new TerrainSettings { radius = radius }).Copy();
+                sampler = TerrainSampler.Create(seed, generationSettings);
+                radius = generationSettings.radius;
+            }
+            else sampler = null;
             Seed = seed;
+            ExcavationHeight = null;
+            EarthworksHeight = null;
+            TerrainVersion = terrainVersion;
             TerrainMaterial = material;
 
             computedMaxDepth = CalculateEffectiveMaxDepth();
@@ -62,8 +118,12 @@ namespace WH30K.Planet
 
             continentOffset = GenerateOffset(seed, 17);
             ridgeOffset = GenerateOffset(seed, 83);
-            continentScale = Mathf.Lerp(0.65f, 1.35f, PseudoRandom(seed * 1.11f));
-            ridgeScale = Mathf.Lerp(2.6f, 3.8f, PseudoRandom(seed * 2.77f));
+            continentScale = TerrainVersion == 0
+                ? Mathf.Lerp(0.65f, 1.35f, PseudoRandom(seed * 1.11f))
+                : Mathf.Lerp(1.7f, 2.3f, PseudoRandom(seed * 1.11f));
+            ridgeScale = TerrainVersion == 0
+                ? Mathf.Lerp(2.6f, 3.8f, PseudoRandom(seed * 2.77f))
+                : Mathf.Lerp(9f, 13f, PseudoRandom(seed * 2.77f));
             ridgeWeight = Mathf.Lerp(0.35f, 0.65f, PseudoRandom(seed * 3.91f));
 
             ClearExisting();
@@ -77,6 +137,8 @@ namespace WH30K.Planet
                 patch.Initialize(this, faceDirections[i], Vector2.zero, Vector2.one, 0);
                 rootPatches[i] = patch;
             }
+            SurfaceRevision++;
+            RootGenerationMilliseconds = ElapsedMilliseconds(started);
         }
 
         private const int DefaultPatchResolutionCap = 1024;
@@ -111,10 +173,16 @@ namespace WH30K.Planet
             {
                 if (rootPatches[i] != null)
                 {
-                    Destroy(rootPatches[i].gameObject);
+                    rootPatches[i].ReleaseGeneratedMeshes();
+                    rootPatches[i].gameObject.SetActive(false);
+                    if (Application.isPlaying) Destroy(rootPatches[i].gameObject);
+                    else DestroyImmediate(rootPatches[i].gameObject);
                 }
             }
         }
+
+        public void ReleaseGeneratedMeshes()
+        {if(rootPatches!=null)foreach(var patch in rootPatches)if(patch!=null)patch.ReleaseGeneratedMeshes();}
 
         private void Update()
         {
@@ -133,51 +201,166 @@ namespace WH30K.Planet
             }
 
             elapsed += Time.deltaTime;
-            if (elapsed < LodUpdateInterval)
+            if (!pendingLod && elapsed < LodUpdateInterval)
             {
                 return;
             }
 
             elapsed = 0f;
-            var cameraPosition = referenceCamera.transform.position;
+            RefreshLodAtPosition(referenceCamera.transform.position);
+        }
+
+        // Also used by the explicit Editor comparison preview, without ExecuteAlways generation.
+        public void RefreshLodAtPosition(Vector3 cameraPosition)
+        {
+            if (rootPatches == null) return;
+            // Each split replaces a visible parent with four complete children atomically.
+            // Continue unfinished work next frame instead of building the whole tree in one frame.
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
+            splitBudget = 1; pendingLod = false; PatchesCreatedLastUpdate = 0;
             foreach (var patch in rootPatches)
             {
                 patch?.RefreshLOD(cameraPosition);
             }
+            LastLodMilliseconds = ElapsedMilliseconds(started);
         }
+
+
+        private static double ElapsedMilliseconds(long started)
+            => (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000d / System.Diagnostics.Stopwatch.Frequency;
 
         internal int GetResolutionForDepth(int depth)
         {
-            var resolution = BaseResolution;
-            for (var i = 0; i < depth; i++)
-            {
-                if (resolution >= MaxPatchResolution)
-                {
-                    return MaxPatchResolution;
-                }
-
-                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
-            }
-
-            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
+            // Subdivision already doubles density. Doubling each child's resolution as well
+            // made a close view allocate million-vertex patches on the larger planet.
+            // Power-of-two cells give exactly matching samples at parent/child boundaries.
+            // Roots need fewer vertices; only nearby subdivided patches receive full density.
+            var cells = Mathf.NextPowerOfTwo(Mathf.Clamp(BaseResolution - 1, 8, 64));
+            // At continental radii a 16-cell root has kilometre-deep chords, hiding
+            // entire continents underneath the ocean shell in orbital views.
+            // Only the two coarsest levels need the denser spherical silhouette.
+            if (radius > 50000 && depth < 2) cells = 128 >> depth;
+            while (cells + 1 > MaxPatchResolution && cells > 8) cells /= 2;
+            if (depth < 2 && radius <= 50000) cells = Mathf.Max(8, cells / 2);
+            return cells + 1;
         }
 
-        internal float EvaluateHeight(Vector3 pointOnUnitSphere)
+        internal float EvaluateHeight(Vector3 direction)
         {
-            var continents = Mathf.PerlinNoise(pointOnUnitSphere.x * continentScale + continentOffset.x,
-                pointOnUnitSphere.y * continentScale + continentOffset.y);
-            continents = Mathf.Pow(continents, 3f);
+            var height = EvaluateBaseHeight(direction);
+            if (EarthworksHeight != null) height = EarthworksHeight(direction, height);
+            return ExcavationHeight != null ? ExcavationHeight(direction, height) : height;
+        }
 
-            var ridged = Mathf.PerlinNoise(pointOnUnitSphere.z * ridgeScale + ridgeOffset.x,
-                pointOnUnitSphere.x * ridgeScale + ridgeOffset.y);
+        public float EvaluateBaseHeight(Vector3 pointOnUnitSphere)
+        {
+            if (sampler != null)
+                return radius + sampler.Elevation(pointOnUnitSphere.x, pointOnUnitSphere.y, pointOnUnitSphere.z);
+            if (TerrainVersion == 0)
+            {
+                // Preserve the exact old seed-to-coastline mapping when expanding a saved world.
+                var oldContinent = Mathf.Pow(Mathf.PerlinNoise(pointOnUnitSphere.x * continentScale + continentOffset.x,
+                    pointOnUnitSphere.y * continentScale + continentOffset.y), 3f);
+                var oldRidge = Mathf.PerlinNoise(pointOnUnitSphere.z * ridgeScale + ridgeOffset.x,
+                    pointOnUnitSphere.x * ridgeScale + ridgeOffset.y);
+                oldRidge = Mathf.Pow(1f - Mathf.Abs(oldRidge * 2f - 1f), 3.2f);
+                return radius + oldContinent * 520f + oldRidge * 380f * ridgeWeight - 210f;
+            }
+            var continents = Noise3(pointOnUnitSphere * continentScale + continentOffset) * 0.7f
+                + Noise3(pointOnUnitSphere * continentScale * 2.1f + continentOffset * 0.37f) * 0.3f;
+            var ridged = Noise3(pointOnUnitSphere * ridgeScale + ridgeOffset);
             ridged = 1f - Mathf.Abs(ridged * 2f - 1f);
-            ridged = Mathf.Pow(ridged, 3.2f);
-
-            var elevation = continents * 520f + ridged * 380f * ridgeWeight - 210f;
+            var inland = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.51f, 0.65f, continents));
+            var mountains = Mathf.Pow(ridged, 5f) * 150f * ridgeWeight * inland;
+            var detail = (Noise3(pointOnUnitSphere * 42f + ridgeOffset) - 0.5f) * 8f * inland;
+            var elevation = (continents - 0.52f) * 650f - 20f + mountains + detail;
+            if (TerrainVersion >= 2)
+            {
+                var ranges = Mathf.SmoothStep(0, 1, Mathf.InverseLerp(0.43f, 0.66f,
+                    Noise3(pointOnUnitSphere * 7.7f + ridgeOffset * 0.31f)));
+                var peaks = Mathf.Pow(ridged, 3.1f) * ranges * inland * 1050f;
+                var hills = (Noise3(pointOnUnitSphere * 65f + continentOffset) - 0.45f) * 100f * inland;
+                elevation += peaks + hills;
+            }
             return radius + elevation;
         }
 
-        internal Vector3 EvaluateSurfacePoint(Vector3 direction)
+        public float Moisture(Vector3 direction)
+        {
+            var n = direction.normalized;
+            return sampler != null ? sampler.Moisture(n.x, n.y, n.z, EvaluateBaseHeight(n) - SeaLevel)
+                : Noise3(n * 8.5f + continentOffset * 0.63f);
+        }
+        public BiomeSample Climate(Vector3 n, float surfaceHeight, float slope)
+            => sampler != null ? sampler.Climate(n.x, n.y, n.z, surfaceHeight - SeaLevel, slope) : default;
+        public string Biome(Vector3 direction)
+        {
+            var n = direction.normalized;
+            return Biome(n, EvaluateHeight(n));
+        }
+        public string Biome(Vector3 direction, float surfaceHeight)
+        {
+            var n = direction.normalized; var height = surfaceHeight - SeaLevel;
+            if (height < 0) return "Ocean";
+            if (sampler != null)
+            {
+                var slope = 1 - Vector3.Dot(n, EvaluateSurfaceNormal(n));
+                switch (Climate(n, surfaceHeight, slope).Dominant)
+                {
+                    case ClimateBiome.Forest: return "Forest";
+                    case ClimateBiome.Desert: return "Desert";
+                    case ClimateBiome.RockyHighlands: return "Rocky highlands";
+                    case ClimateBiome.Tundra: return "Tundra";
+                    case ClimateBiome.SnowIce: return "Snow and ice";
+                    default: return "Grassland";
+                }
+            }
+            if (Mathf.Abs(n.y) > 0.83f || height > 650) return "Alpine / ice";
+            if (height > 220) return "Mountain range";
+            var wet = Moisture(n);
+            if (height < 48 && wet > 0.49f) return "Swamp";
+            if (wet > 0.51f) return "Forest";
+            if (wet < 0.43f && Mathf.Abs(n.y) < 0.65f) return "Arid hills";
+            return height > 80 ? "Rolling hills" : "Grassland";
+        }
+
+        public Color BiomeColor(Vector3 direction)
+            => BiomeColor(direction, EvaluateHeight(direction.normalized));
+        public Color BiomeColor(Vector3 direction, float surfaceHeight)
+        {
+            if (sampler != null) return ClimateColor(Climate(direction.normalized, surfaceHeight,
+                1 - Vector3.Dot(direction.normalized, EvaluateSurfaceNormal(direction))));
+            switch (Biome(direction, surfaceHeight))
+            {
+                case "Swamp": return new Color(0.14f, 0.23f, 0.12f);
+                case "Forest": return new Color(0.10f, 0.24f, 0.13f);
+                case "Arid hills": return new Color(0.54f, 0.39f, 0.23f);
+                case "Mountain range": return new Color(0.34f, 0.33f, 0.30f);
+                case "Alpine / ice": return new Color(0.80f, 0.86f, 0.87f);
+                default: return new Color(0.28f, 0.37f, 0.17f);
+            }
+        }
+
+        public static Color ClimateColor(BiomeSample b)
+            => new Color(.29f, .38f, .18f) * b.grass + new Color(.10f, .23f, .12f) * b.forest
+                + new Color(.58f, .44f, .27f) * b.desert + new Color(.35f, .34f, .32f) * b.rock
+                + new Color(.39f, .40f, .30f) * b.tundra + new Color(.83f, .88f, .91f) * b.snow;
+
+        private static float Noise3(Vector3 p)
+            => (Mathf.PerlinNoise(p.x, p.y) + Mathf.PerlinNoise(p.y, p.z) + Mathf.PerlinNoise(p.z, p.x)) / 3f;
+
+        internal Vector3 EvaluateSurfaceNormal(Vector3 direction)
+        {
+            var n = direction.normalized;
+            var a = Vector3.Cross(n, Mathf.Abs(n.y) > 0.95f ? Vector3.right : Vector3.up).normalized;
+            var b = Vector3.Cross(n, a);
+            const float epsilon = 0.001f;
+            var da = EvaluateSurfacePoint(n + a * epsilon) - EvaluateSurfacePoint(n - a * epsilon);
+            var db = EvaluateSurfacePoint(n + b * epsilon) - EvaluateSurfacePoint(n - b * epsilon);
+            return Vector3.Cross(da, db).normalized;
+        }
+
+        public Vector3 EvaluateSurfacePoint(Vector3 direction)
         {
             var normalised = direction.normalized;
             var height = EvaluateHeight(normalised);
@@ -198,7 +381,7 @@ namespace WH30K.Planet
 
                 var point = EvaluateSurfacePoint(direction);
                 var height = point.magnitude;
-                if (height < SeaLevel)
+                if (height < SeaLevel + 12f)
                 {
                     continue;
                 }
@@ -260,13 +443,7 @@ namespace WH30K.Planet
 
         private int EstimateResolutionForDepth(int depth)
         {
-            var resolution = BaseResolution;
-            for (var i = 0; i < depth; i++)
-            {
-                resolution = Mathf.Min(MaxPatchResolution, resolution * 2);
-            }
-
-            return Mathf.Clamp(resolution, 8, MaxPatchResolution);
+            return GetResolutionForDepth(depth);
         }
 
         private void UpdateTerrainMaterialParameters()
@@ -276,10 +453,16 @@ namespace WH30K.Planet
                 return;
             }
 
+            if (TerrainMaterial.HasProperty("_TerrainRecipe")) TerrainMaterial.SetFloat("_TerrainRecipe", TerrainVersion);
+            SetDebugOverlay(DebugOverlay);
+
             if (TerrainMaterial.HasProperty("_PlanetRadius"))
             {
                 TerrainMaterial.SetFloat("_PlanetRadius", radius);
             }
+
+            if (TerrainMaterial.HasProperty("_PlanetCenter"))
+                TerrainMaterial.SetVector("_PlanetCenter", transform.position);
 
             if (TerrainMaterial.HasProperty("_SeaLevel"))
             {

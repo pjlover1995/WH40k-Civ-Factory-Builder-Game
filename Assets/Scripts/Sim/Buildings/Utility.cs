@@ -13,10 +13,10 @@ namespace WH30K.Sim.Buildings
         public override float UpkeepPerCycle => 14f;
         public override EnvironmentImpact EnvironmentImpact => new EnvironmentImpact
         {
-            co2Delta = 1.1f,
-            o2Delta = -0.08f,
-            waterDelta = 1f,
-            temperatureDelta = 0.05f
+            co2Delta = -0.2f,
+            o2Delta = 0.0015f,
+            waterDelta = -0.06f,
+            temperatureDelta = -0.0001f
         };
         public override Color DisplayColor => new Color(0.45f, 0.75f, 0.6f);
     }
