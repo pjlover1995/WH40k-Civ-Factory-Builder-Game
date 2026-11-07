@@ -23,7 +23,7 @@
   "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
   "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
   "schema": 1,
-  "stage": "Awaiting approval",
+  "stage": "In progress",
   "design": {
     "result": "pass",
     "reviewer": "Design review (coordinating Codex session)",
@@ -33,25 +33,10 @@
     {
       "from": "Testing",
       "reason": "Revalidate the extended scene fixture against updated main."
+    },
+    {
+      "from": "Awaiting approval",
+      "reason": "Separate the approved vox integration from the ongoing UI overhaul."
     }
-  ],
-  "review": {
-    "result": "pass",
-    "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
-    "commit": "11618b9934b0d36d71d97cffd39b3c9ca914c239",
-    "reference": "Independent review passed the unchanged runtime and assets, extended live-scene fixture, and merge of the recovery tooling from origin/main. The reviewed local payload and GitHub payload have identical trees (aa5fd5b)."
-  },
-  "validation": {
-    "result": "pass",
-    "coverage": "pass",
-    "tester": "Vox Scene Test Agent (GPT-6 Luna), final runs by coordinating GPT-6.1 Sol",
-    "manager": "Test Manager (vox_test_manager, GPT-6.1 Sol)",
-    "commit": "11618b9934b0d36d71d97cffd39b3c9ca914c239",
-    "command": "dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .; node Tools/Workflow/ui-style.mjs; Unity 2022.3.2f1 -batchmode -executeMethod VoxSceneChecks.RunBatch",
-    "reference": "606 .NET checks and 25 Unity checks passed. Independent Test Manager accepted focused coverage. Director playtest remains for natural 1x/10x pacing, camera feel, and readability.",
-    "unity": {
-      "result": "pass",
-      "reference": "Logs/vox-final.log and private preview Logs/preview-vox-final.log. Live research, survey, and Manufactorum inputs, captain pressure, portrait match, passive input, modals, and an in-memory save/load round trip."
-    }
-  }
+  ]
 }

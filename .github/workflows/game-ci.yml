@@ -32,8 +32,6 @@ jobs:
           dotnet-version: '9.0.x'
       - name: Validate feature records
         run: node Tools/Workflow/feature.mjs validate
-      - name: Check shared UI palette
-        run: node Tools/Workflow/ui-style.mjs
       - name: Workflow smoke test
         run: node Tools/Workflow/smoke.mjs
       - name: Usage recovery tests

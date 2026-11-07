@@ -22,7 +22,10 @@ namespace WH30K.UI
 
         private void BuildFacilityPanel(Transform parent)
         {
-            facilityPanel = CommandUi.Screen("FacilityPanel", parent, 0.82f);
+            facilityPanel = Panel("FacilityPanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
+            var backdrop = (RectTransform)facilityPanel.transform;
+            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one; backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
+            facilityPanel.GetComponent<Image>().color = new Color(.005f, .008f, .012f, .82f);
             var card = Panel("FacilityCard", facilityPanel.transform, new Vector2(940, 740), Vector2.zero, TextAnchor.MiddleCenter);
             facilityTitle = Label("FacilityTitle", card.transform, "", 23, new Vector2(24, -18), 890, 34, Gold);
             facilityStats = Label("FacilityStatistics", card.transform, "", 13, new Vector2(24, -60), 892, 226, Ivory);
