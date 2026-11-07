@@ -23,13 +23,9 @@ namespace WH30K.UI
                 researchOpenButton = Button("OpenResearch", logPanel, new Vector2(16, -189), "RESEARCH / TECH DATA", out _, 200, 23);
                 researchOpenButton.onClick.AddListener(OpenResearchPanel);
             }
-            researchPanel = new GameObject("ResearchPanel", typeof(RectTransform), typeof(Image));
-            researchPanel.transform.SetParent(parent, false);
-            var full = researchPanel.GetComponent<RectTransform>();
-            full.anchorMin = Vector2.zero; full.anchorMax = Vector2.one; full.offsetMin = full.offsetMax = Vector2.zero;
-            researchPanel.GetComponent<Image>().color = new Color(.005f, .008f, .012f, .72f);
+            researchPanel = CommandUi.Screen("ResearchPanel", parent, 0.72f);
             var card = Panel("ResearchCard", researchPanel.transform, new Vector2(690, 484), Vector2.zero, TextAnchor.MiddleCenter);
-            Accent(card, new Color(.26f,.71f,.77f));
+            Accent(card, CommandUi.Signal);
             Label("ResearchTag", card.transform, "MECHANICUM COGNITORIUM  /  SELECT A PROJECT", 11, new Vector2(28,-18), 610, 22, Gold);
             Button("CloseResearch", card.transform, new Vector2(636,-12), "X", out _, 28, 26).onClick.AddListener(CloseResearchPanel);
             researchBalanceText=Label("ResearchBalance",card.transform,"",11,new Vector2(28,-52),630,36,Muted);

@@ -31,9 +31,7 @@ namespace WH30K.UI
                 else CloseMiningPanel();
             });
             miningReturn.gameObject.SetActive(false);
-            miningPanel=new GameObject("MiningPanel",typeof(RectTransform),typeof(Image));miningPanel.transform.SetParent(parent,false);
-            var rect=miningPanel.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
-            miningPanel.GetComponent<Image>().color=new Color(.005f,.008f,.012f,.70f);
+            miningPanel=CommandUi.Screen("MiningPanel",parent,.70f);
             var card=Panel("ExcavationCard",miningPanel.transform,new Vector2(720,640),Vector2.zero,TextAnchor.MiddleCenter);
             miningCard=card.GetComponent<RectTransform>();
             Label("MiningTag",card.transform,"GEOLOGICAL AUTHORITY  /  EXCAVATION CONTROL",11,new Vector2(26,-20),668,22,Gold);
