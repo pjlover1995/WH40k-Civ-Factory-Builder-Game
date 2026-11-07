@@ -63,6 +63,27 @@ function validate(record, id) {
     const allowed = record.risk === 'routine' ? ['pass', 'not applicable'] : ['pass'];
     requireThat(allowed.includes(record.validation.unity.result), 'Unity validation is required for gameplay or major work');
   }
+  if (record.recovery !== undefined) {
+    const recovery = record.recovery;
+    requireThat(Number.isInteger(recovery.attempts) && recovery.attempts >= 0, 'Invalid recovery attempt count for ' + id);
+    requireThat(['running', 'paused_usage_limit', 'paused_throttled', 'manual_intervention'].includes(recovery.status), 'Invalid recovery status for ' + id);
+    requireThat(Array.isArray(recovery.checkpoints), 'Recovery checkpoints must be an array');
+    if (recovery.github !== undefined) {
+      requireThat(/^[1-9]\d*$/.test(String(recovery.github.issue ?? '')) &&
+        /^[1-9]\d*$/.test(String(recovery.github.project ?? '')) &&
+        /^[a-z\d][a-z\d-]*$/i.test(recovery.github.owner ?? ''),
+      'Recovery GitHub sync needs an issue number, Project owner and Project number');
+    }
+    for (const checkpoint of recovery.checkpoints) {
+      requireThat(/^[a-z][a-z0-9-]{0,79}$/.test(checkpoint.packageId ?? '') &&
+        ['complete', 'in_progress'].includes(checkpoint.state) && shaPattern.test(checkpoint.commit ?? ''),
+      'Invalid package checkpoint for ' + id);
+    }
+    if (['paused_usage_limit', 'paused_throttled'].includes(recovery.status)) {
+      fields(recovery, ['nextAttemptAt'], 'Retryable recovery state');
+      requireThat(Number.isFinite(Date.parse(recovery.nextAttemptAt)), 'Invalid recovery retry time');
+    }
+  }
 }
 
 function write(path, record, exclusive = false) {
@@ -88,7 +109,7 @@ function github(repo, ...args) {
   return JSON.parse(run('gh', [...args, '--repo', repo]));
 }
 
-function board(record, issue, owner, project, pr) {
+function board(record, issue, owner, project, pr, recordFile) {
   requireThat(/^[1-9]\d*$/.test(issue ?? '') && /^[1-9]\d*$/.test(project ?? '') &&
     /^[a-z\d][a-z\d-]*$/i.test(owner ?? ''), 'Provide an issue number, Project owner and Project number');
   const remote = run('git', ['remote', 'get-url', 'origin']);
@@ -97,6 +118,10 @@ function board(record, issue, owner, project, pr) {
   const repo = match[1];
   const { url, state } = github(repo, 'issue', 'view', issue, '--json', 'url,state');
   let status = record.stage;
+  const recoveryState = record.recovery?.status;
+  if (recoveryState === 'paused_usage_limit') status = 'Paused — Usage Limit';
+  else if (recoveryState === 'paused_throttled') status = 'Paused — Rate Limit';
+  else if (recoveryState === 'manual_intervention') status = 'Blocked';
   if (pr !== undefined) {
     requireThat(/^[1-9]\d*$/.test(pr) && state === 'CLOSED' && status === stages[3], 'Completion requires a closed issue and an approval-ready task');
     const merged = github(repo, 'pr', 'view', pr, '--json', 'state,baseRefName,headRefName,isCrossRepository,closingIssuesReferences');
@@ -118,6 +143,15 @@ function board(record, issue, owner, project, pr) {
   requireThat(itemId, 'GitHub did not return a Project item ID');
   run('gh', ['project', 'item-edit', '--id', itemId, '--project-id', projectId,
     '--field-id', field.id, '--single-select-option-id', option.id]);
+  const previousStatus = record.recovery?.githubNotifiedStatus;
+  if (['Paused — Usage Limit', 'Paused — Rate Limit', 'Blocked'].includes(status) && previousStatus !== status) {
+    const reason = record.recovery?.manualReason ?? record.recovery?.lastFailure?.message ?? 'A Codex retry is paused.';
+    run('gh', ['issue', 'comment', issue, '--body', `Workflow status: **${status}**.\n\n${reason}\n\nThe durable task record and package checkpoints remain in the feature branch. See Docs/Features/${record.id}.json and Docs/CODEX_WORKFLOW.md for recovery steps.`]);
+  }
+  if (record.recovery) {
+    record.recovery.githubNotifiedStatus = status;
+    write(recordFile, record);
+  }
   console.log(url + ' -> ' + status);
 }
 
@@ -181,7 +215,7 @@ function main() {
     return;
   }
   if (action === 'board') {
-    board(record, input, owner, project, pr);
+    board(record, input, owner, project, pr, path);
     return;
   }
   featureBranch(id);

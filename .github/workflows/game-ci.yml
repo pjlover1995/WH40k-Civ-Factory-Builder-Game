@@ -34,6 +34,8 @@ jobs:
         run: node Tools/Workflow/feature.mjs validate
       - name: Workflow smoke test
         run: node Tools/Workflow/smoke.mjs
+      - name: Usage recovery tests
+        run: node Tools/Workflow/recovery.test.mjs
       - name: Check patch whitespace
         if: github.event_name == 'pull_request'
         env:
