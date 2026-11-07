@@ -10,8 +10,10 @@ foreach ($file in Get-ChildItem (Join-Path $root 'Docs\Features') -Filter '*.jso
         $record = Get-Content -LiteralPath $file.FullName -Raw | ConvertFrom-Json
         $recovery = $record.recovery
         if (-not $recovery) { continue }
-        $due = $recovery.status -in @('paused_usage_limit', 'paused_throttled') -and
-            $recovery.nextAttemptAt -and [DateTimeOffset]::Parse($recovery.nextAttemptAt).ToUniversalTime() -le $now
+        $due = ($recovery.status -in @('paused_usage_limit', 'paused_throttled') -and
+            $recovery.nextAttemptAt -and [DateTimeOffset]::Parse($recovery.nextAttemptAt).ToUniversalTime() -le $now) -or
+            ($recovery.status -eq 'resuming' -and $recovery.resumeLeaseUntil -and
+                [DateTimeOffset]::Parse($recovery.resumeLeaseUntil).ToUniversalTime() -le $now)
         if ($due) {
             Push-Location $root
             try {

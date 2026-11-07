@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { publicAlertReason } from './recovery.mjs';
 
 const risks = ['routine', 'gameplay', 'major'];
 const stages = ['Queued', 'In progress', 'Testing', 'Awaiting approval'];
@@ -66,7 +67,7 @@ function validate(record, id) {
   if (record.recovery !== undefined) {
     const recovery = record.recovery;
     requireThat(Number.isInteger(recovery.attempts) && recovery.attempts >= 0, 'Invalid recovery attempt count for ' + id);
-    requireThat(['running', 'paused_usage_limit', 'paused_throttled', 'manual_intervention'].includes(recovery.status), 'Invalid recovery status for ' + id);
+    requireThat(['running', 'paused_usage_limit', 'paused_throttled', 'resuming', 'manual_intervention'].includes(recovery.status), 'Invalid recovery status for ' + id);
     requireThat(Array.isArray(recovery.checkpoints), 'Recovery checkpoints must be an array');
     if (recovery.github !== undefined) {
       requireThat(/^[1-9]\d*$/.test(String(recovery.github.issue ?? '')) &&
@@ -78,10 +79,16 @@ function validate(record, id) {
       requireThat(/^[a-z][a-z0-9-]{0,79}$/.test(checkpoint.packageId ?? '') &&
         ['complete', 'in_progress'].includes(checkpoint.state) && shaPattern.test(checkpoint.commit ?? ''),
       'Invalid package checkpoint for ' + id);
+      run('git', ['cat-file', '-e', checkpoint.commit + '^{commit}']);
+      run('git', ['merge-base', '--is-ancestor', checkpoint.commit, 'HEAD']);
     }
     if (['paused_usage_limit', 'paused_throttled'].includes(recovery.status)) {
       fields(recovery, ['nextAttemptAt'], 'Retryable recovery state');
       requireThat(Number.isFinite(Date.parse(recovery.nextAttemptAt)), 'Invalid recovery retry time');
+    }
+    if (recovery.status === 'resuming') {
+      fields(recovery, ['resumeLeaseUntil'], 'Active recovery lease');
+      requireThat(Number.isFinite(Date.parse(recovery.resumeLeaseUntil)), 'Invalid recovery lease expiry');
     }
   }
 }
@@ -145,7 +152,7 @@ function board(record, issue, owner, project, pr, recordFile) {
     '--field-id', field.id, '--single-select-option-id', option.id]);
   const previousStatus = record.recovery?.githubNotifiedStatus;
   if (['Paused — Usage Limit', 'Paused — Rate Limit', 'Blocked'].includes(status) && previousStatus !== status) {
-    const reason = record.recovery?.manualReason ?? record.recovery?.lastFailure?.message ?? 'A Codex retry is paused.';
+    const reason = publicAlertReason(record.recovery, status);
     run('gh', ['issue', 'comment', issue, '--body', `Workflow status: **${status}**.\n\n${reason}\n\nThe durable task record and package checkpoints remain in the feature branch. See Docs/Features/${record.id}.json and Docs/CODEX_WORKFLOW.md for recovery steps.`]);
   }
   if (record.recovery) {

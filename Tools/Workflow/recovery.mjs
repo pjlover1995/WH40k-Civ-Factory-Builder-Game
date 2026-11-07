@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ const maxAttempts = 8;
 const baseDelayMs = 60_000;
 const maxDelayMs = 6 * 60 * 60_000;
 const maxRetryAfterMs = 30 * 24 * 60 * 60_000;
+const runnerLeaseMs = 2 * 60 * 60_000;
 
 export function classifyFailure(error = {}) {
   const status = Number(error.status ?? error.statusCode ?? error.code);
@@ -35,8 +36,16 @@ function parseRetryAfter(value, now = Date.now()) {
 
 export function retryDelay(attempt, retryAfterMs = null, random = Math.random) {
   const exponential = Math.min(maxDelayMs, baseDelayMs * (2 ** Math.max(0, attempt - 1)));
-  // Full jitter spreads retries across the capped exponential window.
-  return retryAfterMs === null ? Math.floor(random() * exponential) : retryAfterMs;
+  // Equal jitter keeps retries away from zero while spreading them across the capped exponential window.
+  return retryAfterMs === null ? Math.floor(exponential / 2) + Math.floor(random() * exponential / 2) : retryAfterMs;
+}
+
+export function publicAlertReason(recovery, status) {
+  if (status === 'Paused — Usage Limit') return 'A Codex usage limit was detected. The feature is paused until its next scheduled retry.';
+  if (status === 'Paused — Rate Limit') return 'Short-term Codex throttling was detected. The feature is paused until its next scheduled retry.';
+  if (recovery?.lastFailure?.kind === 'auth') return 'Codex authentication or account access needs attention. Manual intervention is required.';
+  if ((recovery?.attempts ?? 0) > maxAttempts) return 'Automatic retries stopped after reaching the configured limit. Manual intervention is required.';
+  return 'An unclassified workflow failure needs review. Manual intervention is required.';
 }
 
 function atomicWrite(path, value) {
@@ -80,6 +89,7 @@ export function recordFailure(path, id, error, now = Date.now(), random = Math.r
     const failure = classifyFailure(error);
     record.recovery ??= { attempts: 0, totalAttempts: 0, checkpoints: [], status: 'running' };
     record.recovery.lastFailure = { kind: failure.kind, at: new Date(now).toISOString(), message: safeMessage(error.message ?? error) };
+    delete record.recovery.resumeLeaseUntil;
     if (!failure.retryable) {
       record.recovery.status = 'manual_intervention';
       record.recovery.nextAttemptAt = null;
@@ -107,6 +117,9 @@ export function checkpoint(path, id, checkpointRecord) {
   if (!/^[a-z][a-z0-9-]{0,79}$/.test(packageId ?? '') || !['complete', 'in_progress'].includes(state) || !/^[0-9a-f]{40}$/.test(commit ?? '')) {
     throw new Error('Checkpoint needs a packageId, in_progress/complete state, and full commit SHA');
   }
+  const root = process.cwd();
+  execFileSync('git', ['cat-file', '-e', commit + '^{commit}'], { cwd: root, stdio: 'ignore' });
+  execFileSync('git', ['merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: root, stdio: 'ignore' });
   return withLock(path, () => {
     const record = readRecord(path, id);
     record.recovery ??= { attempts: 0, totalAttempts: 0, checkpoints: [], status: 'running' };
@@ -144,14 +157,26 @@ function main() {
     return;
   }
   if (action === 'tick') {
-    const record = readRecord(path, id);
-    const recovery = record.recovery;
-    if (!recovery || !['paused_usage_limit', 'paused_throttled'].includes(recovery.status)) throw new Error('Feature is not paused for a retryable usage limit or throttle');
-    if (Date.now() < Date.parse(recovery.nextAttemptAt)) throw new Error('Retry is not due until ' + recovery.nextAttemptAt);
     // Only the explicitly configured Codex CLI command can execute work. No API key or model override is accepted.
     const command = process.env.CODEX_RECOVERY_COMMAND;
     if (!command) throw new Error('Set CODEX_RECOVERY_COMMAND to an approved local Codex CLI resume command');
     if (process.env.OPENAI_API_KEY || process.env.OPENAI_ADMIN_KEY) throw new Error('Refusing to run with API key credentials; use the approved Codex subscription session');
+    withLock(path, () => {
+      const record = readRecord(path, id);
+      const recovery = record.recovery;
+      const now = Date.now();
+      const staleLease = recovery?.status === 'resuming' && Number.isFinite(Date.parse(recovery.resumeLeaseUntil)) && Date.parse(recovery.resumeLeaseUntil) <= now;
+      const paused = ['paused_usage_limit', 'paused_throttled'].includes(recovery?.status);
+      if (!paused && !staleLease) throw new Error(recovery?.status === 'resuming' ? 'A Codex resume is already running for this feature' : 'Feature is not paused for a retryable usage limit or throttle');
+      if (paused) {
+        const due = Date.parse(recovery.nextAttemptAt);
+        if (!Number.isFinite(due)) throw new Error('Recovery retry time is invalid; manual intervention is required');
+        if (now < due) throw new Error('Retry is not due until ' + recovery.nextAttemptAt);
+      }
+      recovery.status = 'resuming';
+      recovery.resumeLeaseUntil = new Date(now + runnerLeaseMs).toISOString();
+      atomicWrite(path, record);
+    });
     const result = spawnSync(command, [id, path], { cwd: root, encoding: 'utf8', shell: true, maxBuffer: 20 * 1024 * 1024 });
     if (result.stdout) process.stdout.write(result.stdout);
     if (result.stderr) process.stderr.write(result.stderr);
@@ -170,6 +195,7 @@ function main() {
       latest.recovery.status = 'running';
       latest.recovery.attempts = 0;
       latest.recovery.nextAttemptAt = null;
+      delete latest.recovery.resumeLeaseUntil;
       latest.recovery.lastResumedAt = new Date().toISOString();
       atomicWrite(path, latest);
     });
