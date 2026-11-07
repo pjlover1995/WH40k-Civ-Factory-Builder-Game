@@ -1,0 +1,16 @@
+name: Game feature
+description: Propose a feature for the Codex workflow
+title: "[Feature] "
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Player outcome
+      description: What should the player be able to do or experience?
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints and acceptance
+      description: Relevant mechanics, examples and how to tell it works. This is a public repository.

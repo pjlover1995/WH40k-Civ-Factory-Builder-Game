@@ -1,0 +1,55 @@
+name: Game CI
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review, converted_to_draft]
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: game-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Game validation
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - name: Validate feature records
+        run: node Tools/Workflow/feature.mjs validate
+      - name: Workflow smoke test
+        run: node Tools/Workflow/smoke.mjs
+      - name: Check patch whitespace
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: git diff --check "$env:BASE_SHA...$env:HEAD_SHA"
+      - name: Validate ready feature PR evidence
+        if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: node Tools/Workflow/feature.mjs gate "$env:BASE_SHA" "$env:HEAD_SHA" "$env:HEAD_BRANCH"
+      - name: Compile and run engine-independent simulation and syntax checks
+        run: dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .
+      - name: Record CI scope
+        if: always()
+        run: |
+          'This check covers workflow validation and the .NET simulation suite. Unity compilation, scene checks and playtest are recorded separately in the PR.' >> $env:GITHUB_STEP_SUMMARY
