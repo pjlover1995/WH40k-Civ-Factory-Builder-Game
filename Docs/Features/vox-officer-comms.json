@@ -1,0 +1,67 @@
+{
+  "id": "vox-officer-comms",
+  "title": "Add Captain and Mechanicum Priest vox communications",
+  "risk": "gameplay",
+  "outcome": "The Captain and Mechanicum Priest proactively explain actual colony conditions through concise portrait-led vox messages, with each officer covering distinct responsibilities.",
+  "scope": [
+    "Captain: available housing or berths, food and water reserves, and crew-facing consequences",
+    "Mechanicum Priest: actual production or input shortages, construction supply needs, completed research, and newly charted discoveries",
+    "Original portraits and visually distinct voices, shared nonmodal vox card and a bounded session transcript",
+    "Read existing colony metrics, research completion, and survey events; use simulation-time sampling, sustained thresholds, severity and deduplication"
+  ],
+  "nonGoals": [
+    "Voice acting, animated characters, branching dialogue, rewards, new simulation mechanics, or changes to save schema",
+    "Pause the game, open a modal, or reveal unsurveyed content"
+  ],
+  "acceptance": [
+    "Controlled housing pressure and crew resource shortage produce correctly attributed Captain messages with a clear reason and practical next step",
+    "A sustained manufacturing bottleneck, research completion and a new survey finding are attributed to the Priest and reflect verified game state",
+    "Messages show the matching portrait and readable speaker name; ordinary reports never capture camera input or interrupt decisions",
+    "A single condition does not repeatedly notify on threshold oscillation, fast-forward, or load; existing colonies and new landings start cleanly",
+    "Existing simulation checks pass and Unity Play Mode verifies UI, pause/speed, scenario triggers, input focus and save/reload behavior"
+  ],
+  "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
+  "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
+  "schema": 1,
+  "stage": "Awaiting approval",
+  "design": {
+    "result": "pass",
+    "reviewer": "Design review (coordinating Codex session)",
+    "reference": "Issue #25 design review: use real simulation data and explicit research/survey notifications, bound and deduplicate messages, preserve all save formats, and use the shared UI card."
+  },
+  "rework": [
+    {
+      "from": "Testing",
+      "reason": "Revalidate the extended scene fixture against updated main."
+    },
+    {
+      "from": "Awaiting approval",
+      "reason": "Separate the approved vox integration from the ongoing UI overhaul."
+    }
+  ],
+  "review": {
+    "result": "pass",
+    "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
+    "commit": "e4b56e6b5c728a9dc6bdd083aadfdfddc66698e5",
+    "reference": "Independent review verified the Vox-only diff against main and preserved existing menu behavior outside Vox Log and its Research hit area. The GitHub candidate and local reviewed candidate have identical trees."
+  },
+  "validation": {
+    "result": "pass",
+    "coverage": "pass",
+    "tester": "Coordinating GPT-6.1 Sol using the Vox Scene Test Agent fixture",
+    "manager": "Test Manager (vox_test_manager, GPT-6.1 Sol)",
+    "commit": "e4b56e6b5c728a9dc6bdd083aadfdfddc66698e5",
+    "command": "dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .; Unity 2022.3.2f1 -batchmode -executeMethod VoxSceneChecks.RunBatch",
+    "reference": "606 .NET checks and 25 Unity Play Mode checks passed on the standalone scope.",
+    "unity": {
+      "result": "pass",
+      "reference": "Logs/vox-standalone-acceptance.log: live alerts, portraits, passive card, modal precedence, controlled speeds and current-schema in-memory reload."
+    }
+  },
+  "integrationApproval": {
+    "result": "approved",
+    "by": "Game Director",
+    "reference": "2026-11-07 Codex chat: approved, with Vox issue #25 open",
+    "scope": "Vox communications and its portrait component"
+  }
+}

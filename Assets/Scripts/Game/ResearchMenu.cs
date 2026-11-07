@@ -20,7 +20,7 @@ namespace WH30K.UI
             var logPanel = hudPanel.transform.Find("OperationsLog");
             if (logPanel != null)
             {
-                researchOpenButton = Button("OpenResearch", logPanel, new Vector2(16, -189), "RESEARCH / TECH DATA", out _, 200, 23);
+                researchOpenButton = Button("OpenResearch", logPanel, new Vector2(16, -189), "RESEARCH", out _, 96, 23);
                 researchOpenButton.onClick.AddListener(OpenResearchPanel);
             }
             researchPanel = new GameObject("ResearchPanel", typeof(RectTransform), typeof(Image));

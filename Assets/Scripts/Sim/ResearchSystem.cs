@@ -52,7 +52,9 @@ namespace WH30K.Sim
             if(!string.IsNullOrEmpty(completed))
             {
                 var project=ResearchRules.Project(completed);
-                GetComponent<NewGameMenu>()?.AppendEventLog("Research complete: "+project.Name+". "+project.Effect+".");
+                var menu = GetComponent<NewGameMenu>();
+                menu?.AppendEventLog("Research complete: "+project.Name+". "+project.Effect+".");
+                menu?.ReportVoxResearch(project.Name);
             }
         }
 
