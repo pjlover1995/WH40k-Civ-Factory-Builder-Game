@@ -3,10 +3,12 @@ using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
+using System.Linq;
 using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Sim;
 using WH30K.Sim.Resources;
+using WH30K.Sim.Settlements;
 using WH30K.UI;
 
 public static class VoxSceneChecks
@@ -62,6 +64,7 @@ public static class VoxSceneChecks
             bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings());
             bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard);
             var menu = bootstrap.GetComponent<NewGameMenu>();
+            EnsureHudReady(menu);
             var clock = bootstrap.GetComponent<ColonyClock>();
             var resources = bootstrap.GetComponent<ResourceSystem>();
             var card = FindUi(menu, "VoxPortraitCard");
@@ -75,30 +78,85 @@ public static class VoxSceneChecks
 
             menu.ReportVoxResearch("Noosphere Cartography");
             menu.ReportVoxSurvey("an iron bearing ridge");
-            SetClock(clock, 0);
+            SetClock(clock, 0, 1, true);
             Refresh(menu);
             var history = GameObject.Find("VoxHistory")?.GetComponent<Text>();
             Check(history != null && history.text.Contains("Research completed") && history.text.Contains("Survey finding"),
-                "explicit research and survey reports enter the session transcript even with the clock paused");
+                "explicit research and survey reports enter the transcript while paused");
             Check(history.text.Contains("MECHANICUM PRIEST") && history.text.Contains("Noosphere Cartography")
                 && history.text.Contains("iron bearing ridge"), "priest event copy and officer identity appear in transcript");
+            ToggleVoxLog(menu);
+            Refresh(menu);
+            Check(card.activeSelf && portrait.texture == priest
+                && card.GetComponentsInChildren<Graphic>(false).All(graphic => !graphic.raycastTarget),
+                "the Priest portrait is visible and the entire passive card passes pointer input");
+            ToggleVoxLog(menu);
+
+            var research = bootstrap.GetComponent<ResearchSystem>();
+            Check(research.SelectProject("wide-auspex") && research.AddInsight(40f), "real research project can be selected and funded");
+            research.Simulate(1f);
+            Check(research.IsCompleted("wide-auspex"), "ResearchSystem simulation completes the selected project");
+            SetClock(clock, 10, 10);
+            Refresh(menu);
+            Check(clock.Speed == 10 && !clock.Paused && history.text.Contains("Wide-Angle Auspex") && history.text.Contains("Research completed"),
+                "real ResearchSystem completion reports through Vox at 10x");
+
+            var industry = bootstrap.GetComponent<IndustrySystem>();
+            var site = bootstrap.GetComponent<Settlement>().CreateSnapshot().normal;
+            Check(LandingSceneChecks.PlaceNear(bootstrap, "Outpost", site), "a working survey outpost can be placed");
+            var beforeSurvey = industry.DiscoveredCount;
+            industry.SurveyNow();
+            Refresh(menu);
+            Check(industry.DiscoveredCount > beforeSurvey && history.text.Contains("Survey finding")
+                && (history.text.Contains("new deposit") || history.text.Contains("new site")),
+                "a real survey charts a new location and enters the Priest transcript");
+
+            var savedJson = bootstrap.CaptureSaveJson();
+            var savedValues = JsonUtility.FromJson<VoxSaveValues>(savedJson);
+            Check(bootstrap.TryLoadSaveJson(savedJson), "in-memory colony save reloads successfully");
+            var reloadedValues = JsonUtility.FromJson<VoxSaveValues>(bootstrap.CaptureSaveJson());
+            Check(SameSavedValues(savedValues, reloadedValues),
+                "save/load clears Vox while preserving clock, stockpiles, and completed research values");
+            Check(!FindUi(menu, "VoxLog").activeSelf, "loading a save closes the prior transcript");
+            ToggleVoxLog(menu);
+            history = FindUi(menu, "VoxHistory").GetComponent<Text>();
+            Check(history.text == "No transmissions received in this session.",
+                "save/load starts a clean Vox transcript without altering saved simulation values");
+            ToggleVoxLog(menu);
 
             bootstrap.BeginNewGame(5678, GameSettings.Difficulty.Standard);
             menu = bootstrap.GetComponent<NewGameMenu>();
+            EnsureHudReady(menu);
             clock = bootstrap.GetComponent<ColonyClock>();
             resources = bootstrap.GetComponent<ResourceSystem>();
             card = FindUi(menu, "VoxPortraitCard");
             resources.ConsumeFood(float.MaxValue);
             resources.ConsumeWater(float.MaxValue);
+            var resourceFixture = resources.CreateSnapshot();
+            resourceFixture.Population = ShipRules.CrewCapacity * .95f;
+            resources.LoadFromSnapshot(resourceFixture, GameSettings.GetDefinition(GameSettings.CurrentDifficulty));
             SetClock(clock, 0);
             Refresh(menu); // establish the session origin and fresh-session grace period
-            SetClock(clock, 100);
+            var supplySite = bootstrap.GetComponent<Settlement>().CreateSnapshot().normal;
+            Check(LandingSceneChecks.PlaceNear(bootstrap, "Manufactorum", supplySite), "a real Manufactorum can be placed");
+            bootstrap.GetComponent<IndustrySystem>().Simulate(5);
+            // Placement publishes the normal population; establish the controlled pressure after it.
+            resources.LoadFromSnapshot(resourceFixture, GameSettings.GetDefinition(GameSettings.CurrentDifficulty));
+            SetClock(clock, 100, 1);
             Refresh(menu); // begin observing both shortage conditions
-            SetClock(clock, 145);
+            SetClock(clock, 145, 10);
             Refresh(menu); // sustain both shortages for 45 simulation seconds
             var heading = GameObject.Find("VoxSpeaker")?.GetComponent<Text>();
-            Check(card != null && card.activeSelf && heading != null && heading.text.StartsWith("CAPTAIN"),
-                "sustained food and water shortages produce a captain transmission from simulation clock fixtures");
+            Check(card != null && card.activeSelf && heading != null && heading.text.StartsWith("CAPTAIN") && portrait.texture == captain,
+                "sustained food, water, and housing pressure produce a captain transmission across 1x and 10x fixtures");
+            ToggleVoxLog(menu);
+            var sustainedHistory = FindUi(menu, "VoxHistory").GetComponent<Text>().text;
+            Check(sustainedHistory.Contains("Berths running short") && sustainedHistory.Contains("Food endurance low")
+                && sustainedHistory.Contains("Water endurance low"),
+                "modified in-memory resource snapshot and sustained shortages report all three captain conditions");
+            Check(sustainedHistory.Contains("Production input missing") && sustainedHistory.Contains("missing recipe inputs"),
+                "a real Manufactorum missing recipe inputs produces a Priest transmission");
+            ToggleVoxLog(menu);
             var tracker = FindUi(menu, "FoundingObjectivesTracker");
             tracker.SetActive(true);
             Refresh(menu);
@@ -121,6 +179,7 @@ public static class VoxSceneChecks
             var log = GameObject.Find("VoxLog");
             Check(log != null && log.activeSelf, "vox transcript can be opened from the HUD");
             bootstrap.BeginNewGame(7890, GameSettings.Difficulty.Standard);
+            EnsureHudReady(menu);
             Check(log != null && !log.activeSelf, "starting a new expedition closes the previous session transcript");
             toggleLog.Invoke(menu, null);
             history = GameObject.Find("VoxHistory")?.GetComponent<Text>();
@@ -138,8 +197,40 @@ public static class VoxSceneChecks
     private static GameObject FindUi(NewGameMenu menu, string name)
         => Array.Find(menu.GetComponentsInChildren<RectTransform>(true), item => item.name == name)?.gameObject;
 
+    private static void EnsureHudReady(NewGameMenu menu)
+    {
+        FindUi(menu, "NewGamePanel")?.SetActive(false);
+        FindUi(menu, "HudPanel")?.SetActive(true);
+    }
+
     private static void SetClock(ColonyClock clock, double seconds)
-        => clock.Restore(new ClockSnapshot { simulationSeconds = seconds, playedSeconds = 0, speed = 1, paused = true });
+        => SetClock(clock, seconds, 1);
+
+    private static void SetClock(ColonyClock clock, double seconds, int speed, bool paused = false)
+        => clock.Restore(new ClockSnapshot { simulationSeconds = seconds, playedSeconds = 0, speed = speed, paused = paused });
+
+    [Serializable]
+    private sealed class VoxSaveValues
+    {
+        public ClockSnapshot clock;
+        public ResourceSnapshot resources;
+        public ResearchSnapshot research;
+    }
+
+    private static bool SameSavedValues(VoxSaveValues a, VoxSaveValues b)
+        => a != null && b != null
+            && a.research != null && b.research != null
+            && a.research.completedIds != null && b.research.completedIds != null
+            && a.clock.simulationSeconds == b.clock.simulationSeconds && a.clock.speed == b.clock.speed
+            && a.resources.Food == b.resources.Food && a.resources.Water == b.resources.Water
+            && a.resources.Population == b.resources.Population
+            && a.research.insight == b.research.insight
+            && a.research.activeProjectId == b.research.activeProjectId
+            && a.research.completedIds.Length == b.research.completedIds.Length
+            && Array.TrueForAll(a.research.completedIds, id => Array.IndexOf(b.research.completedIds, id) >= 0);
+
+    private static void ToggleVoxLog(NewGameMenu menu)
+        => typeof(NewGameMenu).GetMethod("ToggleVoxLog", BindingFlags.Instance | BindingFlags.NonPublic).Invoke(menu, null);
 
     private static bool RectsOverlap(RectTransform a, RectTransform b)
     {

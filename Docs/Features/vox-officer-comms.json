@@ -32,7 +32,7 @@
   "review": {
     "result": "pass",
     "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
-    "commit": "ce372eb3b820e357c6119dd71edd4c8cf1aa7a19",
-    "reference": "Independent Codex review after revisions: tracker and research controls are clear; paused event delivery and reserve copy match behavior. Focused Unity coverage passed; broader playtest is separate. GitHub payload tree matches reviewed local commit 6e009ce."
+    "commit": "6e009ce89769f200af619292cb4335ce5c3dfa6a",
+    "reference": "Independent Codex review after revisions: tracker and research controls are clear; paused event delivery and reserve copy match behavior. Focused Unity coverage passed; broader playtest is separate."
   }
 }
