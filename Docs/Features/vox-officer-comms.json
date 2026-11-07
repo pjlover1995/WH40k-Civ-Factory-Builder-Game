@@ -23,7 +23,7 @@
   "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
   "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
   "schema": 1,
-  "stage": "In progress",
+  "stage": "Awaiting approval",
   "design": {
     "result": "pass",
     "reviewer": "Design review (coordinating Codex session)",
@@ -38,5 +38,30 @@
       "from": "Awaiting approval",
       "reason": "Separate the approved vox integration from the ongoing UI overhaul."
     }
-  ]
+  ],
+  "review": {
+    "result": "pass",
+    "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
+    "commit": "e4b56e6b5c728a9dc6bdd083aadfdfddc66698e5",
+    "reference": "Independent review verified the Vox-only diff against main and preserved existing menu behavior outside Vox Log and its Research hit area. The GitHub candidate and local reviewed candidate have identical trees."
+  },
+  "validation": {
+    "result": "pass",
+    "coverage": "pass",
+    "tester": "Coordinating GPT-6.1 Sol using the Vox Scene Test Agent fixture",
+    "manager": "Test Manager (vox_test_manager, GPT-6.1 Sol)",
+    "commit": "e4b56e6b5c728a9dc6bdd083aadfdfddc66698e5",
+    "command": "dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .; Unity 2022.3.2f1 -batchmode -executeMethod VoxSceneChecks.RunBatch",
+    "reference": "606 .NET checks and 25 Unity Play Mode checks passed on the standalone scope.",
+    "unity": {
+      "result": "pass",
+      "reference": "Logs/vox-standalone-acceptance.log: live alerts, portraits, passive card, modal precedence, controlled speeds and current-schema in-memory reload."
+    }
+  },
+  "integrationApproval": {
+    "result": "approved",
+    "by": "Game Director",
+    "reference": "2026-11-07 Codex chat: approved, with Vox issue #25 open",
+    "scope": "Vox communications and its portrait component"
+  }
 }
