@@ -23,10 +23,16 @@
   "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
   "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
   "schema": 1,
-  "stage": "In progress",
+  "stage": "Testing",
   "design": {
     "result": "pass",
     "reviewer": "Design review (coordinating Codex session)",
     "reference": "Issue #25 design review: use real simulation data and explicit research/survey notifications, bound and deduplicate messages, preserve all save formats, and use the shared UI card."
+  },
+  "review": {
+    "result": "pass",
+    "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
+    "commit": "ce372eb3b820e357c6119dd71edd4c8cf1aa7a19",
+    "reference": "Independent Codex review after revisions: tracker and research controls are clear; paused event delivery and reserve copy match behavior. Focused Unity coverage passed; broader playtest is separate. GitHub payload tree matches reviewed local commit 6e009ce."
   }
 }
