@@ -37,6 +37,7 @@ namespace WH30K.UI
             Button("LandingSurvey", landingPanel.transform, new Vector2(24, -514), "CYCLE RESOURCE FILTER", out _, 260, 34)
                 .onClick.AddListener(() => Industry?.SetOverlay(Industry.Overlay >= 7 ? 1 : Industry.Overlay + 1));
             landButton = Button("LandColonyShip", landingPanel.transform, new Vector2(634, -514), "LAND COLONY SHIP", out _, 282, 34);
+            MarkPrimary(landButton);
             landButton.onClick.AddListener(() => bootstrap.ConfirmLanding());
             landingPanel.SetActive(false);
         }
@@ -76,7 +77,7 @@ namespace WH30K.UI
             landButton.interactable = valid;
             if (landingGhost == null)
             {
-                if (landingMaterial == null) landingMaterial = new Material(Shader.Find("Unlit/Color")) { color = new Color(.2f, .85f, .95f) };
+                if (landingMaterial == null) landingMaterial = new Material(Shader.Find("Unlit/Color")) { color = new Color(.2f, .85f, .95f) }; // World preview material
                 landingGhost = BuildingVisuals.Create("ColonyShip", "Colony ship landing preview", planet.transform, BuildingVisuals.ShipDimensions, landingMaterial);
             }
             landingGhost.SetActive(valid);

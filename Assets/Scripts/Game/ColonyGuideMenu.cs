@@ -36,11 +36,7 @@ namespace WH30K.UI
                 guideLabel.fontSize=11;guideButton.onClick.AddListener(ShowGuide);
             }
 
-            guidePanel = new GameObject("ColonyGuide", typeof(RectTransform), typeof(Image));
-            guidePanel.transform.SetParent(parent, false);
-            var full = guidePanel.GetComponent<RectTransform>();
-            full.anchorMin = Vector2.zero; full.anchorMax = Vector2.one; full.offsetMin = full.offsetMax = Vector2.zero;
-            guidePanel.GetComponent<Image>().color = new Color(0.005f, 0.008f, 0.012f, 0.72f);
+            guidePanel = CommandUi.Screen("ColonyGuide", parent, 0.72f);
             var card = Panel("GuideCard", guidePanel.transform, new Vector2(700, 462), Vector2.zero, TextAnchor.MiddleCenter);
             Accent(card, Gold);
             Label("GuideTag", card.transform, "EXPEDITION AUTHORITY  /  COLONY ESTABLISHMENT", 11, new Vector2(28, -18), 600, 22, Gold);

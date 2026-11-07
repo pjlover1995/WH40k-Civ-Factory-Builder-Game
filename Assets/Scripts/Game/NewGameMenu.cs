@@ -18,12 +18,12 @@ namespace WH30K.UI
     [RequireComponent(typeof(PlanetBootstrap))]
     public partial class NewGameMenu : MonoBehaviour
     {
-        private static readonly Color Gold = new Color(0.80f, 0.65f, 0.38f);
-        private static readonly Color Ivory = new Color(0.88f, 0.90f, 0.87f);
-        private static readonly Color Muted = new Color(0.49f, 0.57f, 0.60f);
-        private static readonly Color Surface = new Color(0.025f, 0.040f, 0.052f, 0.96f);
-        private static readonly Color ButtonBase = new Color(0.065f, 0.092f, 0.108f, 1f);
-        private static readonly Color ForgeRed = new Color(0.48f, 0.105f, 0.075f, 1f);
+        private static readonly Color Gold = CommandUi.Brass;
+        private static readonly Color Ivory = CommandUi.Parchment;
+        private static readonly Color Muted = CommandUi.SecondaryText;
+        private static readonly Color Surface = CommandUi.Iron;
+        private static readonly Color ButtonBase = CommandUi.Field;
+        private static readonly Color ForgeRed = CommandUi.Oxblood;
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
@@ -107,7 +107,7 @@ namespace WH30K.UI
             canvas = root.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280, 800); scaler.matchWidthOrHeight = 1;
+            scaler.referenceResolution = new Vector2(1280, 800); scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             hudPanel = new GameObject("HudPanel", typeof(RectTransform)); hudPanel.transform.SetParent(root.transform, false);
             var hudRect = hudPanel.GetComponent<RectTransform>();
             hudRect.anchorMin = Vector2.zero; hudRect.anchorMax = Vector2.one;
@@ -314,14 +314,11 @@ namespace WH30K.UI
 
         private void BuildNewGame(Transform parent)
         {
-            newGamePanel = Panel("NewGamePanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
-            var backdrop = newGamePanel.GetComponent<RectTransform>();
-            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one;
-            backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
-            newGamePanel.GetComponent<Image>().color = new Color(0.009f, 0.017f, 0.025f, 1);
+            newGamePanel = CommandUi.Screen("NewGamePanel", parent, 1);
             Label("MainIdentity", newGamePanel.transform, "WH30K  /  COLONY COMMAND", 20, new Vector2(34, -32), 600, 36, Ivory);
             Label("MainSubtitle", newGamePanel.transform, "PLANETARY EXPEDITION AUTHORITY", 11, new Vector2(35, -78), 600, 24, Gold);
             var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(540, 408), Vector2.zero, TextAnchor.MiddleCenter);
+            Accent(card, Gold);
             Label("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY  /  M31", 11, new Vector2(34, -30), 470, 24, Gold);
             Label("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 27, new Vector2(34, -67), 475, 46, Ivory);
             Label("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 14, new Vector2(34, -119), 470, 30, Muted);
@@ -340,8 +337,9 @@ namespace WH30K.UI
                     if(GameSettings.HasActiveGame) {ShowNewGamePanel(false);ShowHud(true);}
                     else bootstrap.LoadFromFile();
                 });
-            Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44)
-                .onClick.AddListener(() =>
+            var begin = Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44);
+            MarkPrimary(begin);
+            begin.onClick.AddListener(() =>
                 {
                     var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
                     bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
@@ -350,12 +348,9 @@ namespace WH30K.UI
 
         private void BuildEvent(Transform parent)
         {
-            eventPanel = new GameObject("EventPanel", typeof(RectTransform), typeof(Image));
-            eventPanel.transform.SetParent(parent, false);
-            var rect = eventPanel.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
-            eventPanel.GetComponent<Image>().color = new Color(0.005f, 0.008f, 0.012f, 0.62f);
+            eventPanel = CommandUi.Screen("EventPanel", parent, .72f);
             var modal = Panel("DecisionCard", eventPanel.transform, new Vector2(620, 330), Vector2.zero, TextAnchor.MiddleCenter);
+            Accent(modal, CommandUi.Warning);
             Label("DecisionTag", modal.transform, "PRIORITY TRANSMISSION  /  DECISION REQUIRED", 11, new Vector2(26, -22), 566, 25, Gold);
             eventTitleText = Label("EventTitle", modal.transform, "", 26, new Vector2(26, -63), 566, 42, Ivory);
             eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 98, Ivory);
@@ -367,10 +362,9 @@ namespace WH30K.UI
 
         private void BuildDiscovery(Transform parent)
         {
-            discoveryPanel=new GameObject("DiscoveryPanel",typeof(RectTransform),typeof(Image));discoveryPanel.transform.SetParent(parent,false);
-            var rect=discoveryPanel.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
-            discoveryPanel.GetComponent<Image>().color=new Color(.005f,.008f,.012f,.62f);
+            discoveryPanel = CommandUi.Screen("DiscoveryPanel", parent, .72f);
             var card=Panel("DiscoveryCard",discoveryPanel.transform,new Vector2(620,452),Vector2.zero,TextAnchor.MiddleCenter);
+            Accent(card, CommandUi.Signal);
             Label("DiscoveryTag",card.transform,"EXPEDITION RECORD  /  SURVEY INTELLIGENCE",11,new Vector2(28,-24),564,22,Gold);
             discoveryTitleText=Label("DiscoveryTitle",card.transform,"",22,new Vector2(28,-57),564,58,Ivory);
             discoveryBodyText=Label("DiscoveryDetails",card.transform,"",14,new Vector2(28,-123),564,204,Ivory);
@@ -628,27 +622,9 @@ namespace WH30K.UI
         }
 
         private GameObject Panel(string name, Transform parent, Vector2 size, Vector2 position, TextAnchor anchor, bool border = true)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image)); go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>(); rect.sizeDelta = size;
-            var pivot = anchor == TextAnchor.UpperRight ? new Vector2(1, 1)
-                : anchor == TextAnchor.UpperLeft ? new Vector2(0, 1)
-                : anchor == TextAnchor.LowerCenter ? new Vector2(0.5f, 0) : new Vector2(0.5f, 0.5f);
-            rect.anchorMin = rect.anchorMax = rect.pivot = pivot; rect.anchoredPosition = position;
-            go.GetComponent<Image>().color = Surface;
-            if (border) { var edge = go.AddComponent<Outline>(); edge.effectColor = new Color(0.39f, 0.34f, 0.23f, 0.7f); edge.effectDistance = new Vector2(1, -1); }
-            return go;
-        }
-        private void Accent(GameObject panel, Color color)
-        {
-            var stripe = new GameObject("PanelAccent", typeof(RectTransform), typeof(Image));
-            stripe.transform.SetParent(panel.transform, false);
-            var rect = stripe.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0, 0); rect.anchorMax = new Vector2(0, 1);
-            rect.pivot = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(3, 0);
-            rect.anchoredPosition = new Vector2(2, 0);
-            var image = stripe.GetComponent<Image>(); image.color = color; image.raycastTarget = false;
-        }
+            => CommandUi.Panel(name, parent, size, position, anchor, border);
+
+        private void Accent(GameObject panel, Color color) => CommandUi.Accent(panel, color);
         private void StretchWidth(GameObject panel, float inset)
         {
             var rect = panel.GetComponent<RectTransform>();
@@ -657,37 +633,18 @@ namespace WH30K.UI
             rect.anchoredPosition = new Vector2(0, rect.anchoredPosition.y);
         }
         private Text Label(string name, Transform parent, string content, int size, Vector2 position, float width, float height, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Text)); go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-            rect.sizeDelta = new Vector2(width, height); rect.anchoredPosition = position;
-            var text = go.GetComponent<Text>(); text.font = font; text.fontSize = size; text.color = color; text.text = content;
-            text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate; text.supportRichText = true;
-            return text;
-        }
+            => CommandUi.Label(name, parent, font, content, size, position, width, height, color);
+
         private Button Button(string name, Transform parent, Vector2 position, string content, out Text label, float width, float height = 34)
-        {
-            var go = Panel(name, parent, new Vector2(width, height), position, TextAnchor.UpperLeft);
-            go.GetComponent<Image>().color = Color.white;
-            var button = go.AddComponent<Button>();
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            var colors = button.colors; colors.normalColor = ButtonBase;
-            colors.highlightedColor = new Color(0.16f, 0.20f, 0.21f); colors.pressedColor = new Color(0.26f, 0.23f, 0.16f);
-            colors.disabledColor = new Color(0.035f, 0.045f, 0.05f); colors.fadeDuration = 0.12f;
-            button.colors = colors;
-            label = Label("Label", go.transform, content, 14, Vector2.zero, width, height, Ivory);
-            label.alignment = TextAnchor.MiddleCenter;
-            return button;
-        }
+            => CommandUi.Button(name, parent, font, position, content, out label, width, height);
+
+        private static void MarkPrimary(Button button) => CommandUi.Tone(button, true);
+
         private void Tone(Button button, bool selected)
         {
-            if (button == null) return;
-            if(buttonTones.TryGetValue(button,out var priorTone)&&priorTone==selected)return;
-            buttonTones[button]=selected;
-            var colors = button.colors; colors.normalColor = selected ? new Color(0.24f, 0.20f, 0.12f) : ButtonBase;
-            button.colors = colors;
-            var edge = button.GetComponent<Outline>(); if (edge != null) edge.effectColor = selected ? Gold : new Color(0.2f, 0.27f, 0.29f, 0.65f);
+            if (button == null || buttonTones.TryGetValue(button, out var priorTone) && priorTone == selected) return;
+            buttonTones[button] = selected;
+            CommandUi.Tone(button, selected);
         }
 #if UNITY_EDITOR
         private void BuildDebug(Transform parent)

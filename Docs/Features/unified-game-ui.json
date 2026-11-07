@@ -1,0 +1,38 @@
+{
+  "id": "unified-game-ui",
+  "title": "Unify the game UI and establish reusable templates",
+  "risk": "major",
+  "outcome": "From opening the game to managing a colony and saving or loading it, players use one readable gothic industrial interface with predictable controls and state feedback.",
+  "scope": [
+    "Shared Unity uGUI theme tokens, type hierarchy, spacing, semantic colors, and accessible control states",
+    "Reusable UI components and layouts for screens, HUD bars, panels, dialogs, tooltips, toasts, and the future vox portrait card",
+    "All player-facing surfaces: title, setup, landing, HUD, build and placement, inspectors and ship, industry, resources and surveys, research, guide, mining, earthworks, urban development, events, and save/load feedback",
+    "Inventory and migration of existing local-only cinematic and urban screens after their source is available in an agreed branch"
+  ],
+  "nonGoals": [
+    "Change gameplay rules, bindings, camera behavior, save data, or Unity rendering pipeline",
+    "Replace the cinematic world backdrop or copy official game UI assets",
+    "Redesign editor and developer diagnostics as player UI"
+  ],
+  "acceptance": [
+    "A title → new game → landing → build → inspect → save → load playthrough keeps all existing actions, values and states",
+    "All in-scope screens use the documented theme and shared components, including enabled, focused, disabled, warning and critical states",
+    "Representative screens are visually reviewed at 1280×800, 1920×1080, and ultrawide; long labels and dense panels remain readable and interactive",
+    "A small documented template example and guard check catch new hardcoded shared style values and ad hoc controls outside agreed exceptions",
+    "A portrait-card template can display a character, speaker role, priority, message and optional relevant action without stealing game input"
+  ],
+  "rollback": "Split template and screen migration into reviewable pull requests. Revert a migration slice while its legacy UI remains available. Preserve scene and asset GUIDs.",
+  "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/24",
+  "schema": 1,
+  "stage": "In progress",
+  "design": {
+    "result": "pass",
+    "reviewer": "Design review (coordinating Codex session)",
+    "reference": "Issue #24 design review: keep existing uGUI and screen wiring, centralize visual construction, preserve modal/input semantics, and handle in-progress menu/urban integration separately."
+  },
+  "designApproval": {
+    "by": "Game Director",
+    "result": "approved",
+    "reference": "Codex chat, 2026-11-07: “approve both designs” after review of issues #24 and #25."
+  }
+}
