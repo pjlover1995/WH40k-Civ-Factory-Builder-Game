@@ -471,13 +471,21 @@ namespace WH30K.Sim.Resources
         private void RevealSurveyedLocations()
         {
             PrepareSurveyCaps();
-            var changed=false;var newDiscoveryData=0;
-            foreach(var deposit in deposits)if(!deposit.Discovered&&Surveyed(deposit.Direction)){deposit.Discovered=true;changed=true;}
+            var newDepositCount=0;var newDiscoveryData=0;
+            foreach(var deposit in deposits)if(!deposit.Discovered&&Surveyed(deposit.Direction)){deposit.Discovered=true;newDepositCount++;}
             foreach(var discovery in discoveries)if(!discovery.State.discovered&&Surveyed(discovery.Direction))
-            {var state=discovery.State;state.discovered=true;discovery.State=state;changed=true;newDiscoveryData++;}
+            {var state=discovery.State;state.discovered=true;discovery.State=state;newDiscoveryData++;}
             UpdateSurveyCoverage();
             if(newDiscoveryData>0)research?.AddInsight(newDiscoveryData*4f);
-            if(changed){surveyOverlay=-1;GetComponent<NewGameMenu>()?.AppendEventLog("Survey teams recorded new geological sites and planetary discoveries.");}
+            if(newDepositCount > 0 || newDiscoveryData > 0)
+            {
+                surveyOverlay = -1;
+                var menu = GetComponent<NewGameMenu>();
+                menu?.AppendEventLog("Survey teams recorded new geological sites and planetary discoveries.");
+                var depositsFound = newDepositCount == 1 ? "one new deposit" : $"{newDepositCount} new deposits";
+                var sitesFound = newDiscoveryData == 1 ? "one new site" : $"{newDiscoveryData} new sites";
+                menu?.ReportVoxSurvey(newDepositCount == 0 ? sitesFound : newDiscoveryData == 0 ? depositsFound : depositsFound + " and " + sitesFound);
+            }
         }
         public void SurveyNow()
         {if(planet==null)return;Synchronize();RevealSurveyedLocations();}

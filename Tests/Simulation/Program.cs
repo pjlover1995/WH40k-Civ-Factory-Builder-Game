@@ -61,6 +61,7 @@ internal static class Program
                 "continental forests retain metre-scale tree spacing and historical small-world cell identities");
             ShipChecks.Run(Check);
             FoundingChecks.Run(Check);
+            VoxAlertChecks.Run(Check);
             DepositUsageChecks.Run(Check);
             FarmOwnershipChecks.Run(Check);
             FarmChecks.Run(Check);

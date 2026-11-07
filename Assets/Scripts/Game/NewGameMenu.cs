@@ -128,6 +128,7 @@ namespace WH30K.UI
             markerRect.anchorMin = markerRect.anchorMax = new Vector2(0.5f, 0.5f); markerRect.pivot = new Vector2(0.5f, 0.5f);
             colonyMarker.onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             BuildOutputTooltip();
+            BuildVox(hudPanel.transform);
             BuildNewGame(root.transform);
             BuildLanding(root.transform);
             BuildEvent(root.transform);
@@ -197,7 +198,7 @@ namespace WH30K.UI
                 .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
                 .onClick.AddListener(() => Orbit?.FrameTarget());
-            var journal = Panel("OperationsLog", parent, new Vector2(248, 230), new Vector2(16, -366), TextAnchor.UpperLeft);
+            var journal = Panel("OperationsLog", parent, new Vector2(248, 238), new Vector2(16, -358), TextAnchor.UpperLeft);
             Accent(journal, ForgeRed);
             Label("JournalTitle", journal.transform, "LOGISTICA / MANIFEST", 11, new Vector2(16, -13), 212, 20, Gold);
             materialText = Label("MaterialInventory", journal.transform, "", 10, new Vector2(16, -37), 206, 70, Ivory);
@@ -207,7 +208,9 @@ namespace WH30K.UI
                 .onClick.AddListener(VisitDeposit);
             discoveryButton=Button("DiscoveryStatus",journal.transform,new Vector2(16,-162),"SITES 0 / 0",out _,200,23);
             discoveryButton.onClick.AddListener(OpenDiscoveries);
-            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -218), 200, 14, Muted);
+            Button("OpenVoxLog", journal.transform, new Vector2(120, -189), "VOX LOG", out _, 96, 23)
+                .onClick.AddListener(ToggleVoxLog);
+            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -214), 216, 24, Ivory);
             Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out var expeditionLabel, 87, 24)
                 .onClick.AddListener(() => ShowNewGamePanel(true));
             expeditionLabel.fontSize=11;
@@ -382,6 +385,7 @@ namespace WH30K.UI
         {
             RefreshLanding();
             RefreshEarthworks();
+            RefreshVox();
             if(FacilityPanelOpen && Input.GetKeyDown(KeyCode.Escape)){CloseFacilityPanel();return;}
             var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
@@ -390,6 +394,7 @@ namespace WH30K.UI
                 if (Input.GetKeyDown(KeyCode.Escape) && researchPanel != null && researchPanel.activeSelf) { CloseResearchPanel(); return; }
                 if (Input.GetKeyDown(KeyCode.Escape) && guidePanel != null && guidePanel.activeSelf) { CloseGuide(); return; }
                 if (Input.GetKeyDown(KeyCode.Escape) && resourceDepositsPanel.activeSelf && !resourceDepositsPinned) { resourceDepositsPanel.SetActive(false); return; }
+                if (Input.GetKeyDown(KeyCode.Escape) && voxLog.activeSelf) { ToggleVoxLog(); return; }
                 if (Input.GetKeyDown(KeyCode.F5) && GameSettings.HasActiveGame) bootstrap.SaveToFile();
                 if (Input.GetKeyDown(KeyCode.F9)) bootstrap.LoadFromFile();
                 if (Input.GetKeyDown(KeyCode.Space) && GameSettings.HasActiveGame && !bootstrap.ChoosingLanding) clock.TogglePause();
@@ -571,6 +576,7 @@ namespace WH30K.UI
         {
             CloseResearchPanel(); CloseGuide(); CloseFacilityPanel(); CloseMiningPanel();
             ResetDiscoveryPanel(); ShowEventPanel(false); HideOutputTooltip();
+            ResetVox();
             ShowLandingPanel(false); ResetGuideForNewExpedition();
             selectedBuilding = null;
             if (shipPanel != null) shipPanel.SetActive(false);

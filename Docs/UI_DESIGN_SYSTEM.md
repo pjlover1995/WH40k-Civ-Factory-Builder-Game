@@ -11,7 +11,7 @@ Use `CommandUi` in Unity's existing uGUI stack. A UI screen owns its layout and 
 | Tooltip or advisory layer | `Panel(..., receivesPointer: false)` with noninteractive labels |
 | Action | `Button` with a verb and a disabled state when unavailable |
 | Active mode or primary action | `Tone` for a persistent selected state and `MarkPrimary` for one main action |
-| Field | An existing Unity input, dropdown or slider, using the shared field and text colors |
+| Field | An existing Unity input, dropdown or slider. Use `StyleControl` for selectable backgrounds and handles. |
 | Advisory vox | `CreatePortraitCard` with the speaker, portrait, priority and a short message |
 
 Example from a runtime menu that already has a Unity font:

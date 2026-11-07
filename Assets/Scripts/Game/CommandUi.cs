@@ -95,21 +95,26 @@ namespace WH30K.UI
         {
             var obj = Panel(name, parent, new Vector2(width, height), position, TextAnchor.UpperLeft);
             var image = obj.GetComponent<Image>();
-            image.color = Color.white;
             var button = obj.AddComponent<Button>();
-            button.targetGraphic = image;
             button.navigation = new Navigation { mode = Navigation.Mode.None };
-            var colors = button.colors;
-            colors.normalColor = Field;
-            colors.highlightedColor = Hover;
-            colors.selectedColor = Hover;
-            colors.pressedColor = Active;
-            colors.disabledColor = Disabled;
-            colors.fadeDuration = .12f;
-            button.colors = colors;
+            StyleControl(button, image);
             label = Label("Label", obj.transform, font, value, 14, Vector2.zero, width, height, Parchment);
             label.alignment = TextAnchor.MiddleCenter;
             return button;
+        }
+
+        internal static void StyleControl(Selectable control, Graphic target, bool useBrassHandle = false)
+        {
+            target.color = Color.white;
+            control.targetGraphic = target;
+            var colors = control.colors;
+            colors.normalColor = useBrassHandle ? Brass : Field;
+            colors.highlightedColor = useBrassHandle ? Parchment : Hover;
+            colors.selectedColor = colors.highlightedColor;
+            colors.pressedColor = Active;
+            colors.disabledColor = useBrassHandle ? SecondaryText : Disabled;
+            colors.fadeDuration = .12f;
+            control.colors = colors;
         }
 
         internal static void Tone(Button button, bool selected)

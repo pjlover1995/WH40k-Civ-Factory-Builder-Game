@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="VoxAlertChecks.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/VoxAlertPolicy.cs" />
     <Compile Include="FoundingChecks.cs" />
     <Compile Include="../../Assets/Scripts/Sim/FoundingObjectives.cs" />
     <Compile Include="DepositUsageChecks.cs" />
