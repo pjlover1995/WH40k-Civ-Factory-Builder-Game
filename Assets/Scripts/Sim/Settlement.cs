@@ -86,6 +86,7 @@ namespace WH30K.Sim.Settlements
 
         public bool HasActiveSimulation => planet != null && resourceSystem != null && environmentState != null;
         public float Population => population;
+        internal float ReportedHousingCapacity => outputTick.capacity;
         public float IndustryPolicyModifier => industryModifier;
         public IEnumerable<ManagedBuilding> AllBuildings
         {get{foreach(var b in coreBuildings)if(b!=null)yield return b;foreach(var b in constructedBuildings)if(b!=null)yield return b;}}

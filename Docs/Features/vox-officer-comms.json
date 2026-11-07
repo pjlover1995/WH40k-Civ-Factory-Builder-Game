@@ -1,0 +1,32 @@
+{
+  "id": "vox-officer-comms",
+  "title": "Add Captain and Mechanicum Priest vox communications",
+  "risk": "gameplay",
+  "outcome": "The Captain and Mechanicum Priest proactively explain actual colony conditions through concise portrait-led vox messages, with each officer covering distinct responsibilities.",
+  "scope": [
+    "Captain: available housing or berths, food and water reserves, and crew-facing consequences",
+    "Mechanicum Priest: actual production or input shortages, construction supply needs, completed research, and newly charted discoveries",
+    "Original portraits and visually distinct voices, shared nonmodal vox card and a bounded session transcript",
+    "Read existing colony metrics, research completion, and survey events; use simulation-time sampling, sustained thresholds, severity and deduplication"
+  ],
+  "nonGoals": [
+    "Voice acting, animated characters, branching dialogue, rewards, new simulation mechanics, or changes to save schema",
+    "Pause the game, open a modal, or reveal unsurveyed content"
+  ],
+  "acceptance": [
+    "Controlled housing pressure and crew resource shortage produce correctly attributed Captain messages with a clear reason and practical next step",
+    "A sustained manufacturing bottleneck, research completion and a new survey finding are attributed to the Priest and reflect verified game state",
+    "Messages show the matching portrait and readable speaker name; ordinary reports never capture camera input or interrupt decisions",
+    "A single condition does not repeatedly notify on threshold oscillation, fast-forward, or load; existing colonies and new landings start cleanly",
+    "Existing simulation checks pass and Unity Play Mode verifies UI, pause/speed, scenario triggers, input focus and save/reload behavior"
+  ],
+  "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
+  "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
+  "schema": 1,
+  "stage": "In progress",
+  "design": {
+    "result": "pass",
+    "reviewer": "Design review (coordinating Codex session)",
+    "reference": "Issue #25 design review: use real simulation data and explicit research/survey notifications, bound and deduplicate messages, preserve all save formats, and use the shared UI card."
+  }
+}
