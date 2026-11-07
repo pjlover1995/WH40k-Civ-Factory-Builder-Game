@@ -23,16 +23,35 @@
   "rollback": "Remove the observer and vox presentation wiring, leaving all simulation and saved colony state intact.",
   "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/25",
   "schema": 1,
-  "stage": "Testing",
+  "stage": "Awaiting approval",
   "design": {
     "result": "pass",
     "reviewer": "Design review (coordinating Codex session)",
     "reference": "Issue #25 design review: use real simulation data and explicit research/survey notifications, bound and deduplicate messages, preserve all save formats, and use the shared UI card."
   },
+  "rework": [
+    {
+      "from": "Testing",
+      "reason": "Revalidate the extended scene fixture against updated main."
+    }
+  ],
   "review": {
     "result": "pass",
     "reviewer": "Lead Reviewer (ui_review, GPT-6.1 Sol)",
-    "commit": "6e009ce89769f200af619292cb4335ce5c3dfa6a",
-    "reference": "Independent Codex review after revisions: tracker and research controls are clear; paused event delivery and reserve copy match behavior. Focused Unity coverage passed; broader playtest is separate."
+    "commit": "11618b9934b0d36d71d97cffd39b3c9ca914c239",
+    "reference": "Independent review passed the unchanged runtime and assets, extended live-scene fixture, and merge of the recovery tooling from origin/main. The reviewed local payload and GitHub payload have identical trees (aa5fd5b)."
+  },
+  "validation": {
+    "result": "pass",
+    "coverage": "pass",
+    "tester": "Vox Scene Test Agent (GPT-6 Luna), final runs by coordinating GPT-6.1 Sol",
+    "manager": "Test Manager (vox_test_manager, GPT-6.1 Sol)",
+    "commit": "11618b9934b0d36d71d97cffd39b3c9ca914c239",
+    "command": "dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .; node Tools/Workflow/ui-style.mjs; Unity 2022.3.2f1 -batchmode -executeMethod VoxSceneChecks.RunBatch",
+    "reference": "606 .NET checks and 25 Unity checks passed. Independent Test Manager accepted focused coverage. Director playtest remains for natural 1x/10x pacing, camera feel, and readability.",
+    "unity": {
+      "result": "pass",
+      "reference": "Logs/vox-final.log and private preview Logs/preview-vox-final.log. Live research, survey, and Manufactorum inputs, captain pressure, portrait match, passive input, modals, and an in-memory save/load round trip."
+    }
   }
 }
