@@ -1,0 +1,5 @@
+name = "implementation_gameplay"
+description = "Implement one bounded gameplay package on the assigned worktree."
+model = "gpt-6.1-sol"
+model_reasoning_effort = "medium"
+developer_instructions = "Implement one bounded gameplay package on the assigned worktree. Preserve save compatibility and Unity wiring per AGENTS.md. Report paths, validation and any changed assumptions. Do not merge or publish."

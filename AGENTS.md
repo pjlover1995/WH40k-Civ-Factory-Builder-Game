@@ -7,3 +7,7 @@
 - Run `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` and `git diff --check` for gameplay changes. Extend checks for meaningful new behavior.
 - Run the Unity scene checks and visual acceptance checks in `Docs/VERIFICATION.md` when Unity is available. Clearly distinguish syntax checks, engine-independent tests, engine compilation, and actual play testing; do not claim checks passed unless they were run.
 - Update the brief and verification notes when behavior or scope changes. Prioritize a reliable playable loop before adding unrelated systems.
+
+## Feature workflow
+
+For a new feature or a request to run the game development workflow, read [the workflow runbook](Docs/CODEX_WORKFLOW.md) and [the Game Design Authority](Docs/GAME_DESIGN_AUTHORITY.md). Use one feature worktree and record, separate implementation from review and test acceptance, and leave integration and release decisions to the Game Director. Preserve any unrelated edits. Report a blocked check with its cause and evidence.

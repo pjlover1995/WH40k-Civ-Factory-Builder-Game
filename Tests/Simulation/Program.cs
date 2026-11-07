@@ -544,7 +544,7 @@ internal static class Program
                 var text=File.ReadAllText(path);var kind=(int)AssetFloat(text,"kind");definitionKinds.Add(kind);
                 var defaults=ExplorationRules.DefaultProfile((DiscoveryKind)kind);
                 definitionsValid&=text.Contains("guid: "+definitionScriptGuid)&&File.Exists(path+".meta")
-                    &&Regex.IsMatch(text,@"(?m)^  description: .+")&&Regex.IsMatch(text,@"(?m)^  rewards:$")
+                    &&Regex.IsMatch(text,@"(?m)^  description: .+")&&Regex.IsMatch(text,@"(?m)^  rewards:\r?$")
                     &&Math.Abs(AssetFloat(text,"cautiousMultiplier")-defaults.cautiousMultiplier)<.00001f
                     &&Math.Abs(AssetFloat(text,"rapidMultiplier")-defaults.rapidMultiplier)<.00001f
                     &&Math.Abs(AssetFloat(text,"hazardChance")-defaults.hazardChance)<.00001f;
