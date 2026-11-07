@@ -87,6 +87,22 @@ try {
     assert.equal(resumedRecord.recovery.attempts, 0);
     assert.equal(resumedRecord.recovery.checkpoints[0].commit, sha);
 
+    const failedRecord = join(featureDir, 'failed-fixture.json');
+    writeFileSync(failedRecord, JSON.stringify({ schema: 1, id: 'failed-fixture', stage: 'In progress', recovery: {
+      status: 'paused_usage_limit', attempts: 1, totalAttempts: 1, nextAttemptAt: new Date(0).toISOString(), checkpoints: [],
+    } }));
+    const failingStub = join(temp, 'failing-resume-stub.ps1');
+    writeFileSync(failingStub, "[Console]::Error.WriteLine('Codex subscription usage limit reached')\nexit 1\n");
+    const failed = spawnSync(process.execPath, [cli, 'tick', 'failed-fixture'], {
+      cwd: root, env: { ...env, CODEX_RECOVERY_COMMAND: `powershell -NoProfile -ExecutionPolicy Bypass -File "${failingStub}"` }, encoding: 'utf8', windowsHide: true,
+    });
+    assert.notEqual(failed.status, 0, 'a failing runner must not be marked as resumed');
+    const rescheduled = JSON.parse(readFileSync(failedRecord, 'utf8')).recovery;
+    assert.equal(rescheduled.status, 'paused_usage_limit');
+    assert.equal(rescheduled.attempts, 2);
+    assert.equal(rescheduled.resumeLeaseUntil, undefined, 'failed runners must release their lease');
+    assert.ok(Date.parse(rescheduled.nextAttemptAt) > Date.now(), 'failed retries must be scheduled into the future');
+
     resumedRecord.recovery.status = 'resuming';
     resumedRecord.recovery.resumeLeaseUntil = new Date(0).toISOString();
     writeFileSync(resumeRecord, JSON.stringify(resumedRecord));
