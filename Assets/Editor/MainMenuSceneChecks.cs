@@ -171,10 +171,14 @@ public static class MainMenuSceneChecks
             {
                 if (string.IsNullOrWhiteSpace(label.text) || label.resizeTextForBestFit ||
                     label.verticalOverflow != VerticalWrapMode.Truncate) continue;
-                if (label.preferredHeight > label.rectTransform.rect.height + 2)
+                var rect = label.rectTransform.rect;
+                var settings = label.GetGenerationSettings(new Vector2(rect.width, 0f));
+                settings.verticalOverflow = VerticalWrapMode.Overflow;
+                var requiredHeight = label.cachedTextGeneratorForLayout.GetPreferredHeight(label.text, settings) / label.pixelsPerUnit;
+                if (requiredHeight > rect.height + 2)
                 {
                     textFits = false;
-                    Debug.LogWarning($"UI review overflow: {stage}/{label.name}: {label.preferredHeight:0.#} > {label.rectTransform.rect.height:0.#}");
+                    Debug.LogWarning($"UI review overflow: {stage}/{label.name}: {requiredHeight:0.#} > {rect.height:0.#}");
                 }
             }
             Check(textFits, stage + " text fits its populated panel");
