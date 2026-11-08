@@ -43,6 +43,7 @@ namespace WH30K.Sim.Resources
         public float Stockpile => Industry != null ? Industry.ConstructionSupplyTotals().basic : 0;
         public float Water => water;
         public float Food => food;
+        public float FoodRoom => Mathf.Max(0, FarmRules.FoodCapacity - food);
         public const float WaterCapacity = WaterRules.Capacity;
         public bool CanAfford(float cost) => Industry != null && Industry.CanAffordConstruction(cost, 0);
 
@@ -105,6 +106,13 @@ namespace WH30K.Sim.Resources
         }
 
         public float AddFood(float amount) { var added = Mathf.Min(Mathf.Max(0, amount), FarmRules.FoodCapacity - food); food += added; return added; }
+        public bool SetFoodReserve(float amount)
+        {
+            if (!ColonyRules.IsFinite(amount) || amount < 0 || amount > FarmRules.FoodCapacity) return false;
+            food = amount;
+            PushUpdate();
+            return true;
+        }
         public float ConsumeFood(float amount) { var used = Mathf.Min(food, Mathf.Max(0, amount)); food -= used; return used; }
 
         public ResourceSnapshot CreateSnapshot()

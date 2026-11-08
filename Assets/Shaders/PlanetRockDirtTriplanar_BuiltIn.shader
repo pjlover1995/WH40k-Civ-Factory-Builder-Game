@@ -42,6 +42,8 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
             sampler2D _RockTex, _SoilTex, _GrassTex, _SnowTex;
             float3 _PlanetCenter;
             float4 _EarthworkBrush, _EarthworkColor;
+            float4 _PlanetAtmosphericFog;
+            float4 _PlanetAtmosphericFogColor;
             struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float4 color:COLOR; float2 climate:TEXCOORD1; };
             struct v2f { float4 pos:SV_POSITION; float3 worldPos:TEXCOORD0; float3 normal:TEXCOORD1; float4 biome:COLOR; float2 climate:TEXCOORD3; SHADOW_COORDS(2) };
             v2f vert(appdata v)
@@ -123,6 +125,9 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                     float edge=smoothstep(_EarthworkBrush.w-2.5,_EarthworkBrush.w-1,d);
                     lit=lerp(lit,_EarthworkColor.rgb,area*(0.28+edge*0.52));
                 }
+                float fogAmount=saturate((distance(_WorldSpaceCameraPos,i.worldPos)-_PlanetAtmosphericFog.x)
+                    /max(1,_PlanetAtmosphericFog.y-_PlanetAtmosphericFog.x))*_PlanetAtmosphericFog.z;
+                lit=lerp(lit,_PlanetAtmosphericFogColor.rgb,fogAmount);
                 return float4(lit,1);
             }
             ENDCG

@@ -40,6 +40,8 @@ namespace WH30K.Sim.Resources
         private readonly List<SurfaceDiscovery> discoveries=new List<SurfaceDiscovery>();
         private readonly List<FacilityStock> stocks=new List<FacilityStock>();
         private float[] expeditionCargo;
+        private float[] initialTenderManifest;
+        private TenderLogisticsState tenderLogistics;
         private FoundingProgress founding;
         private float foundingFoodDelivery;
         public FoundingProgress Founding => founding;
@@ -68,6 +70,12 @@ namespace WH30K.Sim.Resources
             return recovered;
         }
         public bool HasExpeditionCargo => expeditionCargo != null;
+        public int TenderTripsRemaining => TenderLogisticsRules.TripsRemaining(tenderLogistics);
+        public float OrbitalCrewAvailable => tenderLogistics?.orbitalCrew ?? 0;
+        public float OrbitalRationsAvailable => tenderLogistics?.orbitalFood ?? 0;
+        public float OrbitalSupplyAvailable(MaterialKind kind)
+            => tenderLogistics?.orbitalSupplies != null && (int)kind >= 0 && (int)kind < tenderLogistics.orbitalSupplies.Length
+                ? tenderLogistics.orbitalSupplies[(int)kind] : 0;
         public float ShipCargo(MaterialKind kind) => expeditionCargo != null ? expeditionCargo[(int)kind] : 0;
         // The landed vessel acts as a shared logistics store with a finite 1,920-unit
         // capacity per material; the initial construction manifest occupies part of it.
@@ -93,6 +101,22 @@ namespace WH30K.Sim.Resources
                     reserveMultiplier = GameSettings.GetLandingReserveMultiplier(GameSettings.CurrentDifficulty)
                 }
             });
+        }
+
+        public void PrepareImmediateLanding(Vector3 landingRegion)
+        {
+            PrepareExpedition(landingRegion);
+            // Direct, already-landed starts are used by tools and scene fixtures. They
+            // have no physical orbital shuttle phase, so preserve save validity without
+            // granting orbital stock or unearned return runs.
+            tenderLogistics = new TenderLogisticsState
+            {
+                orbitalCrew = 0,
+                orbitalFood = 0,
+                orbitalSupplies = new float[IndustryRules.MaterialCount],
+                tripsUsed = TenderLogisticsRules.MaximumTrips,
+                initialLoadoutApplied = true
+            };
         }
 
         public void PrepareExpedition(IReadOnlyList<GameSettings.LandingSite> landingSites)
@@ -131,6 +155,77 @@ namespace WH30K.Sim.Resources
                 deposit.InitialVolume = deposit.Remaining;
             }
             SetOverlay(1);
+        }
+
+        public void PrepareOrbitalExpedition(IReadOnlyList<GameSettings.LandingSite> landingSites)
+        {
+            PrepareExpedition(landingSites);
+            initialTenderManifest = (float[])expeditionCargo.Clone();
+            tenderLogistics = new TenderLogisticsState
+            {
+                orbitalCrew = TenderLogisticsRules.MainVesselCrew,
+                orbitalFood = TenderLogisticsRules.MainVesselRations,
+                orbitalSupplies = (float[])expeditionCargo.Clone()
+            };
+            for (var i = 0; i < tenderLogistics.orbitalSupplies.Length; i++)
+                tenderLogistics.orbitalSupplies[i] *= TenderLogisticsRules.MaximumTrips;
+            expeditionCargo = new float[IndustryRules.MaterialCount];
+        }
+
+        public bool CanApplyInitialLandingLoadout(float crew, float rations, float supplyFraction)
+        {
+            if (tenderLogistics == null) return true;
+            return !tenderLogistics.initialLoadoutApplied
+                && ColonyRules.IsFinite(crew) && crew >= 250 && crew <= ShipRules.CrewCapacity
+                && crew <= tenderLogistics.orbitalCrew
+                && ColonyRules.IsFinite(rations) && rations >= 0 && rations <= FarmRules.FoodCapacity
+                && rations <= tenderLogistics.orbitalFood
+                && ColonyRules.IsFinite(supplyFraction) && supplyFraction >= 0 && supplyFraction <= 1;
+        }
+
+        public bool ApplyInitialLandingLoadout(float crew, float rations, float supplyFraction)
+        {
+            if (tenderLogistics == null) return true;
+            if (!CanApplyInitialLandingLoadout(crew, rations, supplyFraction) || settlement == null || resources == null
+                || initialTenderManifest == null || initialTenderManifest.Length != IndustryRules.MaterialCount
+                || !settlement.SetTenderCrew(crew) || !resources.SetFoodReserve(rations)) return false;
+            for (var i = 0; i < IndustryRules.MaterialCount; i++)
+            {
+                var amount = initialTenderManifest[i] * supplyFraction;
+                expeditionCargo[i] += amount;
+                tenderLogistics.orbitalSupplies[i] -= amount;
+            }
+            tenderLogistics.orbitalCrew -= crew;
+            tenderLogistics.orbitalFood -= rations;
+            tenderLogistics.initialLoadoutApplied = true;
+            return true;
+        }
+
+        public bool TryOrbitalSupplyRun(float crew, float rations, float components, float plasteel)
+        {
+            if (tenderLogistics == null || tenderLogistics.tripsUsed >= TenderLogisticsRules.MaximumTrips
+                || !ColonyRules.IsFinite(crew) || !ColonyRules.IsFinite(rations)
+                || !ColonyRules.IsFinite(components) || !ColonyRules.IsFinite(plasteel)
+                || crew < 0 || rations < 0 || components < 0 || plasteel < 0
+                || crew + rations + components + plasteel <= 0
+                || crew > tenderLogistics.orbitalCrew || rations > tenderLogistics.orbitalFood
+                || components > tenderLogistics.orbitalSupplies[(int)MaterialKind.Components]
+                || plasteel > tenderLogistics.orbitalSupplies[(int)MaterialKind.Plasteel]
+                || settlement == null || resources == null || !settlement.CanReceiveTenderCrew(crew)
+                || rations > resources.FoodRoom
+                || components > ShipStorageRoom(MaterialKind.Components)
+                || plasteel > ShipStorageRoom(MaterialKind.Plasteel)) return false;
+
+            settlement.ReceiveTenderCrew(crew);
+            resources.AddFood(rations);
+            StoreOnShip(MaterialKind.Components, components);
+            StoreOnShip(MaterialKind.Plasteel, plasteel);
+            tenderLogistics.orbitalCrew -= crew;
+            tenderLogistics.orbitalFood -= rations;
+            tenderLogistics.orbitalSupplies[(int)MaterialKind.Components] -= components;
+            tenderLogistics.orbitalSupplies[(int)MaterialKind.Plasteel] -= plasteel;
+            tenderLogistics.tripsUsed++;
+            return true;
         }
         private void AddLandingRegionReserves(Vector3 region, float reserveMultiplier, int siteIndex)
         {
@@ -297,6 +392,15 @@ namespace WH30K.Sim.Resources
             if(saved!=null)
             {
                 expeditionCargo = saved.expeditionCargo != null && saved.expeditionCargo.Length > 0 ? (float[])IndustryRules.UpgradeStock(saved.expeditionCargo).Clone() : null;
+                tenderLogistics = saved.tenderLogistics == null ? null : new TenderLogisticsState
+                {
+                    version = saved.tenderLogistics.version,
+                    orbitalCrew = saved.tenderLogistics.orbitalCrew,
+                    orbitalFood = saved.tenderLogistics.orbitalFood,
+                    orbitalSupplies = saved.tenderLogistics.orbitalSupplies != null ? (float[])saved.tenderLogistics.orbitalSupplies.Clone() : null,
+                    tripsUsed = saved.tenderLogistics.tripsUsed,
+                    initialLoadoutApplied = saved.tenderLogistics.initialLoadoutApplied
+                };
                 stocks.Clear();
                 foreach(var source in saved.facilities)
                 {
@@ -810,7 +914,8 @@ namespace WH30K.Sim.Resources
                 DepositUsageSeconds += dt;
                 var coreGeneration=0f;
                 foreach(var core in settlement.CoreBuildings)
-                    if(!core.State.offline && (core.Id=="ColonyShip" || core.Id=="Utility" || core.Id=="Factory")) coreGeneration=ShipRules.ReactorMW;
+                    if(!core.State.offline && (core.Id=="ColonyShip" || core.Id=="Utility" || core.Id=="Factory"))
+                        coreGeneration=settlement.ShipLayoutVersion >= 2 ? ShipRules.ReactorMW : ShipRules.LegacyReactorMW;
                 const float generatorCapacity=28f;
                 const float generatorFuelPerPowerSecond=.006f;
                 WorkersRequired=0;
@@ -1226,6 +1331,10 @@ namespace WH30K.Sim.Resources
             var savedDiscoveries=new DiscoveryRecord[discoveries.Count];for(var i=0;i<discoveries.Count;i++)savedDiscoveries[i]=discoveries[i].State;
             return new IndustrySnapshot{facilities=savedStocks,deposits=savedDeposits,cargo=flights.ConvertAll(f=>f.state).ToArray(),geologyVersion=4,materialVersion=2,facilityVersion=1,
                 founding=founding,expeditionCargo=expeditionCargo != null ? (float[])expeditionCargo.Clone() : null,
+                tenderLogistics=tenderLogistics == null ? null : new TenderLogisticsState
+                {version=tenderLogistics.version,orbitalCrew=tenderLogistics.orbitalCrew,orbitalFood=tenderLogistics.orbitalFood,
+                    orbitalSupplies=tenderLogistics.orbitalSupplies != null ? (float[])tenderLogistics.orbitalSupplies.Clone() : null,
+                    tripsUsed=tenderLogistics.tripsUsed,initialLoadoutApplied=tenderLogistics.initialLoadoutApplied},
                 discoveries=savedDiscoveries,explorationVersion=ExplorationRules.LayoutVersion,exploredCells=(bool[])exploredCells.Clone(),
                 producedTotals=(float[])producedTotals.Clone(),consumedTotals=(float[])consumedTotals.Clone(),
                 productionRates=(float[])productionRates.Clone(),consumptionRates=(float[])consumptionRates.Clone(),
@@ -1235,7 +1344,7 @@ namespace WH30K.Sim.Resources
         {
             CancelLogisticsBuild();LogisticsVisualTruncated=false;
             founding=default;foundingFoodDelivery=0;
-            expeditionCargo = null; farmEntityRevision=-1;farmInputPools.Clear();farmOperations.Clear();
+            expeditionCargo = null; initialTenderManifest = null; tenderLogistics = null; farmEntityRevision=-1;farmInputPools.Clear();farmOperations.Clear();
             ClearExcavation();ClearSurveyPresentation();if(visualRoot!=null)Destroy(visualRoot.gameObject);
             foreach(var material in materials)if(material!=null)Destroy(material);
             DepositUsageSeconds=0;

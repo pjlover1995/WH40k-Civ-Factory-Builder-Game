@@ -9,6 +9,7 @@ using UnityEditor.SceneManagement;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
+using WH30K.CameraSystem;
 using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Gameplay.Construction;
@@ -129,9 +130,24 @@ public static class MainMenuSceneChecks
         var fixedSeed = GameObject.Find("SeedInput")?.GetComponent<InputField>();
         if (fixedSeed != null) fixedSeed.text = "1234";
         FindButton("StartButton")?.onClick.Invoke();
-        yield return new WaitForSecondsRealtime(.35f);
+        var arrivalDeadline = Time.realtimeSinceStartup + 4.5f;
+        while (Time.realtimeSinceStartup < arrivalDeadline) yield return null;
+        Check(GameObject.Find("DiscoveryPanel")?.activeSelf == true
+            && GameObject.Find("DiscoveryTitle")?.GetComponent<Text>().text.Contains("CAPTAIN") == true,
+            "warp exit opens the captain's stable-orbit damage report");
+        FindButton("DiscoveryAction")?.onClick.Invoke();
+        yield return null;
         Check(bootstrap.ChoosingLanding && GameObject.Find("LandingSelection") != null,
-            "start opens the themed landing card");
+            "acknowledging the captain opens the themed landing card");
+        Check(Camera.main.GetComponent<SimpleOrbitCamera>().IsSurfaceView,
+            "landing selection frames the surveyed surface beneath its transparent site panel");
+        var landingPanel = GameObject.Find("LandingSelection");
+        var tenderPreview = GameObject.Find("Landing vessel preview");
+        Check(landingPanel.GetComponent<Image>().color.a < .6f && tenderPreview != null
+            && tenderPreview.GetComponent<Renderer>().sharedMaterial.GetFloat("_Mode") == 3f
+            && tenderPreview.GetComponent<Renderer>().sharedMaterial.color.a < .25f,
+            "the landing panel and tender preview remain translucent over the surface");
+        for (var frame = 0; frame < 60; frame++) yield return null;
         CaptureReview(menu, "landing", true);
         FindButton("LandColonyShip")?.onClick.Invoke();
         yield return new WaitForSecondsRealtime(.35f);

@@ -169,6 +169,17 @@ namespace WH30K.Planet
             children = null;
         }
 
+        internal void AccumulateVisibleCounts(ref int patches, ref int trianglesVisible)
+        {
+            if (meshRenderer != null && meshRenderer.enabled && meshRenderer.isVisible && mesh != null)
+            {
+                patches++;
+                trianglesVisible += countedTriangles;
+            }
+            if (children != null)
+                foreach (var child in children) child?.AccumulateVisibleCounts(ref patches, ref trianglesVisible);
+        }
+
         private void SetVisible(bool visible)
         {
             if (visible && surfaceDirty) { Regenerate(); surfaceDirty = false; }

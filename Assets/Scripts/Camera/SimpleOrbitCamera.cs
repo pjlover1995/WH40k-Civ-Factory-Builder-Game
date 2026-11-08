@@ -275,6 +275,18 @@ namespace WH30K.CameraSystem
             UpdateCameraTransform();
         }
 
+        public void FocusOrbitalArrival(Vector3 direction)
+        {
+            if (target == null || direction.sqrMagnitude < 0.01f) return;
+            pendingZoom = 0;
+            colonyDirection = navigationDirection = direction.normalized;
+            surfaceMode = true;
+            yaw = 24f;
+            pitch = 48f;
+            distance = 18000f;
+            UpdateCameraTransform();
+        }
+
         public void FocusLocation(Vector3 direction)
         {
             if (target == null || direction.sqrMagnitude < 0.01f) return;
