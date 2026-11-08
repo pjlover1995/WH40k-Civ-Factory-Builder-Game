@@ -166,13 +166,18 @@ public static class MainMenuSceneChecks
             Check(panel != null, stage + " opens its live panel");
             if (panel == null) return;
             Canvas.ForceUpdateCanvases();
+            var textFits = true;
             foreach (var label in panel.GetComponentsInChildren<Text>())
             {
                 if (string.IsNullOrWhiteSpace(label.text) || label.resizeTextForBestFit ||
                     label.verticalOverflow != VerticalWrapMode.Truncate) continue;
                 if (label.preferredHeight > label.rectTransform.rect.height + 2)
-                    Debug.Log($"UI review overflow: {stage}/{label.name}: {label.preferredHeight:0.#} > {label.rectTransform.rect.height:0.#}");
+                {
+                    textFits = false;
+                    Debug.LogWarning($"UI review overflow: {stage}/{label.name}: {label.preferredHeight:0.#} > {label.rectTransform.rect.height:0.#}");
+                }
             }
+            Check(textFits, stage + " text fits its populated panel");
             CaptureReview(menu, stage, true, panel.GetComponentInParent<Canvas>());
         }
 
@@ -214,7 +219,7 @@ public static class MainMenuSceneChecks
         yield return null;
         Record("resource-deposits", "ResourceDepositsPane");
         FindButton("CloseResourceDeposits")?.onClick.Invoke();
-        menu.ShowDiscoveryPanel("SURVEY REPORT", "The survey team has charted a new location. Review the site from the colony map.",
+        menu.ShowDiscoveryPanel("SURVEY REPORT", "The survey team has charted a new location. Review the site from the colony map. The orbital instruments recorded a broad mineral seam beneath a fractured ridge, with shallow water traces along the eastern shelf. Several deposits overlap the preferred route, and the western approach crosses loose basalt. Command should compare the projected haul with the extra construction and maintenance cost before committing the dozer. The data remains available from the survey panel after this transmission closes.",
             "REVIEW SITE", () => { });
         yield return null;
         Record("survey", "DiscoveryCard");
@@ -230,10 +235,11 @@ public static class MainMenuSceneChecks
         Record("earthworks", "EarthworksHUD");
         FindButton("CloseEarthworks")?.onClick.Invoke();
 
-        menu.PromptEvent("COLONY TRANSMISSION", "The colony council requests a decision on the next supply delivery.",
+        menu.PromptEvent("COLONY TRANSMISSION", "Several districts report damaged water manifolds after the last pressure cycle. The attached survey identifies a mineral seam near the eastern ridge, but reaching it would delay repairs and require the dozer to cross unstable basalt. The council asks Command to preserve the current reserve until the manifolds are secure, while the Mechanicum recommends issuing a measured supply shipment now so the extraction crew can begin work before the weather front arrives. The decision will be recorded for the next review.",
             "SEND THE SUPPLIES", () => { }, "RETAIN THE RESERVE", () => { });
         yield return null;
         Record("event", "DecisionCard");
+        if (Environment.GetCommandLineArgs().Contains("-wh30k-panel-review")) CaptureReview(menu, "event-long-copy", true);
         menu.ShowEventPanel(false);
         yield return CheckVisibleSaveBrowser(menu, bootstrap);
         var save = bootstrap.CaptureSaveJson();

@@ -371,7 +371,7 @@ namespace WH30K.UI
             Accent(modal, CommandUi.Warning);
             Label("DecisionTag", modal.transform, "PRIORITY TRANSMISSION  /  DECISION REQUIRED", 11, new Vector2(26, -22), 566, 25, Gold);
             eventTitleText = Label("EventTitle", modal.transform, "", 26, new Vector2(26, -63), 566, 42, Ivory);
-            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 98, Ivory);
+            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 112, Ivory);
             choiceA = Button("ChoiceA", modal.transform, new Vector2(26, -239), "", out choiceALabel, 273, 64);
             choiceB = Button("ChoiceB", modal.transform, new Vector2(321, -239), "", out choiceBLabel, 273, 64);
             choiceALabel.fontSize = choiceBLabel.fontSize = 13;
