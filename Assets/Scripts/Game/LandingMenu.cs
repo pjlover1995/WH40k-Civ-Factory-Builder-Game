@@ -19,7 +19,9 @@ namespace WH30K.UI
         private void BuildLanding(Transform parent)
         {
             landingPanel = Panel("LandingSelection", parent, new Vector2(390, 620), new Vector2(-24, -72), TextAnchor.UpperRight);
-            landingPanel.GetComponent<Image>().color = new Color(.025f, .035f, .047f, .48f);
+            var landingPanelTint = CommandUi.Iron;
+            landingPanelTint.a = .48f;
+            landingPanel.GetComponent<Image>().color = landingPanelTint;
             Label("LandingTitle", landingPanel.transform, "LANDING ZONE", 18, new Vector2(18, -14), 348, 28, Gold);
             Label("LandingHelp", landingPanel.transform, "Select a surveyed site", 12, new Vector2(18, -45), 348, 22, Ivory);
             for (var i = 0; i < landingSiteButtons.Length; i++)
@@ -32,7 +34,9 @@ namespace WH30K.UI
             }
             var compareButton = Button("LandingDifficultyDropdown", landingPanel.transform, new Vector2(18, -324), "SITE COMPARISON  ▾", out _, 350, 32);
             comparisonPanel = Panel("LandingDifficultyOptions", landingPanel.transform, new Vector2(350, 124), new Vector2(18, -360), TextAnchor.UpperLeft, false);
-            comparisonPanel.GetComponent<Image>().color = new Color(.025f, .035f, .047f, .76f);
+            var comparisonPanelTint = CommandUi.Iron;
+            comparisonPanelTint.a = .76f;
+            comparisonPanel.GetComponent<Image>().color = comparisonPanelTint;
             Label("LandingDifficultyDetails", comparisonPanel.transform,
                 "EASY  ·  gentler ground, larger reserves, milder events\nMEDIUM  ·  balanced terrain, reserves and conditions\nHARD  ·  rougher ground, smaller reserves, harsher events",
                 11, new Vector2(10, -10), 330, 100, Ivory);
@@ -125,7 +129,9 @@ namespace WH30K.UI
             {
                 if (landingMaterial == null)
                 {
-                    landingMaterial = new Material(Shader.Find("Standard")) { color = new Color(.2f, .85f, .95f, .16f) };
+                    var previewTint = CommandUi.Signal;
+                    previewTint.a = .16f;
+                    landingMaterial = new Material(Shader.Find("Standard")) { color = previewTint }; // World preview material tint follows the shared palette.
                     landingMaterial.SetFloat("_Mode", 3f);
                     landingMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
                     landingMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);

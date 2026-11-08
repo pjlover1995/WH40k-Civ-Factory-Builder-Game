@@ -43,7 +43,9 @@ namespace WH30K.UI
             shipSupplyPanel.transform.SetParent(parent, false);
             var full = shipSupplyPanel.GetComponent<RectTransform>();
             full.anchorMin = Vector2.zero; full.anchorMax = Vector2.one; full.offsetMin = full.offsetMax = Vector2.zero;
-            shipSupplyPanel.GetComponent<Image>().color = new Color(.01f, .02f, .03f, .78f);
+            var supplyBackdrop = CommandUi.Iron;
+            supplyBackdrop.a = .78f;
+            shipSupplyPanel.GetComponent<Image>().color = supplyBackdrop;
             var supplyCard = Panel("OrbitalSupplyCard", shipSupplyPanel.transform, new Vector2(520, 390), Vector2.zero, TextAnchor.MiddleCenter);
             Label("OrbitalSupplyTitle", supplyCard.transform, "TENDER ORBITAL RUN", 18, new Vector2(24, -20), 472, 30, Gold);
             Label("OrbitalSupplyHint", supplyCard.transform, "Choose a mix. Each completed return uses one of four fuel allotments.",
@@ -66,7 +68,9 @@ namespace WH30K.UI
         private InputField SupplyInput(Transform parent, string name, Vector2 position, string value)
         {
             var background = Panel(name + "Box", parent, new Vector2(190, 30), position, TextAnchor.UpperLeft, false);
-            background.GetComponent<Image>().color = new Color(.1f, .12f, .13f, .95f);
+            var supplyField = CommandUi.Field;
+            supplyField.a = .95f;
+            background.GetComponent<Image>().color = supplyField;
             var text = Label(name, background.transform, value, 13, new Vector2(8, -4), 172, 22, Ivory);
             var input = background.AddComponent<InputField>();
             input.textComponent = text; input.contentType = InputField.ContentType.DecimalNumber;
