@@ -2,37 +2,58 @@
   "id": "unified-game-ui",
   "title": "Unify the game UI and establish reusable templates",
   "risk": "major",
-  "outcome": "From opening the game to managing a colony and saving or loading it, players use one readable gothic industrial interface with predictable controls and state feedback.",
+  "outcome": "From the cinematic title through colony management, players use one readable gothic-industrial interface with predictable controls and state feedback.",
   "scope": [
     "Shared Unity uGUI theme tokens, type hierarchy, spacing, semantic colors, and accessible control states",
-    "Reusable UI components and layouts for screens, HUD bars, panels, dialogs, tooltips, toasts, and the future vox portrait card",
-    "All player-facing surfaces: title, setup, landing, HUD, build and placement, inspectors and ship, industry, resources and surveys, research, guide, mining, earthworks, urban development, events, and save/load feedback",
-    "Inventory and migration of existing local-only cinematic and urban screens after their source is available in an agreed branch"
+    "Reusable UI components and layouts for screens, HUD bars, panels, dialogs, tooltips, toasts, and the Vox portrait card",
+    "Migrate the current non-Urban player UI surfaces: title, setup, landing, HUD, build and placement, inspectors and ship, industry, resources and surveys, research, guide, mining, earthworks, events, and save/load feedback",
+    "Reconcile the local-only cinematic menu and save browser with existing save schema and migration behavior"
   ],
   "nonGoals": [
     "Change gameplay rules, bindings, camera behavior, save data, or Unity rendering pipeline",
+    "Implement or migrate Urban development UI/runtime; track in follow-up issue #29",
+    "Claim broad long-copy/populated-state coverage across all panels; track in follow-up issue #30",
     "Replace the cinematic world backdrop or copy official game UI assets",
     "Redesign editor and developer diagnostics as player UI"
   ],
   "acceptance": [
-    "A title → new game → landing → build → inspect → save → load playthrough keeps all existing actions, values and states",
-    "All in-scope screens use the documented theme and shared components, including enabled, focused, disabled, warning and critical states",
-    "Representative screens are visually reviewed at 1280×800, 1920×1080, and ultrawide; long labels and dense panels remain readable and interactive",
-    "A small documented template example and guard check catch new hardcoded shared style values and ad hoc controls outside agreed exceptions",
-    "A portrait-card template can display a character, speaker role, priority, message and optional relevant action without stealing game input"
+    "A title → new game → landing → build → inspect → save → load playthrough keeps existing actions, values and states, including loading a GUID-named disposable save through the visible browser",
+    "All in-scope non-Urban screens use the documented theme and shared components, including enabled, focused, disabled, warning and critical states",
+    "Representative screens are visually reviewed at 1280×800, 1920×1080, and 2560×890; survey and event long-copy examples fit, and the Vox/ship layout is clear",
+    "A documented template example and guard catch new hardcoded shared style values and ad hoc controls outside agreed exceptions",
+    "The portrait-card template displays a character, role, priority, message and optional action without taking game input"
   ],
   "rollback": "Split template and screen migration into reviewable pull requests. Revert a migration slice while its legacy UI remains available. Preserve scene and asset GUIDs.",
   "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/24",
   "schema": 1,
-  "stage": "In progress",
+  "stage": "Awaiting approval",
   "design": {
+    "reviewer": "Design Reviewer (ui_acceptance, independent agent)",
     "result": "pass",
-    "reviewer": "Design review (coordinating Codex session)",
-    "reference": "Issue #24 design review: keep existing uGUI and screen wiring, centralize visual construction, preserve modal/input semantics, and handle in-progress menu/urban integration separately."
+    "reference": "Independent design review of the approved scope split: retain the shared UI/cinematic package and non-Urban panel acceptance; defer Urban to issue #29 and exhaustive all-panel long-copy/populated checks to issue #30. Review confirmed the scope/docs are coherent and the Director playtest remains an approval action."
   },
   "designApproval": {
     "by": "Game Director",
     "result": "approved",
-    "reference": "Codex chat, 2026-11-07: “approve both designs” after review of issues #24 and #25."
+    "reference": "GitHub issue #24 comment #6722607114, 2026-11-08: “Split and defer Urban.” It approves the revised feature boundary and defers Urban and broad long-copy checks to follow-ups #29 and #30."
+  },
+  "review": {
+    "reference": "Independent Lead Review passed the revised scope/docs and the exact public runtime payload. Public issue #24 comment #6722688751 records the PASS; the tested runtime source remains public commit e83225379daea71e2eebad5b6da224c8c5db047f (tree d0700ca58acab23d96aaccf855e2e09cfc57c4ff). No source changes occurred after that runtime review.",
+    "result": "pass",
+    "reviewer": "Lead Reviewer (ui_lead_review, independent agent)",
+    "commit": "66c939a7dc5a68b33f6b9c54fcf5ad251477eca9"
+  },
+  "validation": {
+    "commit": "66c939a7dc5a68b33f6b9c54fcf5ad251477eca9",
+    "tester": "Coordinating GPT-6.1 Sol (root), using MainMenuSceneChecks and SimulationChecks",
+    "coverage": "pass",
+    "command": "node .\\dotnet-cli\\dotnet.exe run --project Tests/Simulation/SimulationChecks.csproj -- .; node Tools/Workflow/ui-style.mjs; git diff --check; Unity 2022.3.2f1 graphics-enabled: MainMenuSceneChecks.RunBatch -wh30k-panel-review",
+    "manager": "Test Manager (ui_test_manager, independent agent)",
+    "unity": {
+      "result": "pass",
+      "reference": "Logs/ui-mainmenu-final-review.log: Unity 2022.3.2f1 graphics-enabled runtime/Editor compile and 93 Play Mode assertions. Rendered captures at .utmp/main-menu-reference-review: 18 states at 1280x800, 1920x1080 and 2560x890; event-long-copy visibly complete at all three sizes."
+    },
+    "reference": "Test Manager PASS on exact C1 commit 66c939a7dc5a68b33f6b9c54fcf5ad251477eca9 (tree 2483be6f03ea54521df8a77fa98032f91262886c): 606 .NET checks, 12-file style guard, clean diff, graphics-enabled Unity 93 assertions and 18 screen states at three resolutions. Unity log Logs/ui-mainmenu-final-review.log records 93 PASS, zero FAIL/overflow warnings; a nonfatal Visual Scripting YamlDotNet package-cache exception is documented. Hosted Game CI run 42488070670 passed on unchanged public runtime commit e832253; CI will rerun for the published feature record. Full manual Director input/save-load playtest remains an Awaiting approval action.",
+    "result": "pass"
   }
 }
