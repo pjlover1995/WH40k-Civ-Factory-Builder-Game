@@ -161,6 +161,7 @@ namespace WH30K.UI
         internal sealed class PortraitCard
         {
             private readonly GameObject root;
+            private readonly RectTransform rootRect;
             private readonly RawImage portrait;
             private readonly Text heading;
             private readonly Text message;
@@ -171,6 +172,7 @@ namespace WH30K.UI
             internal PortraitCard(GameObject root, RawImage portrait, Text heading, Text message, Button action, Text actionLabel)
             {
                 this.root = root;
+                rootRect = (RectTransform)root.transform;
                 this.portrait = portrait;
                 this.heading = heading;
                 this.message = message;
@@ -195,8 +197,27 @@ namespace WH30K.UI
 
             internal void SetTopOffset(float y)
             {
-                var rect = (RectTransform)root.transform;
-                if (rect.anchoredPosition.y != y) rect.anchoredPosition = new Vector2(0, y);
+                if (rootRect.anchoredPosition.y != y)
+                    rootRect.anchoredPosition = new Vector2(rootRect.anchoredPosition.x, y);
+            }
+
+            internal void SetShipInspectorLayout(bool shipInspectorVisible, float canvasWidth)
+            {
+                // At standard and 1920-wide canvases, move into the gap between the left HUD and
+                // the ship inspector. At ultrawide widths the centered card already clears it.
+                var needsSideLayout = shipInspectorVisible && canvasWidth < 1718f;
+                var width = needsSideLayout ? Mathf.Clamp(canvasWidth - 932f, 300f, 446f) : 446f;
+                rootRect.sizeDelta = new Vector2(width, rootRect.sizeDelta.y);
+                rootRect.anchoredPosition = new Vector2(needsSideLayout ? -178f : 0f, rootRect.anchoredPosition.y);
+
+                var textWidth = width - 120f;
+                var compact = needsSideLayout && width < 400f;
+                heading.fontSize = compact ? 11 : 13;
+                message.fontSize = compact ? 12 : 14;
+                heading.rectTransform.sizeDelta = new Vector2(textWidth, compact ? 32f : 24f);
+                heading.rectTransform.anchoredPosition = new Vector2(105f, compact ? -10f : -12f);
+                message.rectTransform.sizeDelta = new Vector2(textWidth, compact ? 62f : 65f);
+                message.rectTransform.anchoredPosition = new Vector2(105f, compact ? -44f : -39f);
             }
 
             internal void Hide() => root.SetActive(false);
