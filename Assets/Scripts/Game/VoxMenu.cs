@@ -134,7 +134,9 @@ namespace WH30K.UI
                 voxCardVisible = false;
             }
 
-            voxCard.SetTopOffset(foundingTracker != null && foundingTracker.activeSelf ? -218 : -110);
+            var canvasScaler = hudPanel.GetComponentInParent<CanvasScaler>();
+            var canvasWidth = canvasScaler == null ? Screen.width : Screen.width / Mathf.Max(canvasScaler.scaleFactor, 0.001f);
+            SetVoxViewportLayout(canvasWidth);
             if (voxCardVisible) return;
             voxCardVisible = true;
             var portrait = displayedVox.Officer == VoxOfficer.Captain ? captainPortrait : priestPortrait;
@@ -142,6 +144,13 @@ namespace WH30K.UI
             voxCard.Show(portrait, heading,
                 displayedVox.Body, displayedVox.Urgent ? CommandUi.Critical
                     : displayedVox.Officer == VoxOfficer.Captain ? CommandUi.Brass : CommandUi.Signal);
+        }
+
+        internal void SetVoxViewportLayout(float canvasWidth)
+        {
+            if (voxCard == null) return;
+            voxCard.SetTopOffset(foundingTracker != null && foundingTracker.activeSelf ? -218 : -110);
+            voxCard.SetShipInspectorLayout(shipPanel != null && shipPanel.activeSelf, canvasWidth);
         }
 
         private void ReceiveVox(List<VoxAlert> messages)

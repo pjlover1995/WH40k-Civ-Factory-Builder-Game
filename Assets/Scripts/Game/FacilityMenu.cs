@@ -22,10 +22,7 @@ namespace WH30K.UI
 
         private void BuildFacilityPanel(Transform parent)
         {
-            facilityPanel = Panel("FacilityPanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
-            var backdrop = (RectTransform)facilityPanel.transform;
-            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one; backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
-            facilityPanel.GetComponent<Image>().color = new Color(.005f, .008f, .012f, .82f);
+            facilityPanel = CommandUi.Screen("FacilityPanel", parent, 0.82f);
             var card = Panel("FacilityCard", facilityPanel.transform, new Vector2(940, 740), Vector2.zero, TextAnchor.MiddleCenter);
             facilityTitle = Label("FacilityTitle", card.transform, "", 23, new Vector2(24, -18), 890, 34, Gold);
             facilityStats = Label("FacilityStatistics", card.transform, "", 13, new Vector2(24, -60), 892, 226, Ivory);
@@ -134,14 +131,15 @@ namespace WH30K.UI
             var go = Panel(name, parent, new Vector2(width, 28), position, TextAnchor.UpperLeft, false);
             var slider = go.AddComponent<Slider>(); slider.minValue = min; slider.maxValue = max; slider.wholeNumbers = true;
             var handle = Panel("Handle", go.transform, new Vector2(18, 28), Vector2.zero, TextAnchor.MiddleCenter, false);
-            handle.GetComponent<Image>().color = Gold;
-            slider.handleRect = (RectTransform)handle.transform; slider.targetGraphic = handle.GetComponent<Image>();
+            slider.handleRect = (RectTransform)handle.transform;
+            CommandUi.StyleControl(slider, handle.GetComponent<Image>(), useBrassHandle: true);
             return slider;
         }
         private Dropdown FacilityDropdown(string name, Transform parent, Vector2 position, float width, List<string> options)
         {
             var go = Panel(name, parent, new Vector2(width, 32), position, TextAnchor.UpperLeft);
-            var dropdown = go.AddComponent<Dropdown>(); dropdown.targetGraphic = go.GetComponent<Image>();
+            var dropdown = go.AddComponent<Dropdown>();
+            CommandUi.StyleControl(dropdown, go.GetComponent<Image>());
             dropdown.captionText = Label("Selection", go.transform, "", 13, new Vector2(10, -5), width - 40, 24, Ivory);
             Label("Arrow", go.transform, "v", 13, new Vector2(width - 24, -5), 20, 24, Gold);
             var template = Panel("Template", go.transform, new Vector2(width, 196), new Vector2(0, -34), TextAnchor.UpperLeft);
@@ -151,7 +149,8 @@ namespace WH30K.UI
             var content = Panel("Content", viewport.transform, new Vector2(width, 32), Vector2.zero, TextAnchor.UpperLeft, false);
             scroll.content = (RectTransform)content.transform;
             var item = Panel("Item", content.transform, new Vector2(width, 32), Vector2.zero, TextAnchor.UpperLeft, false);
-            var toggle = item.AddComponent<Toggle>(); toggle.targetGraphic = item.GetComponent<Image>();
+            var toggle = item.AddComponent<Toggle>();
+            CommandUi.StyleControl(toggle, item.GetComponent<Image>());
             var checkmark = Panel("Selected", item.transform, new Vector2(5, 24), new Vector2(2, -4), TextAnchor.UpperLeft, false);
             checkmark.GetComponent<Image>().color = Gold; toggle.graphic = checkmark.GetComponent<Image>();
             dropdown.itemText = Label("ItemLabel", item.transform, "", 13, new Vector2(12, -5), width - 20, 24, Ivory);

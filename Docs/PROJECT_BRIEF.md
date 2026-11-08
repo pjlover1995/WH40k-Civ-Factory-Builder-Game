@@ -4,6 +4,10 @@
 
 Build a colony on a procedural planet, grow industry, and respond to the environmental and social cost of expansion through construction and policy decisions.
 
+## UI presentation (2026-11-08)
+
+Player-facing runtime UI uses the built-in Unity uGUI with shared gothic-industrial colors, typography, panel construction and control states. The cinematic authority console now opens before expedition setup; its settings, save browser and modals share the same menu controls and focus behavior. Save-file selection uses the existing schema-16 migration and validation path; it adds no save fields. The transient vox advisory card adjusts around the ship inspector and founding tracker. The title and colony flow remain wired at runtime in the enabled prototype scene. The Game Director approved deferring Urban integration and exhaustive long-copy/populated-state checks into follow-up issues #29 and #30; those are outside the current UI scope. The Director's physical-input and save/load playtest remains part of approval for issue #24.
+
 ## Supplies and growth (current rules, 2026-10-29)
 
 The top ribbon shows **FOOD**, **WATER**, **BUILD SUPPLIES**, population, workers and **health (fixed at 100%)**. Food/water months are stored reserve divided by current population demand, excluding future deliveries/production. Build supply months use recent gross component consumption (farm operation, construction and improvements); **NO DEMAND** means no recent use. Counts remain visible, with plasteel shown separately. Construction is discretionary, so its displayed months are an observed-use estimate rather than a guaranteed build budget.

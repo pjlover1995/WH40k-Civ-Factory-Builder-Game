@@ -16,7 +16,7 @@ namespace WH30K.UI
         private void BuildEarthworks(Transform parent)
         {
             earthworksPanel=Panel("EarthworksHUD",parent,new Vector2(294,444),new Vector2(-16,-114),TextAnchor.UpperRight);
-            earthworksPanel.GetComponent<Image>().color=new Color(.025f,.075f,.085f,.98f);
+            earthworksPanel.GetComponent<Image>().color=CommandUi.Field;
             earthworksTitle=Label("EarthworksTitle",earthworksPanel.transform,"ENGINEERING / EARTHWORKS",12,new Vector2(16,-16),240,24,EarthworksController.ColorFor(EarthworkMode.Flatten));
             Button("CloseEarthworks",earthworksPanel.transform,new Vector2(252,-12),"X",out _,26,26).onClick.AddListener(()=>Earthworks.Close());
             earthworksHelp=Label("EarthworksHelp",earthworksPanel.transform,"",12,new Vector2(16,-50),262,100,Ivory);

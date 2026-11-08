@@ -18,12 +18,12 @@ namespace WH30K.UI
     [RequireComponent(typeof(PlanetBootstrap))]
     public partial class NewGameMenu : MonoBehaviour
     {
-        private static readonly Color Gold = new Color(0.80f, 0.65f, 0.38f);
-        private static readonly Color Ivory = new Color(0.88f, 0.90f, 0.87f);
-        private static readonly Color Muted = new Color(0.49f, 0.57f, 0.60f);
-        private static readonly Color Surface = new Color(0.025f, 0.040f, 0.052f, 0.96f);
-        private static readonly Color ButtonBase = new Color(0.065f, 0.092f, 0.108f, 1f);
-        private static readonly Color ForgeRed = new Color(0.48f, 0.105f, 0.075f, 1f);
+        private static readonly Color Gold = CommandUi.Brass;
+        private static readonly Color Ivory = CommandUi.Parchment;
+        private static readonly Color Muted = CommandUi.SecondaryText;
+        private static readonly Color Surface = CommandUi.Iron;
+        private static readonly Color ButtonBase = CommandUi.Field;
+        private static readonly Color ForgeRed = CommandUi.Oxblood;
         private PlanetBootstrap bootstrap;
         private ResourceSystem resourceSystem;
         private EnvironmentState environmentState;
@@ -64,6 +64,7 @@ namespace WH30K.UI
         private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
         private InputField buildingNameInput;
         private bool refreshingBuildingName;
+        private bool newGameScreenRequestedVisible;
         private ManagedBuilding selectedBuilding;
         private Action choiceAHandler, choiceBHandler;
         private Image habitabilityFill;
@@ -74,6 +75,7 @@ namespace WH30K.UI
         public bool HasOpenEvent => bootstrap != null && bootstrap.ChoosingLanding || eventPanel != null && eventPanel.activeSelf || discoveryPanel!=null&&discoveryPanel.activeSelf || guidePanel!=null&&guidePanel.activeSelf || researchPanel!=null&&researchPanel.activeSelf || MiningPanelOpen || FacilityPanelOpen;
         public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
         public ManagedBuilding InspectedBuilding => selectedBuilding;
+        internal bool NewGameScreenRequestedVisible => newGameScreenRequestedVisible;
         private SimpleOrbitCamera Orbit => orbit!=null?orbit:orbit=Camera.main!=null?Camera.main.GetComponent<SimpleOrbitCamera>():null;
 
         private void Awake()
@@ -89,8 +91,13 @@ namespace WH30K.UI
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
             seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString();
-            ShowNewGamePanel(true); ShowHud(false); ShowEventPanel(false);
+            ShowNewGamePanel(false); ShowHud(false); ShowEventPanel(false); ShowMainMenu(true);
             ConfigureSystems();
+        }
+
+        private void Start()
+        {
+            if (mainMenuRequestedVisible) RefreshContinueState();
         }
 
         public void ConfigureSystems()
@@ -107,7 +114,7 @@ namespace WH30K.UI
             canvas = root.GetComponent<Canvas>(); canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             var scaler = root.GetComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            scaler.referenceResolution = new Vector2(1280, 800); scaler.matchWidthOrHeight = 1;
+            scaler.referenceResolution = new Vector2(1280, 800); scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.Expand;
             hudPanel = new GameObject("HudPanel", typeof(RectTransform)); hudPanel.transform.SetParent(root.transform, false);
             var hudRect = hudPanel.GetComponent<RectTransform>();
             hudRect.anchorMin = Vector2.zero; hudRect.anchorMax = Vector2.one;
@@ -138,6 +145,7 @@ namespace WH30K.UI
             BuildColonyGuide(root.transform);
             BuildResearchPanel(root.transform);
             BuildResourceDepositsPane();
+            BuildCinematicMainMenu(root.transform);
 #if UNITY_EDITOR
             BuildDebug(root.transform);
 #endif
@@ -198,7 +206,7 @@ namespace WH30K.UI
                 .onClick.AddListener(() => Orbit?.FocusSettlement(settlement.CreateSnapshot().normal));
             Button("ViewPlanet", panel.transform, new Vector2(120, -198), "ORBIT", out _, 96, 26)
                 .onClick.AddListener(() => Orbit?.FrameTarget());
-            var journal = Panel("OperationsLog", parent, new Vector2(248, 230), new Vector2(16, -366), TextAnchor.UpperLeft);
+            var journal = Panel("OperationsLog", parent, new Vector2(248, 238), new Vector2(16, -358), TextAnchor.UpperLeft);
             Accent(journal, ForgeRed);
             Label("JournalTitle", journal.transform, "LOGISTICA / MANIFEST", 11, new Vector2(16, -13), 212, 20, Gold);
             materialText = Label("MaterialInventory", journal.transform, "", 10, new Vector2(16, -37), 206, 70, Ivory);
@@ -210,7 +218,7 @@ namespace WH30K.UI
             discoveryButton.onClick.AddListener(OpenDiscoveries);
             Button("OpenVoxLog", journal.transform, new Vector2(120, -189), "VOX LOG", out _, 96, 23)
                 .onClick.AddListener(ToggleVoxLog);
-            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -218), 200, 14, Muted);
+            eventLogText = Label("EventLog", journal.transform, "", 10, new Vector2(16, -214), 216, 24, Ivory);
             Button("OpenExpedition", panel.transform, new Vector2(132, -12), "NEW WORLD", out var expeditionLabel, 87, 24)
                 .onClick.AddListener(() => ShowNewGamePanel(true));
             expeditionLabel.fontSize=11;
@@ -317,34 +325,39 @@ namespace WH30K.UI
 
         private void BuildNewGame(Transform parent)
         {
-            newGamePanel = Panel("NewGamePanel", parent, Vector2.zero, Vector2.zero, TextAnchor.MiddleCenter, false);
-            var backdrop = newGamePanel.GetComponent<RectTransform>();
-            backdrop.anchorMin = Vector2.zero; backdrop.anchorMax = Vector2.one;
-            backdrop.offsetMin = backdrop.offsetMax = Vector2.zero;
-            newGamePanel.GetComponent<Image>().color = new Color(0.009f, 0.017f, 0.025f, 1);
-            Label("MainIdentity", newGamePanel.transform, "WH30K  /  COLONY COMMAND", 20, new Vector2(34, -32), 600, 36, Ivory);
-            Label("MainSubtitle", newGamePanel.transform, "PLANETARY EXPEDITION AUTHORITY", 11, new Vector2(35, -78), 600, 24, Gold);
-            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(540, 408), Vector2.zero, TextAnchor.MiddleCenter);
-            Label("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY  /  M31", 11, new Vector2(34, -30), 470, 24, Gold);
-            Label("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 27, new Vector2(34, -67), 475, 46, Ivory);
-            Label("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 14, new Vector2(34, -119), 470, 30, Muted);
-            Label("SeedTag", card.transform, "GENERATION SEED", 10, new Vector2(34, -176), 470, 20, Gold);
-            var input = Panel("SeedInput", card.transform, new Vector2(472, 36), new Vector2(34, -203), TextAnchor.UpperLeft, false);
-            input.GetComponent<Image>().color = ButtonBase;
+            newGamePanel = CommandUi.Screen("NewGamePanel", parent, .13f);
+            newGamePanel.AddComponent<CanvasGroup>();
+            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(594, 366), new Vector2(32, 0), TextAnchor.MiddleCenter, false);
+            var frame = Resources.Load<Texture2D>("Menu/ExpeditionFrame");
+            if (frame != null)
+            {
+                card.GetComponent<Image>().enabled = false;
+                AddMenuTexture("ExpeditionFrame", card.transform, frame, new Vector2(-6, 25), new Vector2(606, 395));
+            }
+            else StyleMenuCard(card);
+            AddCrest(card.transform, new Vector2(185, 38), 224);
+            MenuLabel("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY / M31", 13, new Vector2(35, -42), 522, 24, Parchment);
+            Ornament("AuthorityRule", card.transform, new Vector2(35, -63), new Vector2(524, 1), Brass);
+            MenuLabel("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 33, new Vector2(35, -74), 534, 48, Parchment);
+            var motto = MenuLabel("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 20, new Vector2(35, -121), 522, 30, Ivory);
+            motto.fontStyle = FontStyle.Italic;
+            Ornament("SeedDivider", card.transform, new Vector2(35, -160), new Vector2(524, 1), Brass);
+            MenuLabel("SeedTag", card.transform, "GENERATION SEED", 14, new Vector2(35, -178), 510, 24, Parchment);
+            var input = Panel("SeedInput", card.transform, new Vector2(390, 38), new Vector2(35, -205), TextAnchor.UpperLeft);
+            input.GetComponent<Image>().color = CommandUi.Field;
+            BrassFrame(input, Brass);
             seedInput = input.AddComponent<InputField>();
-            var inputText = Label("SeedText", input.transform, "", 15, new Vector2(12, -8), 448, 26, Ivory);
+            var inputText = MenuLabel("SeedText", input.transform, "", 20, new Vector2(12, -5), 365, 30, Parchment);
             seedInput.textComponent = inputText; seedInput.contentType = InputField.ContentType.IntegerNumber;
-            difficultyLabel = Label("LandingModeHint", card.transform,
+            var randomSeedButton = MenuButton("RandomSeed", card.transform, new Vector2(437, -205), "RANDOMISE", 122, 38);
+            randomSeedButton.onClick.AddListener(() => seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString());
+            difficultyLabel = MenuLabel("LandingModeHint", card.transform,
                 "LANDING CATEGORY AND STARTING CONDITIONS ARE SELECTED ON THE PLANET",
-                11, new Vector2(34, -255), 472, 36, Gold);
-            Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
-                .onClick.AddListener(() =>
-                {
-                    if(GameSettings.HasActiveGame) {ShowNewGamePanel(false);ShowHud(true);}
-                    else bootstrap.LoadFromFile();
-                });
-            Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44)
-                .onClick.AddListener(() =>
+                12, new Vector2(35, -254), 524, 36, Parchment);
+            var backButton = MenuButton("BackToAuthority", card.transform, new Vector2(35, -298), "BACK TO AUTHORITY", 249, 44);
+            backButton.onClick.AddListener(() => { ShowNewGamePanel(false); ShowMainMenu(true); });
+            var startButton = MenuButton("StartButton", card.transform, new Vector2(302, -298), "BEGIN EXPEDITION", 257, 44, true);
+            startButton.onClick.AddListener(() =>
                 {
                     var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
                     bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
@@ -353,27 +366,23 @@ namespace WH30K.UI
 
         private void BuildEvent(Transform parent)
         {
-            eventPanel = new GameObject("EventPanel", typeof(RectTransform), typeof(Image));
-            eventPanel.transform.SetParent(parent, false);
-            var rect = eventPanel.GetComponent<RectTransform>();
-            rect.anchorMin = Vector2.zero; rect.anchorMax = Vector2.one; rect.offsetMin = rect.offsetMax = Vector2.zero;
-            eventPanel.GetComponent<Image>().color = new Color(0.005f, 0.008f, 0.012f, 0.62f);
-            var modal = Panel("DecisionCard", eventPanel.transform, new Vector2(620, 330), Vector2.zero, TextAnchor.MiddleCenter);
+            eventPanel = CommandUi.Screen("EventPanel", parent, .72f);
+            var modal = Panel("DecisionCard", eventPanel.transform, new Vector2(620, 380), Vector2.zero, TextAnchor.MiddleCenter);
+            Accent(modal, CommandUi.Warning);
             Label("DecisionTag", modal.transform, "PRIORITY TRANSMISSION  /  DECISION REQUIRED", 11, new Vector2(26, -22), 566, 25, Gold);
             eventTitleText = Label("EventTitle", modal.transform, "", 26, new Vector2(26, -63), 566, 42, Ivory);
-            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 98, Ivory);
-            choiceA = Button("ChoiceA", modal.transform, new Vector2(26, -239), "", out choiceALabel, 273, 64);
-            choiceB = Button("ChoiceB", modal.transform, new Vector2(321, -239), "", out choiceBLabel, 273, 64);
+            eventBodyText = Label("EventBody", modal.transform, "", 15, new Vector2(26, -121), 566, 140, Ivory);
+            choiceA = Button("ChoiceA", modal.transform, new Vector2(26, -276), "", out choiceALabel, 273, 64);
+            choiceB = Button("ChoiceB", modal.transform, new Vector2(321, -276), "", out choiceBLabel, 273, 64);
             choiceALabel.fontSize = choiceBLabel.fontSize = 13;
             choiceA.onClick.AddListener(() => choiceAHandler?.Invoke()); choiceB.onClick.AddListener(() => choiceBHandler?.Invoke());
         }
 
         private void BuildDiscovery(Transform parent)
         {
-            discoveryPanel=new GameObject("DiscoveryPanel",typeof(RectTransform),typeof(Image));discoveryPanel.transform.SetParent(parent,false);
-            var rect=discoveryPanel.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
-            discoveryPanel.GetComponent<Image>().color=new Color(.005f,.008f,.012f,.62f);
+            discoveryPanel = CommandUi.Screen("DiscoveryPanel", parent, .72f);
             var card=Panel("DiscoveryCard",discoveryPanel.transform,new Vector2(620,452),Vector2.zero,TextAnchor.MiddleCenter);
+            Accent(card, CommandUi.Signal);
             Label("DiscoveryTag",card.transform,"EXPEDITION RECORD  /  SURVEY INTELLIGENCE",11,new Vector2(28,-24),564,22,Gold);
             discoveryTitleText=Label("DiscoveryTitle",card.transform,"",22,new Vector2(28,-57),564,58,Ivory);
             discoveryBodyText=Label("DiscoveryDetails",card.transform,"",14,new Vector2(28,-123),564,204,Ivory);
@@ -393,6 +402,15 @@ namespace WH30K.UI
             RefreshEarthworks();
             RefreshVox();
             if(FacilityPanelOpen && Input.GetKeyDown(KeyCode.Escape)){CloseFacilityPanel();return;}
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (exitConfirmPanel != null && exitConfirmPanel.activeSelf) { FadePanel(exitConfirmPanel, false); return; }
+                if (deleteConfirmPanel != null && deleteConfirmPanel.activeSelf) { FadePanel(deleteConfirmPanel, false); return; }
+                if (settingsPanel != null && settingsPanel.activeSelf) { CloseSettings(); return; }
+                if (saveBrowserPanel != null && saveBrowserPanel.activeSelf) { CloseSaveBrowser(); return; }
+                if (newGamePanel != null && newGameScreenRequestedVisible) { ShowNewGamePanel(false); ShowMainMenu(true); return; }
+                if (mainMenuRequestedVisible) { OpenExitConfirmation(); return; }
+            }
             var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
             if (!typing)
@@ -574,7 +592,7 @@ namespace WH30K.UI
         {
             if(discoveryPanel!=null)discoveryPanel.SetActive(false);
             discoveryAction=null;discoveryLocateAction=null;
-            if(clock!=null)clock.DecisionPending=HasOpenEvent||(newGamePanel!=null&&newGamePanel.activeSelf);
+            if(clock!=null)clock.DecisionPending=HasOpenEvent||newGameScreenRequestedVisible;
         }
         private void CloseDiscoveryPanel()=>ResetDiscoveryPanel();
         // Session UI must not retain a modal, callback or selected object from a replaced world.
@@ -589,9 +607,18 @@ namespace WH30K.UI
             if (inspector != null) inspector.SetActive(false);
         }
         public void FocusLocation(Vector3 direction){Orbit?.FocusLocation(direction);}
-        public void ShowNewGamePanel(bool visible) { if (visible) { HideOutputTooltip(); CloseFacilityPanel(); } newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
+        public void ShowNewGamePanel(bool visible)
+        {
+            newGameScreenRequestedVisible = visible;
+            if (visible) { HideOutputTooltip(); CloseFacilityPanel(); ShowMainMenu(false); }
+            RefreshMenuBackdrop();
+            FadePanel(newGamePanel, visible);
+            if (visible && EventSystem.current != null) EventSystem.current.SetSelectedGameObject(seedInput.gameObject);
+            saveButton.interactable = GameSettings.HasActiveGame;
+            if (clock != null) clock.DecisionPending = visible || HasOpenEvent;
+        }
         public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) { selection.Select(null); RefreshResourceDepositsPane(); } }
-        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || (newGamePanel!=null && newGamePanel.activeSelf); }
+        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || newGameScreenRequestedVisible; }
         public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
         public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
@@ -634,27 +661,9 @@ namespace WH30K.UI
         }
 
         private GameObject Panel(string name, Transform parent, Vector2 size, Vector2 position, TextAnchor anchor, bool border = true)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Image)); go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>(); rect.sizeDelta = size;
-            var pivot = anchor == TextAnchor.UpperRight ? new Vector2(1, 1)
-                : anchor == TextAnchor.UpperLeft ? new Vector2(0, 1)
-                : anchor == TextAnchor.LowerCenter ? new Vector2(0.5f, 0) : new Vector2(0.5f, 0.5f);
-            rect.anchorMin = rect.anchorMax = rect.pivot = pivot; rect.anchoredPosition = position;
-            go.GetComponent<Image>().color = Surface;
-            if (border) { var edge = go.AddComponent<Outline>(); edge.effectColor = new Color(0.39f, 0.34f, 0.23f, 0.7f); edge.effectDistance = new Vector2(1, -1); }
-            return go;
-        }
-        private void Accent(GameObject panel, Color color)
-        {
-            var stripe = new GameObject("PanelAccent", typeof(RectTransform), typeof(Image));
-            stripe.transform.SetParent(panel.transform, false);
-            var rect = stripe.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0, 0); rect.anchorMax = new Vector2(0, 1);
-            rect.pivot = new Vector2(0.5f, 0.5f); rect.sizeDelta = new Vector2(3, 0);
-            rect.anchoredPosition = new Vector2(2, 0);
-            var image = stripe.GetComponent<Image>(); image.color = color; image.raycastTarget = false;
-        }
+            => CommandUi.Panel(name, parent, size, position, anchor, border);
+
+        private void Accent(GameObject panel, Color color) => CommandUi.Accent(panel, color);
         private void StretchWidth(GameObject panel, float inset)
         {
             var rect = panel.GetComponent<RectTransform>();
@@ -663,37 +672,18 @@ namespace WH30K.UI
             rect.anchoredPosition = new Vector2(0, rect.anchoredPosition.y);
         }
         private Text Label(string name, Transform parent, string content, int size, Vector2 position, float width, float height, Color color)
-        {
-            var go = new GameObject(name, typeof(RectTransform), typeof(Text)); go.transform.SetParent(parent, false);
-            var rect = go.GetComponent<RectTransform>(); rect.anchorMin = rect.anchorMax = rect.pivot = new Vector2(0, 1);
-            rect.sizeDelta = new Vector2(width, height); rect.anchoredPosition = position;
-            var text = go.GetComponent<Text>(); text.font = font; text.fontSize = size; text.color = color; text.text = content;
-            text.raycastTarget = false; text.horizontalOverflow = HorizontalWrapMode.Wrap;
-            text.verticalOverflow = VerticalWrapMode.Truncate; text.supportRichText = true;
-            return text;
-        }
+            => CommandUi.Label(name, parent, font, content, size, position, width, height, color);
+
         private Button Button(string name, Transform parent, Vector2 position, string content, out Text label, float width, float height = 34)
-        {
-            var go = Panel(name, parent, new Vector2(width, height), position, TextAnchor.UpperLeft);
-            go.GetComponent<Image>().color = Color.white;
-            var button = go.AddComponent<Button>();
-            button.navigation = new Navigation { mode = Navigation.Mode.None };
-            var colors = button.colors; colors.normalColor = ButtonBase;
-            colors.highlightedColor = new Color(0.16f, 0.20f, 0.21f); colors.pressedColor = new Color(0.26f, 0.23f, 0.16f);
-            colors.disabledColor = new Color(0.035f, 0.045f, 0.05f); colors.fadeDuration = 0.12f;
-            button.colors = colors;
-            label = Label("Label", go.transform, content, 14, Vector2.zero, width, height, Ivory);
-            label.alignment = TextAnchor.MiddleCenter;
-            return button;
-        }
+            => CommandUi.Button(name, parent, font, position, content, out label, width, height);
+
+        private static void MarkPrimary(Button button) => CommandUi.Tone(button, true);
+
         private void Tone(Button button, bool selected)
         {
-            if (button == null) return;
-            if(buttonTones.TryGetValue(button,out var priorTone)&&priorTone==selected)return;
-            buttonTones[button]=selected;
-            var colors = button.colors; colors.normalColor = selected ? new Color(0.24f, 0.20f, 0.12f) : ButtonBase;
-            button.colors = colors;
-            var edge = button.GetComponent<Outline>(); if (edge != null) edge.effectColor = selected ? Gold : new Color(0.2f, 0.27f, 0.29f, 0.65f);
+            if (button == null || buttonTones.TryGetValue(button, out var priorTone) && priorTone == selected) return;
+            buttonTones[button] = selected;
+            CommandUi.Tone(button, selected);
         }
 #if UNITY_EDITOR
         private void BuildDebug(Transform parent)

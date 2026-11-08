@@ -211,6 +211,7 @@ namespace WH30K.Gameplay
 
             if (menu != null)
             {
+                menu.ShowMainMenu(false);
                 menu.SetSeed(seed);
                 menu.SetDifficulty(difficulty);
                 menu.ShowNewGamePanel(false);
@@ -519,43 +520,51 @@ namespace WH30K.Gameplay
             }
         }
 
-        public bool TryLoadSaveJson(string json)
+        public string SaveDirectoryPath
         {
-            GameSaveData save;
-            var recoveredDozerHeading=false;
+            get
+            {
+                var directory = Application.persistentDataPath;
+                if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                return directory;
+            }
+        }
+
+        public string DefaultSaveFilePath => SavePath;
+
+        public bool CanLoadSaveFile(string path)
+        {
             try
             {
-                save = JsonUtility.FromJson<GameSaveData>(json);
-                if (save != null && save.version < 10) save.earthworks = null;
-                if(save!=null && save.version>=10 && save.planetRadius>50000)
-                    recoveredDozerHeading=EarthworksRules.RecoverZeroHeading(save.earthworks);
-                if (save != null && save.version < 15) save.settlement.shipLayoutVersion = 0;
-                if (save != null && save.version < 16) save.research = null;
-                // JsonUtility may create an empty nested object for a missing field in older JSON.
-                if(save != null && save.version < 5) save.industry = null;
-                if (save?.industry?.expeditionCargo != null && save.industry.expeditionCargo.Length == 0)
-                    save.industry.expeditionCargo = null; // JsonUtility's representation of an absent legacy ship manifest.
-                if(save != null && save.version < 6 && save.industry != null)
-                {
-                    save.industry.geologyVersion=0;save.industry.conflict=null;
-                    if(save.industry.deposits!=null)for(var i=0;i<save.industry.deposits.Length;i++)save.industry.deposits[i].excavation=null;
-                }
-                if(save?.industry?.deposits!=null && save.industry.geologyVersion==1)
-                    for(var i=0;i<save.industry.deposits.Length;i++)
-                        if(save.industry.deposits[i].kind==(int)MaterialKind.Biomass)save.industry.deposits[i].excavation=null;
-                if (save?.industry?.deposits != null)
-                    for (var i = 0; i < save.industry.deposits.Length; i++)
-                        if (save.industry.deposits[i].kind == (int)MaterialKind.Biomass || save.industry.deposits[i].kind == (int)MaterialKind.Promethium)
-                            save.industry.deposits[i].excavation = MiningRules.NormalizeOptional(save.industry.deposits[i].excavation);
-                if (!ValidateSave(save, out var error))
-                {
-                    menu?.AppendEventLog($"Load rejected: {error}");
-                    return false;
-                }
+                return !string.IsNullOrWhiteSpace(path) && File.Exists(path)
+                    && TryPrepareSave(File.ReadAllText(path), out _, out _, out _);
             }
-            catch (ArgumentException)
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException || exception is ArgumentException)
             {
-                menu?.AppendEventLog("Load rejected: invalid save JSON.");
+                return false;
+            }
+        }
+
+        public bool LoadFromFilePath(string path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return false;
+                return TryLoadSaveJson(File.ReadAllText(path));
+            }
+            catch (Exception exception) when (exception is IOException || exception is UnauthorizedAccessException)
+            {
+                Debug.LogWarning($"Load failed: {exception.Message}");
+                menu?.AppendEventLog("Could not read the selected save file.");
+                return false;
+            }
+        }
+
+        public bool TryLoadSaveJson(string json)
+        {
+            if (!TryPrepareSave(json, out var save, out var recoveredDozerHeading, out var error))
+            {
+                menu?.AppendEventLog("Load rejected: " + error);
                 return false;
             }
 
@@ -589,15 +598,56 @@ namespace WH30K.Gameplay
 
             if (menu != null)
             {
+                menu.ShowMainMenu(false);
                 menu.SetSeed(save.seed);
                 menu.SetDifficulty(save.difficulty);
                 menu.ShowNewGamePanel(false);
                 menu.ShowHud(true);
                 menu.AppendEventLog("Game loaded. Buildings and economic effects restored.");
-                if(recoveredDozerHeading)menu.AppendEventLog("Recovered the dozer's heading from an earlier large-world save.");
+                if (recoveredDozerHeading) menu.AppendEventLog("Recovered the dozer's heading from an earlier large-world save.");
             }
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, save.seed, save.events);
             return true;
+        }
+
+        private bool TryPrepareSave(string json, out GameSaveData save, out bool recoveredDozerHeading, out string error)
+        {
+            save = null;
+            recoveredDozerHeading = false;
+            error = "invalid save JSON.";
+            try
+            {
+                save = JsonUtility.FromJson<GameSaveData>(json);
+                if (save != null && save.version < 10) save.earthworks = null;
+                if(save!=null && save.version>=10 && save.planetRadius>50000)
+                    recoveredDozerHeading=EarthworksRules.RecoverZeroHeading(save.earthworks);
+                if (save != null && save.version < 15) save.settlement.shipLayoutVersion = 0;
+                if (save != null && save.version < 16) save.research = null;
+                // JsonUtility may create an empty nested object for a missing field in older JSON.
+                if(save != null && save.version < 5) save.industry = null;
+                if (save?.industry?.expeditionCargo != null && save.industry.expeditionCargo.Length == 0)
+                    save.industry.expeditionCargo = null; // JsonUtility's representation of an absent legacy ship manifest.
+                if(save != null && save.version < 6 && save.industry != null)
+                {
+                    save.industry.geologyVersion=0;save.industry.conflict=null;
+                    if(save.industry.deposits!=null)for(var i=0;i<save.industry.deposits.Length;i++)save.industry.deposits[i].excavation=null;
+                }
+                if(save?.industry?.deposits!=null && save.industry.geologyVersion==1)
+                    for(var i=0;i<save.industry.deposits.Length;i++)
+                        if(save.industry.deposits[i].kind==(int)MaterialKind.Biomass)save.industry.deposits[i].excavation=null;
+                if (save?.industry?.deposits != null)
+                    for (var i = 0; i < save.industry.deposits.Length; i++)
+                        if (save.industry.deposits[i].kind == (int)MaterialKind.Biomass || save.industry.deposits[i].kind == (int)MaterialKind.Promethium)
+                            save.industry.deposits[i].excavation = MiningRules.NormalizeOptional(save.industry.deposits[i].excavation);
+                return ValidateSave(save, out error);
+            }
+            catch (Exception)
+            {
+                save = null;
+                recoveredDozerHeading = false;
+                error = "invalid save JSON.";
+                return false;
+            }
         }
 
         private bool ValidateSave(GameSaveData save, out string error)
