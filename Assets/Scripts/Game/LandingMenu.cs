@@ -89,6 +89,7 @@ namespace WH30K.UI
         private void OnDestroy()
         {
             if (landingMaterial != null) Destroy(landingMaterial);
+            if (authorityFont != null) Destroy(authorityFont);
         }
     }
 }

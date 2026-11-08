@@ -64,6 +64,7 @@ namespace WH30K.UI
         private readonly string[] months = { "JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER" };
         private InputField buildingNameInput;
         private bool refreshingBuildingName;
+        private bool newGameScreenRequestedVisible;
         private ManagedBuilding selectedBuilding;
         private Action choiceAHandler, choiceBHandler;
         private Image habitabilityFill;
@@ -74,6 +75,7 @@ namespace WH30K.UI
         public bool HasOpenEvent => bootstrap != null && bootstrap.ChoosingLanding || eventPanel != null && eventPanel.activeSelf || discoveryPanel!=null&&discoveryPanel.activeSelf || guidePanel!=null&&guidePanel.activeSelf || researchPanel!=null&&researchPanel.activeSelf || MiningPanelOpen || FacilityPanelOpen;
         public bool HasNarrativeEvent => eventPanel != null && eventPanel.activeSelf;
         public ManagedBuilding InspectedBuilding => selectedBuilding;
+        internal bool NewGameScreenRequestedVisible => newGameScreenRequestedVisible;
         private SimpleOrbitCamera Orbit => orbit!=null?orbit:orbit=Camera.main!=null?Camera.main.GetComponent<SimpleOrbitCamera>():null;
 
         private void Awake()
@@ -89,8 +91,13 @@ namespace WH30K.UI
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
             seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString();
-            ShowNewGamePanel(true); ShowHud(false); ShowEventPanel(false);
+            ShowNewGamePanel(false); ShowHud(false); ShowEventPanel(false); ShowMainMenu(true);
             ConfigureSystems();
+        }
+
+        private void Start()
+        {
+            if (mainMenuRequestedVisible) RefreshContinueState();
         }
 
         public void ConfigureSystems()
@@ -138,6 +145,7 @@ namespace WH30K.UI
             BuildColonyGuide(root.transform);
             BuildResearchPanel(root.transform);
             BuildResourceDepositsPane();
+            BuildCinematicMainMenu(root.transform);
 #if UNITY_EDITOR
             BuildDebug(root.transform);
 #endif
@@ -317,32 +325,39 @@ namespace WH30K.UI
 
         private void BuildNewGame(Transform parent)
         {
-            newGamePanel = CommandUi.Screen("NewGamePanel", parent, 1);
-            Label("MainIdentity", newGamePanel.transform, "WH30K  /  COLONY COMMAND", 20, new Vector2(34, -32), 600, 36, Ivory);
-            Label("MainSubtitle", newGamePanel.transform, "PLANETARY EXPEDITION AUTHORITY", 11, new Vector2(35, -78), 600, 24, Gold);
-            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(540, 408), Vector2.zero, TextAnchor.MiddleCenter);
-            Accent(card, Gold);
-            Label("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY  /  M31", 11, new Vector2(34, -30), 470, 24, Gold);
-            Label("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 27, new Vector2(34, -67), 475, 46, Ivory);
-            Label("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 14, new Vector2(34, -119), 470, 30, Muted);
-            Label("SeedTag", card.transform, "GENERATION SEED", 10, new Vector2(34, -176), 470, 20, Gold);
-            var input = Panel("SeedInput", card.transform, new Vector2(472, 36), new Vector2(34, -203), TextAnchor.UpperLeft, false);
-            input.GetComponent<Image>().color = ButtonBase;
+            newGamePanel = CommandUi.Screen("NewGamePanel", parent, .13f);
+            newGamePanel.AddComponent<CanvasGroup>();
+            var card = Panel("ExpeditionCard", newGamePanel.transform, new Vector2(594, 366), new Vector2(32, 0), TextAnchor.MiddleCenter, false);
+            var frame = Resources.Load<Texture2D>("Menu/ExpeditionFrame");
+            if (frame != null)
+            {
+                card.GetComponent<Image>().enabled = false;
+                AddMenuTexture("ExpeditionFrame", card.transform, frame, new Vector2(-6, 25), new Vector2(606, 395));
+            }
+            else StyleMenuCard(card);
+            AddCrest(card.transform, new Vector2(185, 38), 224);
+            MenuLabel("ExpeditionTag", card.transform, "EXPEDITION AUTHORITY / M31", 13, new Vector2(35, -42), 522, 24, Parchment);
+            Ornament("AuthorityRule", card.transform, new Vector2(35, -63), new Vector2(524, 1), Brass);
+            MenuLabel("ExpeditionTitle", card.transform, "ESTABLISH A NEW WORLD", 33, new Vector2(35, -74), 534, 48, Parchment);
+            var motto = MenuLabel("ExpeditionSubline", card.transform, "Explore. Establish. Endure.", 20, new Vector2(35, -121), 522, 30, Ivory);
+            motto.fontStyle = FontStyle.Italic;
+            Ornament("SeedDivider", card.transform, new Vector2(35, -160), new Vector2(524, 1), Brass);
+            MenuLabel("SeedTag", card.transform, "GENERATION SEED", 14, new Vector2(35, -178), 510, 24, Parchment);
+            var input = Panel("SeedInput", card.transform, new Vector2(390, 38), new Vector2(35, -205), TextAnchor.UpperLeft);
+            input.GetComponent<Image>().color = CommandUi.Field;
+            BrassFrame(input, Brass);
             seedInput = input.AddComponent<InputField>();
-            var inputText = Label("SeedText", input.transform, "", 15, new Vector2(12, -8), 448, 26, Ivory);
+            var inputText = MenuLabel("SeedText", input.transform, "", 20, new Vector2(12, -5), 365, 30, Parchment);
             seedInput.textComponent = inputText; seedInput.contentType = InputField.ContentType.IntegerNumber;
-            difficultyLabel = Label("LandingModeHint", card.transform,
+            var randomSeedButton = MenuButton("RandomSeed", card.transform, new Vector2(437, -205), "RANDOMISE", 122, 38);
+            randomSeedButton.onClick.AddListener(() => seedInput.text = UnityEngine.Random.Range(0, int.MaxValue).ToString());
+            difficultyLabel = MenuLabel("LandingModeHint", card.transform,
                 "LANDING CATEGORY AND STARTING CONDITIONS ARE SELECTED ON THE PLANET",
-                11, new Vector2(34, -255), 472, 36, Gold);
-            Button("LoadButton", card.transform, new Vector2(34, -326), "RESUME COLONY", out _, 226, 44)
-                .onClick.AddListener(() =>
-                {
-                    if(GameSettings.HasActiveGame) {ShowNewGamePanel(false);ShowHud(true);}
-                    else bootstrap.LoadFromFile();
-                });
-            var begin = Button("StartButton", card.transform, new Vector2(276, -326), "BEGIN EXPEDITION", out _, 230, 44);
-            MarkPrimary(begin);
-            begin.onClick.AddListener(() =>
+                12, new Vector2(35, -254), 524, 36, Parchment);
+            var backButton = MenuButton("BackToAuthority", card.transform, new Vector2(35, -298), "BACK TO AUTHORITY", 249, 44);
+            backButton.onClick.AddListener(() => { ShowNewGamePanel(false); ShowMainMenu(true); });
+            var startButton = MenuButton("StartButton", card.transform, new Vector2(302, -298), "BEGIN EXPEDITION", 257, 44, true);
+            startButton.onClick.AddListener(() =>
                 {
                     var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
                     bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
@@ -387,6 +402,15 @@ namespace WH30K.UI
             RefreshEarthworks();
             RefreshVox();
             if(FacilityPanelOpen && Input.GetKeyDown(KeyCode.Escape)){CloseFacilityPanel();return;}
+            if (Input.GetKeyDown(KeyCode.Escape))
+            {
+                if (exitConfirmPanel != null && exitConfirmPanel.activeSelf) { FadePanel(exitConfirmPanel, false); return; }
+                if (deleteConfirmPanel != null && deleteConfirmPanel.activeSelf) { FadePanel(deleteConfirmPanel, false); return; }
+                if (settingsPanel != null && settingsPanel.activeSelf) { CloseSettings(); return; }
+                if (saveBrowserPanel != null && saveBrowserPanel.activeSelf) { CloseSaveBrowser(); return; }
+                if (newGamePanel != null && newGameScreenRequestedVisible) { ShowNewGamePanel(false); ShowMainMenu(true); return; }
+                if (mainMenuRequestedVisible) { OpenExitConfirmation(); return; }
+            }
             var selected = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
             var typing = selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null;
             if (!typing)
@@ -568,7 +592,7 @@ namespace WH30K.UI
         {
             if(discoveryPanel!=null)discoveryPanel.SetActive(false);
             discoveryAction=null;discoveryLocateAction=null;
-            if(clock!=null)clock.DecisionPending=HasOpenEvent||(newGamePanel!=null&&newGamePanel.activeSelf);
+            if(clock!=null)clock.DecisionPending=HasOpenEvent||newGameScreenRequestedVisible;
         }
         private void CloseDiscoveryPanel()=>ResetDiscoveryPanel();
         // Session UI must not retain a modal, callback or selected object from a replaced world.
@@ -583,9 +607,18 @@ namespace WH30K.UI
             if (inspector != null) inspector.SetActive(false);
         }
         public void FocusLocation(Vector3 direction){Orbit?.FocusLocation(direction);}
-        public void ShowNewGamePanel(bool visible) { if (visible) { HideOutputTooltip(); CloseFacilityPanel(); } newGamePanel.SetActive(visible); saveButton.interactable = GameSettings.HasActiveGame; if(clock!=null)clock.DecisionPending=visible||HasOpenEvent; }
+        public void ShowNewGamePanel(bool visible)
+        {
+            newGameScreenRequestedVisible = visible;
+            if (visible) { HideOutputTooltip(); CloseFacilityPanel(); ShowMainMenu(false); }
+            RefreshMenuBackdrop();
+            FadePanel(newGamePanel, visible);
+            if (visible && EventSystem.current != null) EventSystem.current.SetSelectedGameObject(seedInput.gameObject);
+            saveButton.interactable = GameSettings.HasActiveGame;
+            if (clock != null) clock.DecisionPending = visible || HasOpenEvent;
+        }
         public void ShowHud(bool visible) { hudPanel.SetActive(visible); if (visible) { selection.Select(null); RefreshResourceDepositsPane(); } }
-        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || (newGamePanel!=null && newGamePanel.activeSelf); }
+        public void ShowEventPanel(bool visible) { if (visible) HideOutputTooltip(); eventPanel.SetActive(visible); if (clock != null) clock.DecisionPending = HasOpenEvent || newGameScreenRequestedVisible; }
         public void SetEventChoiceAInteractable(bool affordable) { choiceA.interactable = affordable; }
         public void SetSeed(int seed) { seedInput.text = seed.ToString(); }
         public void SetDifficulty(GameSettings.Difficulty difficulty)
