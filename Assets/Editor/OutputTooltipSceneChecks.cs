@@ -44,7 +44,9 @@ public static class OutputTooltipSceneChecks
     {
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard, legacyCore: true);
         var menu = bootstrap.GetComponent<NewGameMenu>();
-        using var uiRender = new BatchUiRender(menu.GetComponentInChildren<Canvas>());
+        var canvas = menu.GetComponentInChildren<Canvas>();
+        FinishMenuFadeOut(canvas);
+        using var uiRender = new BatchUiRender(canvas);
         var settlement = bootstrap.GetComponent<Settlement>();
         var resources = bootstrap.GetComponent<ResourceSystem>();
         var environment = bootstrap.GetComponent<EnvironmentState>();
@@ -59,11 +61,25 @@ public static class OutputTooltipSceneChecks
         var pointer = new PointerEventData(EventSystem.current);
         Canvas.ForceUpdateCanvases();
         var targetRect = (RectTransform)target.transform;
-        pointer.position = RectTransformUtility.WorldToScreenPoint(uiRender.Camera, targetRect.TransformPoint(targetRect.rect.center));
+        var netPoint = RectTransformUtility.WorldToScreenPoint(uiRender.Camera, targetRect.TransformPoint(targetRect.rect.center));
+        pointer.position = netPoint;
         var hits = new List<RaycastResult>();
         EventSystem.current.RaycastAll(pointer, hits);
         check(hits.Count > 0 && hits[0].gameObject == target.gameObject,
             "the net metric is reachable by a real UI raycast across its title/value hover area");
+        var reserveTargets = new[] { (target: targets.First(t => t.name == "StockpileHover"), title: "FOOD"),
+            (target: targets.First(t => t.name == "WaterSupplyHover"), title: "WATER") };
+        foreach (var metric in reserveTargets)
+        {
+            var reserveRect = (RectTransform)metric.target.transform;
+            var titleRect = (RectTransform)reserveRect.parent.Find(metric.target.name.Replace("Hover", "Title"));
+            pointer.position = RectTransformUtility.WorldToScreenPoint(uiRender.Camera, titleRect.TransformPoint(titleRect.rect.center));
+            EventSystem.current.RaycastAll(pointer, hits);
+            check(hits.Count > 0 && hits[0].gameObject == metric.target.gameObject,
+                metric.title + " reserve accepts a real UI raycast over its title. Hit order: "
+                + string.Join(", ", hits.Select(hit => hit.gameObject.name)));
+        }
+        pointer.position = netPoint;
         ExecuteEvents.Execute(target.gameObject, pointer, ExecuteEvents.pointerEnterHandler);
         Canvas.ForceUpdateCanvases();
         var report = resources.CreateSnapshot();
@@ -98,31 +114,29 @@ public static class OutputTooltipSceneChecks
         check(!tooltip.gameObject.activeSelf, "new expedition modal dismisses and suppresses the hover panel");
         menu.ShowNewGamePanel(false);
         check(bootstrap.TryLoadSaveJson(before), "the healthy paused fixture restores after the hover checks");
-        foreach (var metric in new[] { (name: "StockpileHover", title: "FOOD"), (name: "WaterSupplyHover", title: "WATER") })
+        FinishMenuFadeOut(canvas);
+        foreach (var metric in reserveTargets)
         {
-            var reserveTarget = targets.First(t => t.name == metric.name);
-            var reserveRect = (RectTransform)reserveTarget.transform;
-            pointer.position = RectTransformUtility.WorldToScreenPoint(uiRender.Camera, reserveRect.TransformPoint(reserveRect.rect.center));
-            hits.Clear();
-            EventSystem.current.RaycastAll(pointer, hits);
-            check(hits.Count > 0 && hits[0].gameObject == reserveTarget.gameObject, metric.title + " reserve accepts a real UI raycast");
-            ExecuteEvents.Execute(reserveTarget.gameObject, pointer, ExecuteEvents.pointerEnterHandler);
+            ExecuteEvents.Execute(metric.target.gameObject, pointer, ExecuteEvents.pointerEnterHandler);
             check(text.text.Contains(metric.title + " OUTLOOK") && text.text.Contains("Measuring inflow")
                 && text.text.Contains("Reserve coverage"), metric.title + " outlook starts a fresh observation on load");
             CheckLayout(tooltip, text, check);
-            ExecuteEvents.Execute(reserveTarget.gameObject, pointer, ExecuteEvents.pointerExitHandler);
+            ExecuteEvents.Execute(metric.target.gameObject, pointer, ExecuteEvents.pointerExitHandler);
         }
     }
 
     public static void RunSupplies(PlanetBootstrap bootstrap, Action<bool,string> check)
     {
         bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings());
-        bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard);
+        bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard, chooseLanding: true);
+        check(bootstrap.ConfirmLanding(), "the selected medium site deploys a tender with orbital supply runs");
+        GameObject.Find("DeclineColonyGuide").GetComponent<Button>().onClick.Invoke();
         var colony=bootstrap.GetComponent<Settlement>();
         var industry=bootstrap.GetComponent<IndustrySystem>();
         var resources=bootstrap.GetComponent<ResourceSystem>();
         var placement=bootstrap.GetComponent<WH30K.Gameplay.Construction.BuildingPlacementController>();
         var menu=bootstrap.GetComponent<NewGameMenu>();
+        FinishMenuFadeOut(menu.GetComponentInChildren<Canvas>());
         var normal=colony.CreateSnapshot().normal;
         check(LandingSceneChecks.PlaceNear(bootstrap,"GroundwaterPump",normal),"normal placement builds the founding pump");
         check(LandingSceneChecks.PlaceNear(bootstrap,"Farm",normal),"normal placement builds the founding farm");
@@ -132,7 +146,7 @@ public static class OutputTooltipSceneChecks
         check(industry.SupplyOutlook.Ready && industry.SupplyOutlook.WaterPerMonth > 0
             && industry.SupplyOutlook.FoodPerMonth > 0 && industry.SupplyOutlook.FoodPerMonth < FarmRules.FoodCapacity,
             "a full simulated month measures actual operating pump water and delivered farm food");
-        check(resources.Water>water,"one connected pump replenishes water against all 6,000 crew demand");
+        check(resources.Water>water,"one connected pump replenishes water against current colony demand");
         check(resources.Food>food-500 && industry.FoodTransportCount>0,
             "founding farm receives ship components and crew waste without injected inventory and feeds the actual colony");
         check(industry.ConstructionSupplyTotals().basic<supplies,"farm operation consumes finite physical supplies");
@@ -179,6 +193,20 @@ public static class OutputTooltipSceneChecks
         check(bootstrap.TryLoadSaveJson(bootstrap.CaptureSaveJson())
             && industry.Capture().cargo.Any(c=>c.target==-3 && c.kind==(int)MaterialKind.Metal),
             "save/load preserves an actual travelling ship-bound supply hauler");
+    }
+
+    private static void FinishMenuFadeOut(Canvas canvas)
+    {
+        // This fixture begins and checks colonies in the same frame, before the cinematic fade can finish.
+        foreach (var panelName in new[] { "CinematicMainMenu", "NewGamePanel" })
+        {
+            var panel = canvas.transform.Find(panelName);
+            var group = panel.GetComponent<CanvasGroup>();
+            group.alpha = 0;
+            group.interactable = false;
+            group.blocksRaycasts = false;
+            panel.gameObject.SetActive(false);
+        }
     }
 
     private static void CheckReadyReserveHovers(PlanetBootstrap bootstrap, Settlement colony, NewGameMenu menu, Action<bool, string> check)
