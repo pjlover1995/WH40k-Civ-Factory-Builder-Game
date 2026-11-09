@@ -1,5 +1,16 @@
 # Verification
 
+## Close-zoom shoreline depth artifact — 2026-11-09
+
+- The ocean now follows terrain LOD patches in a separate draw using the same vertex samples and triangle layout. Submerged patches project water vertices to sea level, and their skirts close seams between LODs. Dry patches have no water indices. Signed depth is recorded before adding the planet radius, preserving sub-metre differences that were lost when the shader estimated depth from globe-scale coordinates. Terrain edits update the water mask when a patch rebuilds.
+- The mask discards the shallowest **2.5 m** of interpolated depth and tapers geometric waves near the edge. This leaves a dry margin whose width depends on the local slope. The fixture reproduced the orbital grid and close speckling with the earlier shader-only mask.
+- The simulation suite passed **621 engine-independent checks**, including Player and Editor syntax parsing for **130 Unity C# sources**. The shared UI check passed for 12 files. The base-to-head and working-tree Git diff checks passed.
+- Graphics-enabled Unity **2022.3.2f1** imported and compiled the runtime and Editor code. The terrain geometry suite passed **61 checks** across all three recipes, including the ocean shader, LOD split/merge, and filled/submerged terrain rebuilds. The shoreline Play Mode suite passed **4 checks** in the playable scene at the default radius. Local logs are `Logs/pr40-geometry.log` and `Logs/pr40-shoreline.log`.
+- Inspected 1280×800 Unity renders in Orbit, at regional zoom, and close to the ground in two wave phases. The orbital grid, close shoreline speckling and offshore seam seen in earlier iterations are absent in these views. The close view shows small stationary notches at the waterline. Physical-input playtesting, other GPUs and sustained performance profiling remain unverified.
+
+Repeat with `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` and `git diff --check`. Run `TerrainSceneChecks.RunGeometry` and `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` in graphics-enabled Unity **2022.3.2f1**. Omit `-quit` for the shoreline suite and inspect `.utmp/shoreline-review-final/`.
+
+
 ## Colony reserve outlook
 
 Run the simulation suite for observation warmup, rolling-window expiry, water proration, discrete food deliveries, pause, reset and deficit arithmetic. Run graphics-enabled Unity 2022.3.2f1 with `ArchitectureAppearanceChecks.RunBatch -wh30k-check supplies` and omit `-quit`. The fixture verifies HUD raycasts, measured pump output and farm deliveries, exclusion of an actual orbital ration run, stable saved state while reading the outlook and a fresh window after reload. Inspect `.utmp/ship-review/reserve-outlook-*.png` at 1280×800 and 1920×1080.

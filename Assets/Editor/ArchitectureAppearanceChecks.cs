@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -161,6 +162,10 @@ public static class ArchitectureAppearanceChecks
                 case "estate": FarmEstateSceneChecks.RunGameplay(bootstrap,Check); break;
                 case "mining": MiningSceneChecks.Run(); break;
                 case "industry": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunIndustryChecks(bootstrap);break;
+                case "shoreline":
+                    bootstrap.StartCoroutine(CompleteShorelineReview(
+                        TerrainSceneChecks.RunShorelineReview(bootstrap, Check), () => count));
+                    return;
                 case "discovery": GameplayChecks.RunDiscoveryMarkerChecks(bootstrap,Check);break;
                 case "legacy-mining": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunMiningChecks(bootstrap);break;
                 case "performance": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunPerformanceRegressions(bootstrap);break;
@@ -169,5 +174,28 @@ public static class ArchitectureAppearanceChecks
             Debug.Log($"Scene suite {suite} completed ({count} routed checks).");SceneCheckExit.Exit(0);
         }
         catch (Exception error) { Debug.LogException(error); SceneCheckExit.Exit(1); }
+    }
+
+    private static IEnumerator CompleteShorelineReview(IEnumerator review, Func<int> count)
+    {
+        try
+        {
+            while (true)
+            {
+                bool more;
+                try { more = review.MoveNext(); }
+                catch (Exception error)
+                {
+                    Debug.LogException(error);
+                    SceneCheckExit.Exit(1);
+                    yield break;
+                }
+                if (!more) break;
+                yield return null;
+            }
+            Debug.Log($"Scene suite shoreline completed ({count()} routed checks).");
+            SceneCheckExit.Exit(0);
+        }
+        finally { (review as IDisposable)?.Dispose(); }
     }
 }

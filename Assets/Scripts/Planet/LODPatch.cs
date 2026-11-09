@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 namespace WH30K.Planet
 {
@@ -29,6 +30,8 @@ namespace WH30K.Planet
         private Vector2[] uvs, climateData;
         private int[] triangles, edge;
         private int countedTriangles;
+        private bool hasWater;
+        private Vector2[] waterDepths;
 
         public void RefreshSurface(Vector3 center, float range)
         {
@@ -56,13 +59,15 @@ namespace WH30K.Planet
 
             meshFilter = GetComponent<MeshFilter>();
             meshRenderer = GetComponent<MeshRenderer>();
-            meshRenderer.sharedMaterial = planet.TerrainMaterial;
+            meshRenderer.sharedMaterials = planet.OceanMaterial == null
+                ? new[] { planet.TerrainMaterial }
+                : new[] { planet.TerrainMaterial, planet.OceanMaterial };
             // The directional shader supplies the planetary terminator. Only local
             // architecture casts shadow maps, avoiding acne across a 24,000-unit globe.
-            meshRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            meshRenderer.shadowCastingMode = ShadowCastingMode.Off;
 
             mesh = new Mesh { name = $"PatchMesh_{depth}" };
-            mesh.indexFormat = UnityEngine.Rendering.IndexFormat.UInt32;
+            mesh.indexFormat = IndexFormat.UInt32;
             meshFilter.sharedMesh = mesh;
             planet.LiveMeshCount++;
 
@@ -202,6 +207,7 @@ namespace WH30K.Planet
             var edgeCount = (resolution - 1) * 4;
             var vertexCount = surfaceCount + edgeCount;
             var newTopology = vertices == null || vertices.Length != vertexCount;
+            var trackOcean = planet.OceanMaterial != null;
             if(newTopology)
             {
                 vertices = new Vector3[vertexCount]; normals = new Vector3[vertexCount];
@@ -209,9 +215,14 @@ namespace WH30K.Planet
                 climateData = new Vector2[vertexCount];
                 triangles = new int[(resolution - 1) * (resolution - 1) * 6 + edgeCount * 6];
                 edge = new int[edgeCount];
+                if (trackOcean) waterDepths = new Vector2[vertexCount];
             }
 
             var triIndex = 0;
+            var seaLevel = planet.SeaLevel;
+            var hasSubmergedVertex = false;
+            var oceanMin = Vector3.one * float.PositiveInfinity;
+            var oceanMax = Vector3.one * float.NegativeInfinity;
             for (var y = 0; y < resolution; y++)
             {
                 for (var x = 0; x < resolution; x++)
@@ -221,8 +232,19 @@ namespace WH30K.Planet
                     var percentY = Mathf.Lerp(uvMin.y, uvMax.y, y / (float)(resolution - 1));
                     var pointOnCube = localUp + (percentX - 0.5f) * 2f * axisA + (percentY - 0.5f) * 2f * axisB;
                     var pointOnSphere = pointOnCube.normalized;
-                    var vertex = planet.EvaluateSurfacePoint(pointOnSphere);
+                    float waterDepth = 0;
+                    var vertex = trackOcean
+                        ? planet.EvaluateSurfacePoint(pointOnSphere, out waterDepth)
+                        : planet.EvaluateSurfacePoint(pointOnSphere);
                     vertices[i] = vertex;
+                    if (trackOcean)
+                    {
+                        waterDepths[i].x = waterDepth;
+                        hasSubmergedVertex |= waterDepth > 0;
+                        var oceanVertex = pointOnSphere * seaLevel;
+                        oceanMin = Vector3.Min(oceanMin, oceanVertex);
+                        oceanMax = Vector3.Max(oceanMax, oceanVertex);
+                    }
                     // Match boundary normals across different LODs; reuse rendered neighbours inside.
                     if(x==0 || y==0 || x==resolution-1 || y==resolution-1)
                         normals[i] = planet.EvaluateSurfaceNormal(pointOnSphere);
@@ -273,6 +295,7 @@ namespace WH30K.Planet
                 normals[lower] = normals[a]; uvs[lower] = uvs[a];
                 colors[lower] = colors[a];
                 climateData[lower] = climateData[a];
+                if (trackOcean) waterDepths[lower] = new Vector2(waterDepths[a].x, 1);
                 triangles[triIndex++] = a; triangles[triIndex++] = lower; triangles[triIndex++] = b;
                 triangles[triIndex++] = b; triangles[triIndex++] = lower; triangles[triIndex++] = nextLower;
             }
@@ -282,8 +305,35 @@ namespace WH30K.Planet
             mesh.normals = normals;
             mesh.colors = colors;
             mesh.uv2 = climateData;
-            if(newTopology){mesh.uv = uvs;mesh.triangles = triangles;}
+            if (newTopology)
+            {
+                mesh.uv = uvs;
+                mesh.triangles = triangles;
+            }
             else mesh.RecalculateBounds();
+
+            if (trackOcean)
+            {
+                mesh.uv3 = waterDepths;
+                // Water follows the terrain triangles and their seam skirts. The
+                // shader clips dry skirt sections using the depth of their top edge.
+                if (newTopology || hasWater != hasSubmergedVertex)
+                {
+                    hasWater = hasSubmergedVertex;
+                    mesh.subMeshCount = 2;
+                    mesh.SetIndices(triangles, 0, hasWater ? triangles.Length : 0, MeshTopology.Triangles, 1, false);
+                }
+                if (hasSubmergedVertex)
+                {
+                    // The shader projects vertices above the seabed. Include the water
+                    // and its wave displacement when Unity frustum-culls the patch.
+                    var bounds = mesh.bounds;
+                    var waveMargin = Vector3.one * 1.5f;
+                    bounds.Encapsulate(oceanMin - waveMargin);
+                    bounds.Encapsulate(oceanMax + waveMargin);
+                    mesh.bounds = bounds;
+                }
+            }
             planet.LiveTriangleCount += triangles.Length / 3 - countedTriangles;
             countedTriangles = triangles.Length / 3;
         }

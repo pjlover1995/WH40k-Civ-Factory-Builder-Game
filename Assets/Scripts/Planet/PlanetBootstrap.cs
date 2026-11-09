@@ -833,8 +833,9 @@ namespace WH30K.Gameplay
             }
             planet.ApplyConfiguration(radius, basePatchResolution, maximumDepth, splitDistance * radius / 6000f, splitFalloff,
                 lodUpdateInterval, maxPatchResolution, targetTriangleArea);
-            planet.BuildPlanet(seed, terrainMaterialInstance, terrainVersion, settings);
-            planetGO.AddComponent<PlanetPresentation>().Configure(planet);
+            var presentation = planetGO.AddComponent<PlanetPresentation>();
+            planet.BuildPlanet(seed, terrainMaterialInstance, terrainVersion, settings, presentation.CreateOceanMaterial());
+            presentation.Configure(planet);
             planet.SetCamera(UnityEngine.Camera.main);
             return planetGO.transform;
         }

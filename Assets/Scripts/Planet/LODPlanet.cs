@@ -30,6 +30,7 @@ namespace WH30K.Planet
         public float TargetTriangleArea => Mathf.Max(0.5f, targetTriangleArea);
         public int Seed { get; private set; }
         public Material TerrainMaterial { get; private set; }
+        public Material OceanMaterial { get; private set; }
         public int TerrainVersion { get; private set; } = 1;
         public float SeaLevel => radius + (TerrainVersion >= 3 ? generationSettings.seaLevel : TerrainVersion == 0 ? -120f : -20f);
         private TerrainSettings generationSettings = new TerrainSettings();
@@ -106,7 +107,8 @@ namespace WH30K.Planet
         private float ridgeScale;
         private float ridgeWeight;
 
-        public void BuildPlanet(int seed, Material material, int terrainVersion = 3, TerrainSettings settings = null)
+        public void BuildPlanet(int seed, Material material, int terrainVersion = 3, TerrainSettings settings = null,
+            Material oceanMaterial = null)
         {
             var started = System.Diagnostics.Stopwatch.GetTimestamp();
             if (terrainVersion < 0 || terrainVersion > 3) throw new ArgumentOutOfRangeException(nameof(terrainVersion));
@@ -122,6 +124,7 @@ namespace WH30K.Planet
             EarthworksHeight = null;
             TerrainVersion = terrainVersion;
             TerrainMaterial = material;
+            OceanMaterial = oceanMaterial;
 
             computedMaxDepth = CalculateEffectiveMaxDepth();
             UpdateTerrainMaterialParameters();
@@ -256,9 +259,10 @@ namespace WH30K.Planet
             return cells + 1;
         }
 
-        internal float EvaluateHeight(Vector3 direction)
+        internal float EvaluateHeight(Vector3 direction) => ApplySurfaceEdits(direction, EvaluateBaseHeight(direction));
+
+        private float ApplySurfaceEdits(Vector3 direction, float height)
         {
-            var height = EvaluateBaseHeight(direction);
             if (EarthworksHeight != null) height = EarthworksHeight(direction, height);
             return ExcavationHeight != null ? ExcavationHeight(direction, height) : height;
         }
@@ -378,6 +382,25 @@ namespace WH30K.Planet
             return normalised * height;
         }
 
+        internal Vector3 EvaluateSurfacePoint(Vector3 direction, out float waterDepth)
+        {
+            var normal = direction.normalized;
+            if (sampler == null)
+            {
+                var legacyHeight = EvaluateHeight(normal);
+                waterDepth = SeaLevel - legacyHeight;
+                return normal * legacyHeight;
+            }
+
+            // Keep the signed shoreline elevation separate from the large absolute
+            // radius so sub-metre samples survive at the default world scale.
+            var elevation = sampler.Elevation(normal.x, normal.y, normal.z);
+            var baseHeight = radius + elevation;
+            var height = ApplySurfaceEdits(normal, baseHeight);
+            waterDepth = generationSettings.seaLevel - elevation - (height - baseHeight);
+            return normal * height;
+        }
+
         internal bool TryFindLandPoint(int attempts, System.Random random, out Vector3 position, out Vector3 normal)
         {
             for (var i = 0; i < attempts; i++)
@@ -459,6 +482,11 @@ namespace WH30K.Planet
 
         private void UpdateTerrainMaterialParameters()
         {
+            if (OceanMaterial != null)
+            {
+                OceanMaterial.SetFloat("_SeaLevel", SeaLevel);
+                OceanMaterial.SetFloat("_WaterSkirtFloor", SkirtFloor);
+            }
             if (TerrainMaterial == null)
             {
                 return;
