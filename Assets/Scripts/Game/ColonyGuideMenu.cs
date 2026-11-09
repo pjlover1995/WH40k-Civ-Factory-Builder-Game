@@ -110,7 +110,7 @@ namespace WH30K.UI
         private void CloseGuide()
         {
             if (guidePanel != null) guidePanel.SetActive(false);
-            if (clock != null) clock.DecisionPending = HasOpenEvent || (newGamePanel != null && newGamePanel.activeSelf);
+            if (clock != null) clock.DecisionPending = HasOpenEvent || newGameScreenRequestedVisible;
         }
 
         private void SetGuidePage(int page)

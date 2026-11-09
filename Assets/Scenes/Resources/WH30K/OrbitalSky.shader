@@ -27,11 +27,14 @@ Shader "WH30K/OrbitalSky"
                 float3 d=normalize(i.dir);
                 float3 up=normalize(_WorldSpaceCameraPos-_WorldPlanetCenterRadius.xyz);
                 float altitude=length(_WorldSpaceCameraPos-_WorldPlanetCenterRadius.xyz)-_WorldPlanetCenterRadius.w;
-                float atmosphere=1-smoothstep(1300,6000,altitude);
-                float horizon=pow(1-abs(dot(d,up)),7)*atmosphere;
+                float atmosphere=1-smoothstep(3000,18000,altitude);
+                float elevation=saturate(dot(d,up));
+                float horizon=pow(1-elevation,2.2)*atmosphere;
                 float s=stars(d,430,0.995)*0.65+stars(d+13,170,0.997)*0.9;
-                float3 base=float3(0.003,0.005,0.012);
-                return float4(base+s*float3(0.68,0.77,0.92)*(1-atmosphere*0.8)+horizon*float3(0.075,0.13,0.19),1);
+                float3 space=float3(0.035,0.065,0.105);
+                float3 air=lerp(float3(0.18,0.29,0.38),float3(0.08,0.15,0.23),elevation);
+                float3 base=lerp(space,air,atmosphere);
+                return float4(base+s*float3(0.68,0.77,0.92)*(1-atmosphere*0.8)+horizon*float3(0.11,0.21,0.30),1);
             }
             ENDCG
         }

@@ -16,6 +16,7 @@
     <Compile Include="../../Assets/Scripts/Sim/DepositUsage.cs" />
     <Compile Include="ShipChecks.cs" />
     <Compile Include="../../Assets/Scripts/Sim/ShipRules.cs" />
+    <Compile Include="../../Assets/Scripts/Sim/TenderLogisticsRules.cs" />
     <Compile Include="../../Assets/Scripts/Sim/ColonyGuideContent.cs" />
     <Compile Include="FarmChecks.cs" />
     <Compile Include="FarmOwnershipChecks.cs" />

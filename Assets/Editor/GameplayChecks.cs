@@ -527,6 +527,7 @@ public static class GameplayChecks
             CaptureDiscoveryMarkerView(Camera.main,"orbit");
 
             var direction=new Vector3(site.x,site.y,site.z).normalized;
+            industry.SetOverlay(1);
             orbit.FocusLocation(direction);RefreshDiscoveryMarkers(industry);
             check(orbit.IsSurfaceView&&siteMarker.gameObject.activeSelf,"focusing a discovered site into surface mode reveals its pin");
             CaptureDiscoveryMarkerView(Camera.main,"close-ground");
@@ -534,7 +535,8 @@ public static class GameplayChecks
             check(orbit.IsSurfaceView&&siteMarker.gameObject.activeSelf,"discovered-site pins remain visible while zoomed out to the regional view");
             CaptureDiscoveryMarkerView(Camera.main,"regional");
 
-            orbit.FrameTarget();RefreshDiscoveryMarkers(industry);
+            industry.SetOverlay(0);orbit.FrameTarget();RefreshDiscoveryMarkers(industry);
+            check(!siteMarker.gameObject.activeSelf,"discovered-site pins stay hidden when the overlay is off");
             var sitesButton=GameObject.Find("DiscoveryStatus")?.GetComponent<Button>();
             sitesButton?.onClick.Invoke();
             check(!orbit.IsSurfaceView&&GameObject.Find("DiscoveryPanel")?.activeSelf==true,
@@ -545,8 +547,8 @@ public static class GameplayChecks
             for(var i=0;i<industry.DiscoveredCount&&details!=null&&next!=null&&!details.text.Contains(expected);i++)next.onClick.Invoke();
             check(details!=null&&details.text.Contains(expected),"the SITES browser can select the discovered ruin from Orbit");
             GameObject.Find("LocateDiscovery")?.GetComponent<Button>()?.onClick.Invoke();
-            check(orbit.IsSurfaceView&&Vector3.Angle(orbit.NavigationDirection,direction)<.01f,
-                "LOCATE closes the browser and focuses the selected discovered site");
+            check(industry.Overlay==1&&orbit.IsSurfaceView&&Vector3.Angle(orbit.NavigationDirection,direction)<.01f,
+                "LOCATE enables discovery pins and focuses the selected site");
             RefreshDiscoveryMarkers(industry);
             check(siteMarker.gameObject.activeSelf,"the selected site's pin remains visible after browser focus");
         }

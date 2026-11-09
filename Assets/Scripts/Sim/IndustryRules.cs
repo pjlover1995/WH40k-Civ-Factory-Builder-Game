@@ -16,6 +16,7 @@ namespace WH30K.Sim
         public DiscoveryRecord[] discoveries;
         public bool[] exploredCells;
         public float[] expeditionCargo;
+        public TenderLogisticsState tenderLogistics;
         public int facilityVersion;
         public int geologyVersion; public int materialVersion; public int explorationVersion; public MiningConflict conflict;
     }
@@ -138,7 +139,7 @@ namespace WH30K.Sim
         public static bool Valid(IndustrySnapshot snapshot, int buildingCount)
         {
             if(snapshot==null) return true;
-            if(!FoundingObjectives.Valid(snapshot.founding)) return false;
+            if(!FoundingObjectives.Valid(snapshot.founding) || !TenderLogisticsRules.Valid(snapshot.tenderLogistics)) return false;
             if(snapshot.expeditionCargo != null && snapshot.expeditionCargo.Length > 0 && !ValidStock(snapshot.expeditionCargo)) return false;
             if(snapshot.facilities==null || snapshot.facilities.Length!=buildingCount || snapshot.deposits==null || snapshot.deposits.Length>4096
                 || snapshot.cargo==null || snapshot.cargo.Length>64) return false;

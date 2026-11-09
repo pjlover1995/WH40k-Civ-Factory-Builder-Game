@@ -12,9 +12,25 @@ namespace WH30K.Planet
         private Material orbitalSky;
         private Material priorSky;
         private Light sun;
+        private LODPlanet planet;
+        private Camera viewCamera;
+        private float fogStart, fogEnd;
+        private bool visibilityLimited;
+        private bool atmosphericPerspectiveEnabled = true;
+
+        public float FogStartDistance => fogStart;
+        public float FogEndDistance => fogEnd;
+        public bool VisibilityLimited => visibilityLimited;
+        public void SetAtmosphericPerspectiveEnabled(bool enabled)
+        {
+            atmosphericPerspectiveEnabled = enabled;
+            UpdateAtmosphericPerspective();
+        }
 
         public void Configure(LODPlanet planet)
         {
+            this.planet = planet;
+            viewCamera = Camera.main;
             priorSky = RenderSettings.skybox;
             orbitalSky = MakeMaterial("OrbitalSky");
             RenderSettings.skybox = orbitalSky;
@@ -34,7 +50,7 @@ namespace WH30K.Planet
                 sun.color = new Color(1f, 0.94f, 0.83f);
                 sun.intensity = 1.25f;
                 sun.shadows = LightShadows.Soft;
-                sun.shadowStrength = 0.8f;
+                sun.shadowStrength = 0.58f;
                 sun.shadowBias = 0.03f;
                 sun.shadowNormalBias = 0.2f;
                 RenderSettings.sun = sun;
@@ -50,6 +66,53 @@ namespace WH30K.Planet
             gameObject.AddComponent<PlanetarySystem>().Configure(planet);
             var camera = Camera.main;
             if (camera != null) camera.clearFlags = CameraClearFlags.Skybox;
+            UpdateAtmosphericPerspective();
+        }
+
+        private void LateUpdate()
+        {
+            UpdateAtmosphericPerspective();
+        }
+
+        private void UpdateAtmosphericPerspective()
+        {
+            if (planet == null) return;
+            if (viewCamera == null) viewCamera = Camera.main;
+            if (viewCamera == null) return;
+            if (!atmosphericPerspectiveEnabled)
+            {
+                visibilityLimited = false;
+                fogStart = fogEnd = 0;
+                Shader.SetGlobalVector("_PlanetAtmosphericFog", Vector4.zero);
+                return;
+            }
+
+            // Surface views lose detail into a blue-grey haze before the geometric horizon.
+            // As the camera climbs, the fade range widens; above 150 km, orbital planet views
+            // retain their natural horizon and far clipping.
+            var radialDistance = Vector3.Distance(viewCamera.transform.position, planet.transform.position);
+            var altitude = Mathf.Max(0, radialDistance - planet.Radius);
+            visibilityLimited = altitude < 150000f;
+            if (!visibilityLimited)
+            {
+                fogStart = fogEnd = 0;
+                Shader.SetGlobalVector("_PlanetAtmosphericFog", Vector4.zero);
+                return;
+            }
+
+            var altitudeBlend = Mathf.SmoothStep(0, 1, altitude / 150000f);
+            fogStart = Mathf.Lerp(300f, 80000f, altitudeBlend);
+            fogEnd = Mathf.Lerp(3200f, 180000f, altitudeBlend);
+            Shader.SetGlobalVector("_PlanetAtmosphericFog", new Vector4(fogStart, fogEnd, 1, 0));
+            Shader.SetGlobalColor("_PlanetAtmosphericFogColor", new Color(.42f, .55f, .64f, 1));
+
+            // Keep the main camera just beyond the atmospheric fade. This also lets normal
+            // frustum culling skip far terrain patches instead of shading invisible horizons.
+            // SimpleOrbitCamera recalculates its geometric horizon clip each frame; LateUpdate
+            // applies this nearer visibility cap after its camera update.
+            var visibilityFarClip = fogEnd + 2500f;
+            if (viewCamera.farClipPlane > visibilityFarClip)
+                viewCamera.farClipPlane = visibilityFarClip;
         }
 
         public void LightLandingSite(Vector3 normal)
@@ -104,6 +167,7 @@ namespace WH30K.Planet
 
         private void OnDestroy()
         {
+            Shader.SetGlobalVector("_PlanetAtmosphericFog", Vector4.zero);
             if (RenderSettings.skybox == orbitalSky) RenderSettings.skybox = priorSky;
             foreach (var material in materials) if (material != null) Destroy(material);
             foreach (var mesh in meshes) if (mesh != null) Destroy(mesh);
