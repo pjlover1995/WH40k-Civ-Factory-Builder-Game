@@ -1,5 +1,11 @@
 # Verification
 
+## Orbital discovery marker clarity — 2026-11-09 (implementation in progress)
+
+- The screenshot's repeated dots match discovered-site pins: the HUD count is backed by `IndustrySystem.DiscoveredCount`, and `UpdateSurvey` rendered every discovered site on the visible hemisphere while enlarging pins to a 260 m cap. On the historical 12 km radius world, that produced a dense globe-wide pattern that could be mistaken for a water or terrain artifact.
+- Discovery pins now appear only while the orbit camera is in regional/close surface mode. The SITES browser remains available in Orbit and focuses the selected location. No save fields, terrain sampling, water, building IDs or scene assets change.
+- `git diff --check` passed. Simulation and Unity scene checks were not run for this implementation. Manual Orbit/region/close-ground inspection remains pending; Unity Editor was not exposed as an open window during this session, so no visual acceptance is claimed.
+
 ## Cinematic menu and screen flow - 2026-11-08
 
 - The public UI branch now includes the cinematic title/expedition console, the artwork and metadata, shared component styling, save picker and settings modals, and `PlanetBootstrap` APIs for validating and loading a selected save through the current migration rules. The save schema remains version 16. By the Game Director's scope decision, Urban integration is deferred to issue #29 because its private source requires coupled gameplay, residential and persistence changes; exhaustive long-copy checks across all panels are deferred to issue #30.
@@ -559,3 +565,4 @@ Verification completed: **576 engine-independent checks passed**, including Play
 Actual graphics-enabled Unity **2022.3.2f1** imported/compiled the final sources and passed **50 focused scene checks** (`Logs/manufactorum-verified.log`), including existing facility/depot controls, exact physical costs, real occupied-frontier avoidance, pending reservations blocking new buildings, suspension, partial/full JsonUtility save/load with exact cargo, powered/staffed recipe output, doubled factory power demand, physical upkeep consumption, founding-only output without upkeep, gantry movement/pause/suspension, repeated expansion at Tier III, and historical paid-upgrade completion without further automatic expansion. The residential regression separately passed **171 scene checks** (`Logs/manufactorum-residential-regression.log`). These logs are local/ignored. The initial scene run exposed Unity zero-filled null-class serialization; optional-state normalization fixed it before these passing final runs.
 
 Reviewed final actual rendered warehouse and production-control images at **1280x800 and 1920x1080**. Two full-size warehouse bays, service galleries, textures and machinery render; the Tier III/three-times-capacity control panel fits. Isolated model renders expose the deep foundation plinth normally buried in terrain. These are programmatic scene/animation checks and rendered layout/model review, not a manual ten-minute session, standalone build or sustained performance test. Those acceptance items remain pending.
+
