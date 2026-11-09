@@ -1,6 +1,10 @@
 Shader "WH30K/PlanetOcean"
 {
-    Properties { _PlanetCenter ("Center", Vector)=(0,0,0,0) }
+    Properties
+    {
+        _PlanetCenter ("Center", Vector)=(0,0,0,0)
+        _ShoreClearance ("Shoreline clearance (metres)", Float) = 2.5
+    }
     SubShader
     {
         Tags { "RenderType"="Opaque" "Queue"="Geometry+1" }
@@ -15,6 +19,7 @@ Shader "WH30K/PlanetOcean"
             #include "Lighting.cginc"
             float3 _PlanetCenter;
             float _PlanetSimulationTime;
+            float _ShoreClearance;
             struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float4 color:COLOR; };
             struct v2f { float4 pos:SV_POSITION; float3 world:TEXCOORD0; float3 normal:TEXCOORD1; float depth:TEXCOORD2; };
             v2f vert(appdata v)
@@ -28,6 +33,10 @@ Shader "WH30K/PlanetOcean"
             }
             fixed4 frag(v2f i):SV_Target
             {
+                // Water waves displace the shell by at most 1.45 m. Leave a small dry
+                // clearance where terrain meets the sea so the two depth surfaces never
+                // alternate in the depth buffer at close camera distances.
+                clip(i.depth * 110.0 - max(_ShoreClearance, 1.5));
                 float3 p=normalize(i.world-_PlanetCenter), n=normalize(i.normal);
                 float3 v=normalize(_WorldSpaceCameraPos-i.world), l=normalize(_WorldSpaceLightPos0.xyz);
                 float3 wp=i.world-_PlanetCenter;

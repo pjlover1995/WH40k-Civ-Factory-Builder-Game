@@ -23,6 +23,8 @@ public static class TerrainSceneChecks
         if (Application.isPlaying) throw new InvalidOperationException("Run geometry checks outside Play Mode.");
         checks = 0;
         var material = UnityEngine.Object.Instantiate(Resources.Load<Material>("WH30K/PlanetTerrain"));
+        var oceanShader = Resources.Load<Shader>("WH30K/PlanetOcean");
+        var oceanMaterial = oceanShader != null ? new Material(oceanShader) : null;
         var root = new GameObject("Terrain geometry checks") { hideFlags = HideFlags.HideAndDontSave };
         var planet = root.AddComponent<LODPlanet>();
         try
@@ -51,9 +53,18 @@ public static class TerrainSceneChecks
             }
             // Import validates the changed shader on the actual graphics backend when available.
             Check(!ShaderUtil.ShaderHasError(material.shader), "terrain shader has no reported import errors");
+            Check(oceanShader != null && oceanMaterial != null
+                && oceanMaterial.GetFloat("_ShoreClearance") > 1.45f
+                && !ShaderUtil.ShaderHasError(oceanShader),
+                "ocean shader compiles and keeps its shoreline clearance above the maximum wave displacement");
             Debug.Log($"Terrain geometry: {checks} checks passed in Unity {Application.unityVersion}.");
         }
-        finally { planet.ReleaseGeneratedMeshes();UnityEngine.Object.DestroyImmediate(root); UnityEngine.Object.DestroyImmediate(material); }
+        finally
+        {
+            planet.ReleaseGeneratedMeshes(); UnityEngine.Object.DestroyImmediate(root);
+            UnityEngine.Object.DestroyImmediate(material);
+            if (oceanMaterial != null) UnityEngine.Object.DestroyImmediate(oceanMaterial);
+        }
     }
 
     private static void ValidateMeshes(LODPlanet planet)

@@ -1,5 +1,12 @@
 # Verification
 
+## Close-zoom shoreline depth artifact — 2026-11-09
+
+- The opaque ocean shader now discards fragments with less than **2.5 m** of sampled water depth. Its animated radial waves move the surface by at most **1.45 m**, so the mask keeps the water surface clear of terrain at shallow coasts without changing terrain heights, sea level, saves or placement rules. The intentional result is a narrow dry shoreline margin.
+- `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` passed **606 engine-independent checks**, including Player/Editor syntax parsing for **124 Unity C# sources**. `dotnet` was not on PATH; the repository-local .NET 9 SDK was used.
+- Unity **2022.3.2f1** imported and compiled the project and passed **56 Terrain Geometry checks**, including the new ocean shader import/clearance assertion (`zoom-geometry.log`, local). `git diff --check` passed.
+- Manual zoom/play inspection was not completed: screenshot capture of the already-open Unity window timed out twice. The scene capture and actual play behaviour therefore remain unverified and should be checked at a shallow coastline through orbit, region and close-ground zoom.
+
 ## Cinematic menu and screen flow - 2026-11-08
 
 - The public UI branch now includes the cinematic title/expedition console, the artwork and metadata, shared component styling, save picker and settings modals, and `PlanetBootstrap` APIs for validating and loading a selected save through the current migration rules. The save schema remains version 16. By the Game Director's scope decision, Urban integration is deferred to issue #29 because its private source requires coupled gameplay, residential and persistence changes; exhaustive long-copy checks across all panels are deferred to issue #30.
