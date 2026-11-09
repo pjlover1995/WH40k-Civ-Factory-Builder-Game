@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -485,6 +486,104 @@ public static class GameplayChecks
         Check(resolved.outcomeRecorded&&resolved.rewardReceived>0,"the recorded expedition outcome survives JsonUtility save/load");
         placement.Buildings[0].ToggleOperation();industry.SurveyNow();
         Check(industry.ExploredFraction==coverage&&industry.DiscoveredCount>0,"suspending the survey outpost preserves charted territory and discoveries");
+    }
+
+    internal static void RunDiscoveryMarkerChecks(PlanetBootstrap bootstrap,Action<bool,string> check)
+    {
+        if(bootstrap==null||check==null)throw new ArgumentNullException(bootstrap==null?nameof(bootstrap):nameof(check));
+        var priorColony=CaptureReviewColony(bootstrap);var priorTerrain=bootstrap.NewWorldTerrain;
+        try
+        {
+            bootstrap.ConfigureNewWorldTerrain(new TerrainSettings{radius=6000});
+            bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard,legacyCore:true);
+            FundConstruction(bootstrap);
+            bootstrap.GetComponent<ColonyEventSystem>().EndSession();
+            var industry=bootstrap.GetComponent<IndustrySystem>();
+            var placement=bootstrap.GetComponent<BuildingPlacementController>();
+            var resources=bootstrap.GetComponent<ResourceSystem>();
+            var planet=bootstrap.ActivePlanet;
+            var colony=bootstrap.GetComponent<Settlement>().CreateSnapshot().normal;
+            resources.ModifyStockpile(10000);
+            check(PlaceNear(placement,"Outpost",colony,planet.Radius,180),"a real survey outpost can be built for the discovery-pin fixture");
+            industry.SurveyNow();
+            var site=Array.Find(industry.Capture().discoveries,d=>d.discovered&&!d.resolved&&d.kind==(int)DiscoveryKind.AncientRuins);
+            check(site.discovered,"the survey reveals an unresolved ruin for pin visibility and location checks");
+
+            var internalDiscoveries=typeof(IndustrySystem).GetField("discoveries",BindingFlags.Instance|BindingFlags.NonPublic);
+            Transform siteMarker=null;
+            if(internalDiscoveries?.GetValue(industry) is System.Collections.IEnumerable discoveries)
+                foreach(var item in discoveries)
+                {
+                    var stateField=item.GetType().GetField("State");var markerField=item.GetType().GetField("Marker");
+                    if(stateField?.GetValue(item) is DiscoveryRecord state&&state.id==site.id)
+                    {siteMarker=markerField?.GetValue(item) as Transform;break;}
+                }
+            check(siteMarker!=null,"the discovered ruin owns its expected scene marker");
+            if(siteMarker==null)throw new InvalidOperationException("The discovered ruin marker fixture could not be found.");
+
+            var orbit=Camera.main.GetComponent<SimpleOrbitCamera>();
+            orbit.FrameTarget();RefreshDiscoveryMarkers(industry);
+            check(!siteMarker.gameObject.activeSelf,"discovered-site pins stay hidden in the orbital overview");
+            CaptureDiscoveryMarkerView(Camera.main,"orbit");
+
+            var direction=new Vector3(site.x,site.y,site.z).normalized;
+            orbit.FocusLocation(direction);RefreshDiscoveryMarkers(industry);
+            check(orbit.IsSurfaceView&&siteMarker.gameObject.activeSelf,"focusing a discovered site into surface mode reveals its pin");
+            CaptureDiscoveryMarkerView(Camera.main,"close-ground");
+            orbit.Zoom(-.5f);RefreshDiscoveryMarkers(industry);
+            check(orbit.IsSurfaceView&&siteMarker.gameObject.activeSelf,"discovered-site pins remain visible while zoomed out to the regional view");
+            CaptureDiscoveryMarkerView(Camera.main,"regional");
+
+            orbit.FrameTarget();RefreshDiscoveryMarkers(industry);
+            var sitesButton=GameObject.Find("DiscoveryStatus")?.GetComponent<Button>();
+            sitesButton?.onClick.Invoke();
+            check(!orbit.IsSurfaceView&&GameObject.Find("DiscoveryPanel")?.activeSelf==true,
+                "the SITES browser opens while the camera remains in Orbit");
+            var details=GameObject.Find("DiscoveryDetails")?.GetComponent<Text>();
+            var next=GameObject.Find("NextDiscovery")?.GetComponent<Button>();
+            var expected=$"Survey site {site.id+1:000}";
+            for(var i=0;i<industry.DiscoveredCount&&details!=null&&next!=null&&!details.text.Contains(expected);i++)next.onClick.Invoke();
+            check(details!=null&&details.text.Contains(expected),"the SITES browser can select the discovered ruin from Orbit");
+            GameObject.Find("LocateDiscovery")?.GetComponent<Button>()?.onClick.Invoke();
+            check(orbit.IsSurfaceView&&Vector3.Angle(orbit.NavigationDirection,direction)<.01f,
+                "LOCATE closes the browser and focuses the selected discovered site");
+            RefreshDiscoveryMarkers(industry);
+            check(siteMarker.gameObject.activeSelf,"the selected site's pin remains visible after browser focus");
+        }
+        finally
+        {
+            bootstrap.ConfigureNewWorldTerrain(priorTerrain);
+            if(priorColony!=null&&!bootstrap.TryLoadSaveJson(priorColony))
+                Debug.LogError("Could not restore the colony after discovery marker checks.");
+        }
+    }
+
+    private static void RefreshDiscoveryMarkers(IndustrySystem industry)
+    {
+        var timer=typeof(IndustrySystem).GetField("surveyTimer",BindingFlags.Instance|BindingFlags.NonPublic);
+        var update=typeof(IndustrySystem).GetMethod("UpdateSurvey",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(timer!=null)timer.SetValue(industry,1f);
+        if(update==null)throw new MissingMethodException(typeof(IndustrySystem).FullName,"UpdateSurvey");
+        update.Invoke(industry,null);
+    }
+
+    private static void CaptureDiscoveryMarkerView(Camera camera,string name)
+    {
+        var directory=Path.Combine(".utmp","discovery-marker-review");Directory.CreateDirectory(directory);
+        var target=camera.targetTexture;var active=RenderTexture.active;var aspect=camera.aspect;
+        var texture=new RenderTexture(1280,800,24);texture.Create();
+        var image=new Texture2D(1280,800,TextureFormat.RGB24,false);
+        try
+        {
+            camera.targetTexture=texture;camera.aspect=1280f/800f;
+            camera.Render();RenderTexture.active=texture;image.ReadPixels(new Rect(0,0,1280,800),0,0);image.Apply();
+            File.WriteAllBytes(Path.Combine(directory,name+".png"),image.EncodeToPNG());
+        }
+        finally
+        {
+            camera.targetTexture=target;camera.aspect=aspect;RenderTexture.active=active;
+            texture.Release();UnityEngine.Object.DestroyImmediate(texture);UnityEngine.Object.DestroyImmediate(image);
+        }
     }
 
     internal static void RunIndustryChecks(PlanetBootstrap bootstrap)

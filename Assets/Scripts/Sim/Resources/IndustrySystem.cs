@@ -1179,6 +1179,11 @@ namespace WH30K.Sim.Resources
             surveyTimer=0;surveyOverlay=Overlay;
             if(surveyCamera==null)surveyCamera=Camera.main;
             if(surveyCamera==null)return;var camera=surveyCamera.transform.position;
+            var orbitCamera=surveyCamera.GetComponent<WH30K.CameraSystem.SimpleOrbitCamera>();
+            // Discovery pins identify local sites, but rendering every one as an enlarged
+            // marker turns an orbital overview into a globe-wide dot pattern. The site
+            // browser remains available from Orbit; show pins after focusing into a region.
+            var showDiscoveryPins=orbitCamera==null||orbitCamera.IsSurfaceView;
             if(logisticsRenderer!=null)logisticsRenderer.enabled=Overlay==1 && !LogisticsBuildPending;
             if(surveyCoverageRenderer!=null)surveyCoverageRenderer.enabled=Overlay==1;
             foreach(var deposit in deposits)
@@ -1198,7 +1203,7 @@ namespace WH30K.Sim.Resources
             foreach(var discovery in discoveries)
             {
                 var world=discovery.Position;var distance=Vector3.Distance(world,camera);
-                var visible=discovery.State.discovered&&Vector3.Dot(world-planet.transform.position,camera-world)>0;
+                var visible=showDiscoveryPins&&discovery.State.discovered&&Vector3.Dot(world-planet.transform.position,camera-world)>0;
                 if(discovery.Marker.gameObject.activeSelf!=visible)discovery.Marker.gameObject.SetActive(visible);
                 if(discovery.Site!=null)discovery.Site.gameObject.SetActive(visible&&distance<2400);
                 if(visible)

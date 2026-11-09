@@ -1,5 +1,16 @@
 # Verification
 
+## Orbital discovery marker clarity — 2026-11-09
+
+- The screenshot's repeated dots match discovered-site pins: the HUD count is backed by `IndustrySystem.DiscoveredCount`, and `UpdateSurvey` rendered every discovered site on the visible hemisphere while enlarging pins to a 260 m cap. On the historical 12 km radius world, that produced a dense globe-wide pattern that could be mistaken for a water or terrain artifact.
+- Discovery pins now appear only while the orbit camera is in regional/close surface mode. The SITES browser remains available in Orbit and focuses the selected location. No save fields, terrain sampling, water, building IDs or scene assets change.
+- The engine-independent simulation suite passed **606 checks**, including Player/Editor syntax parsing for **124 Unity C# sources**. `node Tools/Workflow/ui-style.mjs` passed for 12 menu and panel files; `git diff --check` passed. Player and Editor reference compilation passed against Unity **2022.3.2f1**, with existing serialized-field and API warnings.
+- Graphics-enabled Unity **2022.3.2f1** `MainMenuSceneChecks.RunBatch -wh30k-panel-review` passed **93 assertions** and rendered the menu/layout review captures. This fixture does not assert discovery-pin state.
+- The focused `ArchitectureAppearanceChecks.RunBatch -wh30k-check discovery` passed **10 runtime assertions** in the real playable scene. It builds a survey outpost, verifies discovered pins are hidden in Orbit, visible after focusing a site and at regional zoom, opens the SITES browser while still in Orbit, selects a discovered ruin, and verifies LOCATE focuses that selection. UI callbacks are invoked directly by the fixture; this is not physical-input play testing.
+- Visually inspected the actual Unity-rendered fixture captures in `.utmp/discovery-marker-review/{orbit,regional,close-ground}.png`: Orbit has no field of discovery pins, and the regional and close-ground views show the selected marker against the terrain. Manual mouse/keyboard play remains separate and was not performed.
+
+Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, `Tests/CompileUnityReferences.ps1`, then run `ArchitectureAppearanceChecks.RunBatch -wh30k-check discovery` in Unity **2022.3.2f1** and inspect its Orbit, regional and close-ground captures.
+
 ## Cinematic menu and screen flow - 2026-11-08
 
 - The public UI branch now includes the cinematic title/expedition console, the artwork and metadata, shared component styling, save picker and settings modals, and `PlanetBootstrap` APIs for validating and loading a selected save through the current migration rules. The save schema remains version 16. By the Game Director's scope decision, Urban integration is deferred to issue #29 because its private source requires coupled gameplay, residential and persistence changes; exhaustive long-copy checks across all panels are deferred to issue #30.
