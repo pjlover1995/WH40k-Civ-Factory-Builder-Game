@@ -1,0 +1,33 @@
+{
+  "id": "colony-reserve-outlook",
+  "title": "Show food and water reserve outlook in the colony HUD",
+  "risk": "gameplay",
+  "outcome": "Players can see whether recent farm deliveries and pump output can sustain the colony before deciding where to expand.",
+  "scope": [
+    "Dedicated Food and Water HUD hover details in WH30K_VS01 using the shared colony UI",
+    "Observe one full simulated month of farm food actually delivered to the colony and pump water retained by the colony",
+    "Compare observed monthly supply with current population demand and estimate time to empty during a deficit",
+    "Keep the existing headline stock-only coverage distinct and restart observation after loading or replacing a colony"
+  ],
+  "acceptance": [
+    "Hovering either reserve metric exposes the current stock, stock-only coverage, observed supply, current demand and net change as applicable",
+    "Deficit, surplus, zero demand, empty stock and incomplete observation show the appropriate state",
+    "Simulation pause freezes observation and orbital resupply and in-transit farm food are excluded",
+    "Save and load preserve reserve balances and other existing contracts while restarting the observation",
+    "Focused simulation and Unity checks exercise the calculation and playable UI, with applicable rendered layout evidence recorded"
+  ],
+  "nonGoals": [
+    "Change consumption, production, cargo, staffing, power or storage rules",
+    "Add save fields, change stable building IDs or scene metadata, or change the pinned Unity Editor and rendering pipeline",
+    "Introduce alerts, automated construction or changes to the colony HUD layout"
+  ],
+  "rollback": "Revert the feature pull request. The outlook is derived session state, so rollback requires no save migration.",
+  "issue": "https://github.com/pjlover1995/WH40k-Civ-Factory-Builder-Game/issues/43",
+  "schema": 1,
+  "stage": "In progress",
+  "design": {
+    "reviewer": "/root/lead_reviewer",
+    "result": "pass",
+    "reference": "Independent design review in the 2026-11-09 Codex chat. Issue #43 records the agreed scope within the existing survival and persistence rules."
+  }
+}

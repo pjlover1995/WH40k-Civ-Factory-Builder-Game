@@ -1,5 +1,11 @@
 # Verification
 
+## Colony reserve outlook
+
+Run the simulation suite for observation warmup, rolling-window expiry, water proration, discrete food deliveries, pause, reset and deficit arithmetic. Run graphics-enabled Unity 2022.3.2f1 with `ArchitectureAppearanceChecks.RunBatch -wh30k-check supplies` and omit `-quit`. The fixture verifies HUD raycasts, measured pump output and farm deliveries, exclusion of an actual orbital ration run, stable saved state while reading the outlook and a fresh window after reload. Inspect `.utmp/ship-review/reserve-outlook-*.png` at 1280×800 and 1920×1080.
+
+For physical-input acceptance, hover both reserve cells on a landed colony. Build a connected farm and pump, advance one simulated month and compare the net rates with demand. Suspend one facility, verify the outlook changes as the observation window advances, then pause and save/reload. The reserve coverage and observation progress should be visible immediately after load.
+
 ## Orbital discovery marker clarity — 2026-11-09
 
 - The screenshot's repeated dots match discovered-site pins: the HUD count is backed by `IndustrySystem.DiscoveredCount`, and `UpdateSurvey` rendered every discovered site on the visible hemisphere while enlarging pins to a 260 m cap. On the historical 12 km radius world, that produced a dense globe-wide pattern that could be mistaken for a water or terrain artifact.
