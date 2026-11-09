@@ -161,6 +161,7 @@ public static class ArchitectureAppearanceChecks
                 case "estate": FarmEstateSceneChecks.RunGameplay(bootstrap,Check); break;
                 case "mining": MiningSceneChecks.Run(); break;
                 case "industry": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunIndustryChecks(bootstrap);break;
+                case "shoreline": TerrainSceneChecks.RunShorelineReview(bootstrap,Check);break;
                 case "legacy-mining": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunMiningChecks(bootstrap);break;
                 case "performance": bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings{radius=6000});GameplayChecks.RunPerformanceRegressions(bootstrap);break;
                 default: GameplayChecks.Run(); ResidentialSceneChecks.Run(); break;

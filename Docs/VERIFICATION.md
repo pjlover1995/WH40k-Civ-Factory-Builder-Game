@@ -5,7 +5,8 @@
 - The opaque ocean shader now discards fragments with less than **2.5 m** of sampled water depth. Its animated radial waves move the surface by at most **1.45 m**, so the mask keeps the water surface clear of terrain at shallow coasts without changing terrain heights, sea level, saves or placement rules. The intentional result is a narrow dry shoreline margin.
 - `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` passed **606 engine-independent checks**, including Player/Editor syntax parsing for **124 Unity C# sources**. `dotnet` was not on PATH; the repository-local .NET 9 SDK was used.
 - Unity **2022.3.2f1** imported and compiled the project and passed **56 Terrain Geometry checks**, including the new ocean shader import/clearance assertion (`zoom-geometry.log`, local). `git diff --check` passed.
-- Manual zoom/play inspection was not completed: screenshot capture of the already-open Unity window timed out twice. The scene capture and actual play behaviour therefore remain unverified and should be checked at a shallow coastline through orbit, region and close-ground zoom.
+- `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` passed **3 focused Play Mode checks**: it finds a sampled 1 m-deep coastline inside the ocean mask and verifies the camera enters close-ground and regional surface views. Its orbit capture rendered, but the generated regional and close-ground images are effectively blank, so they do not establish shoreline appearance. Manual zoom/play inspection remains outstanding; Unity window screenshots timed out twice.
+- The generated images are local/ignored under `.utmp/shoreline-review/`. Review the actual shallow coast in Orbit, region and close-ground zoom before treating visual acceptance as complete.
 
 ## Cinematic menu and screen flow - 2026-11-08
 
@@ -16,7 +17,7 @@
 - Unity logs report a nonfatal `DirectoryNotFoundException` while package validation checks the Visual Scripting YamlDotNet assembly; Unity then completes script compilation/domain reload and all scene assertions, and the referenced package file is present afterward. Treat this as an Editor package-cache warning, not as evidence of a clean import.
 - Visual review found the first event-copy fix still clipped the final sentence at 1280×800 and 1920×1080. The acceptance check now measures full wrapped text with overflow enabled, and the event card/body were expanded to 380/140 px; the latest captures show the complete copy at all three review sizes. By the Game Director's 2026-11-08 scope decision, Urban integration is deferred to issue #29 and exhaustive long-copy/populated checks across panels to issue #30. The Game Director must complete the physical-input and save/load playtest before final approval.
 
-Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, then run `MainMenuSceneChecks.RunBatch -wh30k-panel-review` in Unity 2022.3.2f1 with graphics enabled.
+Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, then run `MainMenuSceneChecks.RunBatch -wh30k-panel-review` and `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` in Unity 2022.3.2f1 with graphics enabled.
 
 ## Shared UI panel layout - 2026-11-08
 
