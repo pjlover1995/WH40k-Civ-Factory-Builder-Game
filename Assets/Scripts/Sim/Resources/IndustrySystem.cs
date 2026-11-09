@@ -1267,4 +1267,3 @@ namespace WH30K.Sim.Resources
         }
     }
 }
-

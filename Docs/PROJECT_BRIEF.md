@@ -255,4 +255,3 @@ Six projects improve groundwater pumps, farms, industrial processing, promethium
 ## Officer vox advisories
 
 After landing, the Captain reports crew housing and essential reserves. The Mechanicum Priest reports manufacturing inputs, component reserves, research and survey findings. Portrait advisories and the session Vox Log surface existing conditions without changing the colony economy, decisions or save schema. See [Vox communications](VOX_COMMUNICATIONS.md).
-
