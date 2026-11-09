@@ -158,13 +158,15 @@ namespace WH30K.UI
             Accent(header, ForgeRed);
             Label("IdentityTag", header.transform, "ADEPTUS MECHANICUS  /  M31", 10, new Vector2(18, -13), 205, 18, Gold);
             Label("Identity", header.transform, "FORGE WORLD", 18, new Vector2(18, -34), 205, 28, Ivory);
-            Metric(header.transform, "Stockpile", "FOOD / RESERVE", 218, out stockpileValue, 136);
-            Metric(header.transform, "WaterSupply", "WATER / RESERVE", 358, out waterSupplyValue, 136);
+            Metric(header.transform, "Stockpile", "FOOD / RESERVE [?]", 218, out stockpileValue, 136);
+            Metric(header.transform, "WaterSupply", "WATER / RESERVE [?]", 358, out waterSupplyValue, 136);
             Metric(header.transform, "Net", "BUILD SUPPLIES [?]", 498, out netValue, 158);
             Metric(header.transform, "Population", "POPULATION [?]", 660, out populationValue, 130);
             Metric(header.transform, "Workforce", "WORKERS / HEALTH", 794, out workforceValue, 112);
             stockpileValue.fontSize = waterSupplyValue.fontSize = netValue.fontSize = 15;
             workforceValue.fontSize = 14;
+            AddOutputHover(header.transform, "Stockpile", 218, 136, OutputHoverTopic.Food);
+            AddOutputHover(header.transform, "WaterSupply", 358, 136, OutputHoverTopic.Water);
             AddOutputHover(header.transform, "Population", 660, 130);
             AddOutputHover(header.transform, "Net", 498, 158);
             AddOutputHover(header.transform, "Workforce", 794, 112);

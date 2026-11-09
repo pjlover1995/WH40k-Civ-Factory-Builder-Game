@@ -44,6 +44,7 @@ namespace WH30K.Sim.Resources
         private TenderLogisticsState tenderLogistics;
         private FoundingProgress founding;
         private float foundingFoodDelivery;
+        public ReserveOutlook SupplyOutlook { get; } = new ReserveOutlook();
         public FoundingProgress Founding => founding;
         public void SetFoundingObjectives(bool enabled) { founding.enabled = enabled; }
         public float RecoverFoundingCanister()
@@ -971,7 +972,7 @@ namespace WH30K.Sim.Resources
                     var focus=pump.State.focus==1?1.4f:pump.State.focus==2?.75f:1f;
                     waterProduced+=WaterRules.PumpOutput(pump.Id,staffing,power,pump.State.level,focus)*(research!=null?research.PumpYieldMultiplier(pump.Id):1f)*dt;
                 }
-                if(waterProduced>0)resources?.AddWater(waterProduced);
+                var waterAdded=waterProduced>0 ? resources.AddWater(waterProduced) : 0;
                 if(settlement!=null&&resources!=null)
                     resources.ConsumeWater(WaterRules.Demand(settlement.Population)*dt);
                 SimulateFarms(dt, staffing);
@@ -1061,6 +1062,7 @@ namespace WH30K.Sim.Resources
                 if(environment!=null&&(policyImpact.co2Delta!=0||policyImpact.o2Delta!=0||policyImpact.waterDelta!=0||policyImpact.temperatureDelta!=0))
                     environment.ApplyIndustryImpact(policyImpact,dt);
                 AdvanceCargo(dt);dispatchTimer+=dt;if(dispatchTimer>=1){dispatchTimer%=1;Dispatch();}
+                SupplyOutlook.Record(dt, foundingFoodDelivery, waterAdded);
                 var wasEstablished=founding.completed;
                 FoundingObjectives.Observe(ref founding,dt,waterProduced,WaterRules.Demand(settlement.Population)*dt,
                     foundingFoodDelivery,FarmRules.MonthlyDemand(settlement.Population)*dt/(float)ColonyCalendar.SecondsPerMonth,
@@ -1352,6 +1354,7 @@ namespace WH30K.Sim.Resources
         {
             CancelLogisticsBuild();LogisticsVisualTruncated=false;
             founding=default;foundingFoodDelivery=0;
+            SupplyOutlook.Reset();
             expeditionCargo = null; initialTenderManifest = null; tenderLogistics = null; farmEntityRevision=-1;farmInputPools.Clear();farmOperations.Clear();
             ClearExcavation();ClearSurveyPresentation();if(visualRoot!=null)Destroy(visualRoot.gameObject);
             foreach(var material in materials)if(material!=null)Destroy(material);
