@@ -50,7 +50,7 @@ namespace WH30K.Planet
                 sun.color = new Color(1f, 0.94f, 0.83f);
                 sun.intensity = 1.25f;
                 sun.shadows = LightShadows.Soft;
-                sun.shadowStrength = 0.8f;
+                sun.shadowStrength = 0.58f;
                 sun.shadowBias = 0.03f;
                 sun.shadowNormalBias = 0.2f;
                 RenderSettings.sun = sun;
@@ -101,8 +101,8 @@ namespace WH30K.Planet
             }
 
             var altitudeBlend = Mathf.SmoothStep(0, 1, altitude / 150000f);
-            fogStart = Mathf.Lerp(2500f, 80000f, altitudeBlend);
-            fogEnd = Mathf.Lerp(8000f, 180000f, altitudeBlend);
+            fogStart = Mathf.Lerp(300f, 80000f, altitudeBlend);
+            fogEnd = Mathf.Lerp(3200f, 180000f, altitudeBlend);
             Shader.SetGlobalVector("_PlanetAtmosphericFog", new Vector4(fogStart, fogEnd, 1, 0));
             Shader.SetGlobalColor("_PlanetAtmosphericFogColor", new Color(.42f, .55f, .64f, 1));
 

@@ -160,6 +160,9 @@ namespace WH30K.Sim.Resources
         public void PrepareOrbitalExpedition(IReadOnlyList<GameSettings.LandingSite> landingSites)
         {
             PrepareExpedition(landingSites);
+            // Keep the surveyed surface clear while the player compares landing sites.
+            // The landing panel's resource-filter action can turn scanned markers back on.
+            SetOverlay(0);
             initialTenderManifest = (float[])expeditionCargo.Clone();
             tenderLogistics = new TenderLogisticsState
             {
@@ -1303,7 +1306,7 @@ namespace WH30K.Sim.Resources
             foreach(var discovery in discoveries)
             {
                 var world=discovery.Position;var distance=Vector3.Distance(world,camera);
-                var visible=discovery.State.discovered&&Vector3.Dot(world-planet.transform.position,camera-world)>0;
+                var visible=Overlay>0&&discovery.State.discovered&&Vector3.Dot(world-planet.transform.position,camera-world)>0;
                 if(discovery.Marker.gameObject.activeSelf!=visible)discovery.Marker.gameObject.SetActive(visible);
                 if(discovery.Site!=null)discovery.Site.gameObject.SetActive(visible&&distance<2400);
                 if(visible)

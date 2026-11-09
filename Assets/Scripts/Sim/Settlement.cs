@@ -568,7 +568,8 @@ namespace WH30K.Sim.Settlements
                 var ground = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(localDirection));
                 var normal = planet.transform.TransformDirection(localDirection);
                 var forward = Vector3.ProjectOnPlane(settlementAnchor.forward, normal).normalized;
-                visual.transform.SetPositionAndRotation(ground, Quaternion.LookRotation(forward, normal));
+                var restingCenter = visualId == "LandingVessel" ? ground + normal * (WH30K.Sim.ShipRules.Height * .5f) : ground;
+                visual.transform.SetPositionAndRotation(restingCenter, Quaternion.LookRotation(forward, normal));
                 if (visualId == "LandingVessel") visual.AddComponent<LandingVesselDescent>();
                 buildingVisuals.Add(visual);
                 var managed = visual.AddComponent<ManagedBuilding>();

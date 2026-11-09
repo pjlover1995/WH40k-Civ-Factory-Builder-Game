@@ -13,6 +13,7 @@ namespace WH30K.Gameplay.Construction
         private static readonly Dictionary<string, Mesh> Meshes = new Dictionary<string, Mesh>();
         private static Material[] materials;
         private static Material[] shipMaterials;
+        private static Material[] tenderMaterials;
         private const int Stone = 0, Iron = 1, Roof = 2, Brass = 3, Amber = 4, Cyan = 5, Dark = 6;
         public static Material[] ServiceRoadMaterials => new[] { GetMaterials()[Iron], GetMaterials()[Brass] };
         public static Material[] ArchitectureMaterials => GetMaterials();
@@ -25,7 +26,12 @@ namespace WH30K.Gameplay.Construction
             go.transform.localScale = dimensions;
             if (!Meshes.TryGetValue(id, out var mesh) || mesh == null)
             {
-                if(id=="Farm")mesh=FarmMesh(0);
+                if (id == "LandingVessel")
+                {
+                    var authoredTender = Resources.Load<GameObject>("Architecture/TenderHull");
+                    mesh = authoredTender != null ? authoredTender.GetComponentInChildren<MeshFilter>()?.sharedMesh : null;
+                }
+                else if(id=="Farm")mesh=FarmMesh(0);
                 else if(id=="HabBlock")mesh=ResidentialVisual.PreviewCoreMesh;
                 else
                 {
@@ -56,6 +62,10 @@ namespace WH30K.Gameplay.Construction
                 }
                 mesh = builder.Build(id);
                 }
+                if (mesh == null)
+                {
+                    var fallback = new Architecture(); LandingShip(fallback); mesh = fallback.Build(id);
+                }
                 Meshes[id] = mesh;
             }
             go.GetComponent<MeshFilter>().sharedMesh = mesh;
@@ -69,7 +79,10 @@ namespace WH30K.Gameplay.Construction
             }
             else
             {
-                renderer.sharedMaterials = id == "Farm" ? FarmMaterials : id == "ColonyShip" || id == "LandingVessel" ? GetShipMaterials() : GetMaterials();
+                renderer.sharedMaterials = id == "Farm" ? FarmMaterials
+                    : id == "LandingVessel" ? GetTenderMaterials()
+                    : id == "ColonyShip" || id == "ColonyShipLegacy" ? GetShipMaterials()
+                    : GetMaterials();
                 if (WH30K.Sim.IndustryRules.Facility(id)) go.AddComponent<FacilityAnimation>().Configure(id);
             }
             if (id == "ColonyShip") AddDistantShip(go, renderer);
@@ -507,6 +520,59 @@ namespace WH30K.Gameplay.Construction
             return shipMaterials;
         }
 
+        private static Material[] GetTenderMaterials()
+        {
+            if (tenderMaterials != null && tenderMaterials[0] != null) return tenderMaterials;
+            var atlas = UnityEngine.Resources.Load<Texture2D>("Architecture/TenderSurfaceAtlas");
+            var template = UnityEngine.Resources.Load<Material>("Architecture/BuildingSurface");
+            var authoredTender = UnityEngine.Resources.Load<GameObject>("Architecture/TenderHull");
+            var authoredSlots = authoredTender != null
+                ? authoredTender.GetComponentInChildren<MeshRenderer>()?.sharedMaterials
+                : null;
+            if (atlas == null || template == null)
+                throw new System.InvalidOperationException("Missing tender surface atlas or architecture shader material.");
+
+            // Unity's FBX importer groups slots by its own material ordering. Build logical
+            // photographic materials first, then align each submesh slot by its authored name.
+            var logical = new[]
+            {
+                ShipSurface(template, atlas, "Tender primary armour", new Vector2(0, .5f), .018f, .006f, .25f, .42f),
+                ShipSurface(template, atlas, "Tender engine machinery", new Vector2(.5f, .5f), .022f, .006f, .42f, .39f),
+                ShipSurface(template, atlas, "Tender oxblood plating", Vector2.zero, .020f, .006f, .22f, .41f),
+                ShipSurface(template, atlas, "Tender aged brass", new Vector2(.5f, 0), .028f, .005f, .38f, .40f),
+                Emissive("Tender amber signal", new Color(.85f, .33f, .06f)),
+                Emissive("Tender cyan exhaust", new Color(.01f, .63f, .72f)),
+                ShipSurface(template, atlas, "Tender recessed iron", new Vector2(.5f, .5f), .024f, .003f, .28f, .37f)
+            };
+            if (authoredSlots == null) return logical; // Keep the procedural tender fallback usable without an FBX import.
+            if (authoredSlots.Length != logical.Length)
+                throw new System.InvalidOperationException("Tender FBX must retain all seven authored material slots.");
+            tenderMaterials = new Material[authoredSlots.Length];
+            for (var slot = 0; slot < authoredSlots.Length; slot++)
+            {
+                var logicalIndex = TenderMaterialIndex(authoredSlots[slot] != null ? authoredSlots[slot].name : string.Empty);
+                if (logicalIndex < 0)
+                    throw new System.InvalidOperationException("Unknown landing tender FBX material slot: "
+                        + (authoredSlots[slot] != null ? authoredSlots[slot].name : "<null>"));
+                tenderMaterials[slot] = logical[logicalIndex];
+            }
+            return tenderMaterials;
+        }
+
+        private static int TenderMaterialIndex(string name)
+        {
+            switch (name)
+            {
+                case "Tender primary armour": return 0;
+                case "Tender engine machinery": return 1;
+                case "Tender oxblood plating": return 2;
+                case "Tender aged brass": return 3;
+                case "Tender amber signal": return 4;
+                case "Tender cyan exhaust": return 5;
+                case "Tender recessed iron": return 6;
+                default: return -1;
+            }
+        }
         private static Material ShipSurface(Material template, Texture2D atlas, string name, Vector2 quadrant,
             float scale, float relief, float metal, float smoothness)
         {

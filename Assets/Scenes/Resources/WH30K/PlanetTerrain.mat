@@ -11,7 +11,8 @@ Material:
   m_Shader: {fileID: 4800000, guid: a018cfe441804ffbb774bb799d920597, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
-  m_ValidKeywords: []
+  m_ValidKeywords:
+  - _TERRAIN_TEXTURES
   m_InvalidKeywords: []
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -32,7 +33,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _GrassTex:
-        m_Texture: {fileID: 0}
+        m_Texture: {fileID: 2800000, guid: 9ae22981d278421da020653534448a79, type: 3}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _SnowTex:
@@ -49,9 +50,9 @@ Material:
     - _PlanetRadius: 6000
     - _SeaLevel: 5980
     - _SnowLine: 600
-    - _TextureScale: 0.08
-    - _TextureStrength: 1
-    - _UseTextures: 0
+    - _TextureScale: 0.025
+    - _TextureStrength: 0.84
+    - _UseTextures: 1
     - _TerrainRecipe: 3
     - _DebugOverlay: 0
     m_Colors:

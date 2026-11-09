@@ -110,7 +110,7 @@ public static class PlanetHazeSceneChecks
         distance.SetValue(orbit, 1800f); updateCamera.Invoke(orbit, null);
         yield return null;
         var baselineFarClip = camera.farClipPlane;
-        Capture(camera, "surface-clear-1280x800", 1280, 800);
+        var clearPixels = Capture(camera, "surface-clear-1280x800", 1280, 800);
         var baseline = SampleFrames(60); while (baseline.MoveNext()) yield return null;
         var baselineMetrics = ReadMetric;
         var baselineTriangles = planet.VisibleTerrainTriangleCount;
@@ -123,7 +123,10 @@ public static class PlanetHazeSceneChecks
             "surface view activates a bounded atmospheric fade");
         Check(hazeFarClip <= presentation.FogEndDistance + 2501f && hazeFarClip < baselineFarClip * .5f,
             $"fog-end clipping culls the far horizon range ({baselineFarClip:N0} m to {hazeFarClip:N0} m)");
-        Capture(camera, "surface-haze-1280x800", 1280, 800);
+        var hazePixels = Capture(camera, "surface-haze-1280x800", 1280, 800);
+        var changedFraction = ChangedPixelFraction(clearPixels, hazePixels, 12);
+        Check(changedFraction >= .20f,
+            $"distance haze visibly changes at least one fifth of the surface view ({changedFraction:P0} of pixels)");
         Capture(camera, "surface-haze-1920x1080", 1920, 1080);
         var haze = SampleFrames(60); while (haze.MoveNext()) yield return null;
         var hazeMetrics = ReadMetric;
@@ -161,7 +164,21 @@ public static class PlanetHazeSceneChecks
             cpu.Count > 0 ? cpu.Average() : 0, gpu.Count > 0 ? gpu.Average() : 0, Math.Min(cpu.Count, gpu.Count));
     }
 
-    private static void Capture(Camera camera, string name, int width, int height)
+    private static float ChangedPixelFraction(Color32[] before, Color32[] after, int channelThreshold)
+    {
+        if (before == null || after == null || before.Length != after.Length || before.Length == 0) return 0;
+        var changed = 0;
+        for (var i = 0; i < before.Length; i++)
+        {
+            if (Mathf.Abs(before[i].r - after[i].r) >= channelThreshold
+                || Mathf.Abs(before[i].g - after[i].g) >= channelThreshold
+                || Mathf.Abs(before[i].b - after[i].b) >= channelThreshold)
+                changed++;
+        }
+        return changed / (float)before.Length;
+    }
+
+    private static Color32[] Capture(Camera camera, string name, int width, int height)
     {
         const string folder = ".utmp/planet-haze-review";
         Directory.CreateDirectory(folder);
@@ -175,6 +192,7 @@ public static class PlanetHazeSceneChecks
             camera.Render(); RenderTexture.active = target;
             image.ReadPixels(new Rect(0, 0, width, height), 0, 0); image.Apply();
             File.WriteAllBytes(Path.Combine(folder, name + ".png"), image.EncodeToPNG());
+            return image.GetPixels32();
         }
         finally
         {

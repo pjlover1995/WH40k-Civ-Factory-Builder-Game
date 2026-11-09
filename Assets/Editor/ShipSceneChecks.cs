@@ -108,6 +108,12 @@ public static class ShipSceneChecks
                 "declining the guide releases the simulation and engineering controls");
             var ship = settlement.CoreBuildings[0];
             var planet = bootstrap.ActivePlanet;
+            var landingGround = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(bootstrap.LandingDirection));
+            var shipContactUp = planet.transform.TransformDirection(bootstrap.LandingDirection).normalized;
+            var landingDescent = ship.GetComponent<LandingVesselDescent>();
+            var landingPose = landingDescent != null ? landingDescent.LandingTargetPosition : ship.transform.position;
+            var contactGap = Vector3.Dot(landingPose - shipContactUp * (ShipRules.Height * .5f) - landingGround, shipContactUp);
+            Check(Mathf.Abs(contactGap) < .5f, "tender touchdown target aligns its landing pads with the selected ground plane (gap=" + contactGap.ToString("0.00") + " m)");
             Check(planet.Radius == WH30K.Planet.PlanetScale.DefaultRadius && planet.Radius == 3185500f,
                 "new expedition uses half Earth's mean radius: 3,185.5 km");
             Check(bootstrap.GetComponent<BuildingPlacementController>().GridResolution == 135915,
@@ -127,11 +133,24 @@ public static class ShipSceneChecks
             Check(planet.LiveMeshCount > 6 && planet.PatchesCreatedLastUpdate <= 4,
                 "half Earth terrain refines around the colony with the bounded split budget");
             var mesh = ship.GetComponent<MeshFilter>().sharedMesh;
-            Check(Mathf.Abs(mesh.bounds.size.z * ship.transform.lossyScale.z - 500) < 1, "rendered tender is exactly 500 m in world units");
+            var authoredTender = Resources.Load<GameObject>("Architecture/TenderHull");
+            var sourceRenderer = authoredTender != null ? authoredTender.GetComponentInChildren<MeshRenderer>() : null;
+            if (sourceRenderer != null) Debug.Log("Tender FBX source material order: " + string.Join(" | ", sourceRenderer.sharedMaterials.Select((material, index) => index + ":" + material.name)));
+            Debug.Log("Tender runtime material order: " + string.Join(" | ", ship.GetComponent<MeshRenderer>().sharedMaterials.Select((material, index) => index + ":" + material.name)));
+            var runtimeSlots = ship.GetComponent<MeshRenderer>().sharedMaterials;
+            Check(sourceRenderer != null && sourceRenderer.sharedMaterials.Select(material => material.name)
+                .SequenceEqual(runtimeSlots.Select(material => material.name)),
+                "runtime tender material names follow Unity's imported FBX submesh order");
+            Check(authoredTender != null && mesh == authoredTender.GetComponentInChildren<MeshFilter>()?.sharedMesh,
+                "deployed tender uses the authored high-detail FBX rather than the procedural fallback");
+            Debug.Log("Tender FBX import: vertices=" + mesh?.vertexCount + ", submeshes=" + mesh?.subMeshCount);
+            Check(mesh != null && mesh.vertexCount >= 30000 && mesh.subMeshCount == 7,
+                "authored tender retains detailed 30k-plus-vertex geometry and all seven material groups");
+            Check(mesh != null && Mathf.Abs(mesh.bounds.size.z * ship.transform.lossyScale.z - 500) < 1, "rendered tender is exactly 500 m in world units (bounds=" + mesh?.bounds.size + ", scale=" + ship.transform.lossyScale + ", result=" + (mesh != null ? mesh.bounds.size.z * ship.transform.lossyScale.z : 0) + ")");
             var rawVertices = mesh.vertices;
             var vertices = rawVertices.Select(v => Vector3.Scale(v, BuildingVisuals.ShipDimensions)).ToArray();
-            Check(mesh.bounds.size.x * ShipRules.Beam <= ShipRules.Beam + 1
-                && mesh.bounds.size.y * ShipRules.Height <= ShipRules.Height + 1,
+            Check(Mathf.Abs(mesh.bounds.size.x * ShipRules.Beam - ShipRules.Beam) < 1
+                && Mathf.Abs(mesh.bounds.size.y * ShipRules.Height - ShipRules.Height) < 1,
                 "tender stays within the 90 m beam and 120 m height envelope");
             Check(vertices.Min(v => v.y) >= -60 && vertices.Max(v => v.y) <= 60,
                 "deployed tender uses a level, non-crash landing pose");
@@ -145,10 +164,16 @@ public static class ShipSceneChecks
             UnityEngine.Object.DestroyImmediate(preview); UnityEngine.Object.DestroyImmediate(previewMaterial);
             Check(mesh.subMeshCount == 7 && mesh.GetIndexCount(6) > 0 && mesh.GetIndexCount(5) > 0,
                 "tender armour, engines and visual layers are real mesh geometry");
-            var atlas = UnityEngine.Resources.Load<Texture2D>("Architecture/ExploratorSurfaceAtlas");
+            var atlas = UnityEngine.Resources.Load<Texture2D>("Architecture/TenderSurfaceAtlas");
             var shipMaterials = ship.GetComponent<Renderer>().sharedMaterials;
             Check(atlas != null && shipMaterials.Length == 7 && shipMaterials.Take(4).All(m => m != null && m.GetTexture("_MainTex") == atlas),
-                "the tender uses the photographic armour atlas across its physically based surface materials");
+                "the tender uses its original photographic armour atlas across its physically based surface materials");
+            var legacyShip = BuildingVisuals.Create("ColonyShip", "Legacy Explorator visual check", null, BuildingVisuals.LegacyShipDimensions);
+            var legacyAtlas = UnityEngine.Resources.Load<Texture2D>("Architecture/ExploratorSurfaceAtlas");
+            Check(legacyAtlas != null && legacyShip.GetComponent<Renderer>().sharedMaterials.Take(4)
+                .All(m => m != null && m.GetTexture("_MainTex") == legacyAtlas),
+                "legacy Explorators keep their original photographic surface atlas");
+            UnityEngine.Object.DestroyImmediate(legacyShip);
             Check(!ship.SetFocus(2) && ship.Economy.capacity == ShipRules.CrewCapacity && !ship.CanUpgrade, "ship cannot exceed physical berth limit");
             var center = ship.transform.position;
             Check(settlement.OverlapsStartingBuildings(center + ship.transform.forward * 220, new Vector3(20, 30, 20), ship.transform.rotation),

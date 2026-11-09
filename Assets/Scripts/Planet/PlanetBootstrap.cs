@@ -517,8 +517,6 @@ namespace WH30K.Gameplay
             settlement.SetLandingPreview(false);
             settlement.BeginLanderDescent();
             planet.GetComponent<PlanetPresentation>().LightLandingSite(LandingDirection);
-            orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 1.3f);
-            orbitCamera?.FocusSettlement(LandingDirection);
             earthworks.Configure(planet, LandingDirection);
             menu?.SetDifficulty(difficulty);
             menu?.ShowLandingPanel(false); menu?.ShowHud(true);

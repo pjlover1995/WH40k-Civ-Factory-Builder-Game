@@ -86,7 +86,7 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                 float latitude=abs(radial.y);
                 float arid=smoothstep(0.46,0.68,climate)*(1-smoothstep(0.5,0.8,latitude));
                 float3 vegetation=lerp(_GrassColor.rgb*0.68,_GrassColor.rgb*1.25,fbm(radial*34));
-                float3 albedo=i.biome.rgb*lerp(0.8,1.2,fbm(radial*190));
+                float3 albedo=lerp(i.biome.rgb,vegetation,0.45)*lerp(0.8,1.2,fbm(radial*190));
                 float slope=smoothstep(0.12,0.5,physicalSlope);
                 albedo=lerp(albedo,lerp(_DirtColor.rgb,_RockColor.rgb,0.7),slope);
                 albedo=lerp(albedo,float3(0.49,0.45,0.31),(1-smoothstep(0,9,height))*0.7);
@@ -95,7 +95,7 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                 if(_TerrainRecipe>2.5) snow=i.climate.x;
                 albedo=lerp(albedo,_SnowColor.rgb,snow);
                 float detailFade=1-smoothstep(1200,7500,distance(_WorldSpaceCameraPos,i.worldPos));
-                albedo*=lerp(0.99,lerp(0.97,1.03,fbm(p*0.01)),detailFade);
+                albedo*=lerp(0.92,lerp(0.78,1.20,fbm(p*0.045)),detailFade);
                 // Sample optional textures only in local views. CPU climate colors remain
                 // the source of biome identity at every LOD and at orbital distances.
                 #if defined(_TERRAIN_TEXTURES)

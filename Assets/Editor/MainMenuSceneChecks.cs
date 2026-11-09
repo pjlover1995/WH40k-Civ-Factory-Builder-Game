@@ -14,6 +14,7 @@ using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Gameplay.Construction;
 using WH30K.Sim.Settlements;
+using WH30K.Sim.Resources;
 using WH30K.UI;
 
 public static class MainMenuSceneChecks
@@ -141,7 +142,12 @@ public static class MainMenuSceneChecks
             "acknowledging the captain opens the themed landing card");
         Check(Camera.main.GetComponent<SimpleOrbitCamera>().IsSurfaceView,
             "landing selection frames the surveyed surface beneath its transparent site panel");
+        Check(bootstrap.GetComponent<IndustrySystem>().Overlay == 0,
+            "landing-site selection hides resource pins until the player enables a survey filter");
         var landingPanel = GameObject.Find("LandingSelection");
+        var landingPortrait = GameObject.Find("LandingTenderPhotorealRender")?.GetComponent<Image>();
+        Check(landingPortrait != null && landingPortrait.sprite != null && landingPortrait.preserveAspect,
+            "landing selection shows the photoreal tender render above the live surface preview");
         var tenderPreview = GameObject.Find("Landing vessel preview");
         Check(landingPanel.GetComponent<Image>().color.a < .6f && tenderPreview != null
             && tenderPreview.GetComponent<Renderer>().sharedMaterial.GetFloat("_Mode") == 3f
@@ -153,6 +159,60 @@ public static class MainMenuSceneChecks
         yield return new WaitForSecondsRealtime(.35f);
         FindButton("DeclineColonyGuide")?.onClick.Invoke();
         yield return new WaitForSecondsRealtime(.35f);
+        var landedTender = bootstrap.GetComponent<Settlement>()?.CoreBuildings.FirstOrDefault(b => b.Id == "ColonyShip");
+        var tenderDescent = landedTender?.GetComponent<LandingVesselDescent>();
+        if (landedTender != null && tenderDescent != null)
+        {
+            var approachUp = bootstrap.ActivePlanet.transform.TransformDirection(bootstrap.LandingDirection).normalized;
+            var approachGround = bootstrap.ActivePlanet.transform.TransformPoint(bootstrap.ActivePlanet.EvaluateSurfacePoint(bootstrap.LandingDirection));
+            tenderDescent.Begin(approachGround + approachUp * (WH30K.Sim.ShipRules.Height * .5f), landedTender.transform.rotation, approachUp);
+        }
+        Check(tenderDescent != null && tenderDescent.IsDescending,
+            "the in-world authored tender remains in its timed descent after touchdown confirmation");
+        yield return new WaitForSecondsRealtime(1.25f);
+        Check(tenderDescent != null && tenderDescent.IsDescending,
+            "the tender is still descending during the rendered approach");
+        var approachCamera = Camera.main;
+        var approachRenderer = landedTender?.GetComponent<Renderer>();
+        var approachDistance = approachCamera != null && landedTender != null
+            ? Vector3.Distance(approachCamera.transform.position, landedTender.transform.position) : 0f;
+        var tenderInApproachFrustum = approachCamera != null && approachRenderer != null
+            && GeometryUtility.TestPlanesAABB(GeometryUtility.CalculateFrustumPlanes(approachCamera), approachRenderer.bounds);
+        Check(approachCamera != null && landedTender != null
+            && approachDistance > 700f && approachDistance < 1450f && tenderInApproachFrustum,
+            $"the full 500 m tender stays inside the oblique approach camera during descent (distance={approachDistance:0}, frustum={tenderInApproachFrustum})");
+        CaptureReview(menu, "tender-descent-mid", true, null, new[] { new Vector2Int(1920, 1080) });
+        CaptureTenderWorldOnly(1920, 1080, "descent-mid");
+        yield return new WaitForSecondsRealtime(3.0f);
+        Check(tenderDescent != null && !tenderDescent.IsDescending,
+            "the tender completes its descent and settles at the selected surface site");
+        Check(tenderDescent != null && tenderDescent.TouchdownEffectPlayed
+            && GameObject.Find("Tender touchdown dust") != null,
+            "touchdown kicks up a short world-scale dust plume around the landing pads");
+        var landingCamera = Camera.main;
+        var landingRenderer = landedTender?.GetComponent<Renderer>();
+        Check(landingCamera != null && landingCamera.GetComponent<SimpleOrbitCamera>().IsSurfaceView
+            && landedTender != null && Vector3.Distance(landingCamera.transform.position, landedTender.transform.position) < 1000
+            && landingRenderer != null && GeometryUtility.TestPlanesAABB(GeometryUtility.CalculateFrustumPlanes(landingCamera), landingRenderer.bounds),
+            "post-touchdown camera frames the full tender at close surface range");
+        CaptureReview(menu, "tender-touchdown", true);
+        CaptureTenderWorldOnly(1920, 1080, "touchdown");
+        var touchdownCamera = landingCamera.GetComponent<SimpleOrbitCamera>();
+        var distanceField = typeof(SimpleOrbitCamera).GetField("distance", BindingFlags.Instance | BindingFlags.NonPublic);
+        var lookElevationField = typeof(SimpleOrbitCamera).GetField("surfaceLookElevation", BindingFlags.Instance | BindingFlags.NonPublic);
+        var cameraUpdate = typeof(SimpleOrbitCamera).GetMethod("UpdateCameraTransform", BindingFlags.Instance | BindingFlags.NonPublic);
+        var overviewDistance = distanceField != null ? (float)distanceField.GetValue(touchdownCamera) : 0f;
+        var overviewLookElevation = lookElevationField != null ? (float)lookElevationField.GetValue(touchdownCamera) : 0f;
+        if (distanceField != null && lookElevationField != null && cameraUpdate != null)
+        {
+            distanceField.SetValue(touchdownCamera, 210f);
+            lookElevationField.SetValue(touchdownCamera, 4f);
+            cameraUpdate.Invoke(touchdownCamera, null);
+            CaptureTenderWorldOnly(1920, 1080, "touchdown-contact");
+            distanceField.SetValue(touchdownCamera, overviewDistance);
+            lookElevationField.SetValue(touchdownCamera, overviewLookElevation);
+            cameraUpdate.Invoke(touchdownCamera, null);
+        }
         Check(GameObject.Find("CommandHeader") != null && GameObject.Find("ConstructionDeck") != null,
             "touchdown reaches the themed colony HUD");
         menu.ReportVoxResearch("Field Survey");
@@ -422,7 +482,8 @@ public static class MainMenuSceneChecks
         return ac[0].x < bc[2].x && ac[2].x > bc[0].x && ac[0].y < bc[2].y && ac[2].y > bc[0].y;
     }
 
-    private static void CaptureReview(NewGameMenu menu, string stage, bool showWorld = false, Canvas selectedCanvas = null)
+    private static void CaptureReview(NewGameMenu menu, string stage, bool showWorld = false, Canvas selectedCanvas = null,
+        Vector2Int[] resolutions = null)
     {
         var canvas = selectedCanvas != null ? selectedCanvas : menu.GetComponentInChildren<Canvas>();
         var scaler = canvas.GetComponent<CanvasScaler>();
@@ -430,6 +491,10 @@ public static class MainMenuSceneChecks
         var previousTarget = camera.targetTexture;
         var previousActive = RenderTexture.active;
         var previousAspect = camera.aspect;
+        var orbit = camera.GetComponent<SimpleOrbitCamera>();
+        var distantCamera = orbit != null ? orbit.DistantCamera : null;
+        var previousDistantTarget = distantCamera != null ? distantCamera.targetTexture : null;
+        var previousDistantAspect = distantCamera != null ? distantCamera.aspect : 1f;
         var previousClear = camera.clearFlags;
         var previousColor = camera.backgroundColor;
         var previousMask = camera.cullingMask;
@@ -473,7 +538,7 @@ public static class MainMenuSceneChecks
                 camera.backgroundColor = Color.magenta;
                 camera.cullingMask = 1 << canvas.gameObject.layer;
             }
-            foreach (var size in new[] { new Vector2Int(1280, 800), new Vector2Int(1920, 1080), new Vector2Int(2560, 890) })
+            foreach (var size in resolutions ?? new[] { new Vector2Int(1280, 800), new Vector2Int(1920, 1080), new Vector2Int(2560, 890) })
             {
                 var target = new RenderTexture(size.x, size.y, 24);
                 var pixels = new Texture2D(size.x, size.y, TextureFormat.RGB24, false);
@@ -547,6 +612,56 @@ public static class MainMenuSceneChecks
             if (uiCameraRoot != null) UnityEngine.Object.DestroyImmediate(uiCameraRoot);
             if (uiTransforms != null)
                 for (var i = 0; i < uiTransforms.Length; i++) uiTransforms[i].gameObject.layer = originalLayers[i];
+        }
+    }
+
+    private static void CaptureTenderWorldOnly(int width, int height, string stage)
+    {
+        var camera = Camera.main;
+        var canvases = UnityEngine.Object.FindObjectsOfType<Canvas>(true);
+        var previousCanvasStates = canvases.Select(canvas => canvas.enabled).ToArray();
+        var previousTarget = camera.targetTexture;
+        var previousActive = RenderTexture.active;
+        var previousAspect = camera.aspect;
+        var orbit = camera.GetComponent<SimpleOrbitCamera>();
+        var distantCamera = orbit != null ? orbit.DistantCamera : null;
+        var previousDistantTarget = distantCamera != null ? distantCamera.targetTexture : null;
+        var previousDistantAspect = distantCamera != null ? distantCamera.aspect : 1f;
+        var target = new RenderTexture(width, height, 24);
+        var pixels = new Texture2D(width, height, TextureFormat.RGB24, false);
+        try
+        {
+            foreach (var canvas in canvases) canvas.enabled = false;
+            camera.targetTexture = target;
+            camera.aspect = width / (float)height;
+            if (distantCamera != null)
+            {
+                distantCamera.targetTexture = target;
+                distantCamera.aspect = camera.aspect;
+                distantCamera.Render();
+            }
+            camera.Render();
+            RenderTexture.active = target;
+            pixels.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            var path = Path.Combine(".utmp", "main-menu-reference-review", $"tender-{stage}-art-{width}x{height}.png");
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            File.WriteAllBytes(path, pixels.EncodeToPNG());
+        }
+        catch (Exception e) { Check(false, "could not capture the HUD-free tender art view: " + e.Message); }
+        finally
+        {
+            for (var i = 0; i < canvases.Length; i++) canvases[i].enabled = previousCanvasStates[i];
+            camera.targetTexture = previousTarget;
+            camera.aspect = previousAspect;
+            if (distantCamera != null)
+            {
+                distantCamera.targetTexture = previousDistantTarget;
+                distantCamera.aspect = previousDistantAspect;
+            }
+            RenderTexture.active = previousActive;
+            target.Release();
+            UnityEngine.Object.DestroyImmediate(target);
+            UnityEngine.Object.DestroyImmediate(pixels);
         }
     }
 

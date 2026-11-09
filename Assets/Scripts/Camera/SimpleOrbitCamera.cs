@@ -49,9 +49,13 @@ namespace WH30K.CameraSystem
         }
         private void Awake() { GetComponent<Camera>().eventMask = 0; }
         private bool viewCached, cachedSurface;
+        private bool landingFrameTransition;
+        private float landingFrameStarted, landingFrameDuration, landingFrameStartDistance, landingFrameEndDistance;
+        private float landingFrameStartPitch, landingFrameEndPitch;
+        private float surfaceLookElevation = 6f, landingFrameStartLookElevation, landingFrameEndLookElevation;
         private Vector3 cachedDirection, cachedTargetPosition, cachedTargetScale;
         private Quaternion cachedTargetRotation;
-        private float cachedDistance, cachedYaw, cachedPitch;
+        private float cachedDistance, cachedYaw, cachedPitch, cachedLookElevation;
         private int cachedRevision, colonyRevision=-1;
         private Vector3 cachedColonyDirection, colonyPoint;
         public bool IsSettlementView => surfaceMode;
@@ -118,6 +122,20 @@ namespace WH30K.CameraSystem
             if (selected != null && selected.activeInHierarchy && selected.GetComponent<InputField>() != null) return;
             var keys = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical"));
             Navigate(keys, Time.unscaledDeltaTime * (Input.GetKey(KeyCode.LeftShift) ? 3f : 1f));
+            if (landingFrameTransition)
+            {
+                if (keys.sqrMagnitude > .001f || Input.GetMouseButton(1) || Input.GetMouseButton(2)
+                    || Mathf.Abs(Input.GetAxis("Mouse ScrollWheel")) > .0001f) landingFrameTransition = false;
+                else
+                {
+                    var t = Mathf.Clamp01((Time.unscaledTime - landingFrameStarted) / landingFrameDuration);
+                    var eased = t * t * (3f - 2f * t);
+                    distance = Mathf.Lerp(landingFrameStartDistance, landingFrameEndDistance, eased);
+                    pitch = Mathf.Lerp(landingFrameStartPitch, landingFrameEndPitch, eased);
+                    surfaceLookElevation = Mathf.Lerp(landingFrameStartLookElevation, landingFrameEndLookElevation, eased);
+                    if (t >= 1f) landingFrameTransition = false;
+                }
+            }
             if (!PointerOverUi)
             {
                 if (Input.GetMouseButton(1))
@@ -203,10 +221,10 @@ namespace WH30K.CameraSystem
         private void UpdateCameraTransform()
         {
             if(viewCached && cachedDirection.Equals(navigationDirection) && cachedSurface==surfaceMode
-                && cachedDistance==distance && cachedYaw==yaw && cachedPitch==pitch && cachedRevision==planet.SurfaceRevision
+                && cachedDistance==distance && cachedYaw==yaw && cachedPitch==pitch && cachedLookElevation==surfaceLookElevation && cachedRevision==planet.SurfaceRevision
                 && cachedTargetPosition==target.position && cachedTargetRotation==target.rotation && cachedTargetScale==target.lossyScale)return;
             viewCached=true;cachedDirection=navigationDirection;cachedSurface=surfaceMode;
-            cachedDistance=distance;cachedYaw=yaw;cachedPitch=pitch;cachedRevision=planet.SurfaceRevision;
+            cachedDistance=distance;cachedYaw=yaw;cachedPitch=pitch;cachedLookElevation=surfaceLookElevation;cachedRevision=planet.SurfaceRevision;
             cachedTargetPosition=target.position;cachedTargetRotation=target.rotation;cachedTargetScale=target.lossyScale;
             if (surfaceMode)
             {
@@ -219,7 +237,7 @@ namespace WH30K.CameraSystem
                 var local = target.InverseTransformPoint(position);
                 var safeRadius = Mathf.Max(planet.SeaLevel, planet.EvaluateSurfacePoint(local.normalized).magnitude) + 45f;
                 if (local.magnitude < safeRadius) position = target.TransformPoint(local.normalized * safeRadius);
-                transform.position = position; transform.LookAt(ground + up * 6f, viewPitch > 89.5f ? overheadUp : up);
+                transform.position = position; transform.LookAt(ground + up * surfaceLookElevation, viewPitch > 89.5f ? overheadUp : up);
             }
             else
             {
@@ -269,9 +287,55 @@ namespace WH30K.CameraSystem
         {
             if (target == null || direction.sqrMagnitude < 0.01f) return;
             pendingZoom = 0;
+            surfaceLookElevation = 6f;
             colonyDirection = direction.normalized;
             FocusLocation(direction);
             distance = colonyFocusDistance;
+            UpdateCameraTransform();
+        }
+
+        public void FocusLandingSite(Vector3 direction, float viewDistance)
+        {
+            FocusSettlement(direction);
+            if (target == null || direction.sqrMagnitude < 0.01f) return;
+            pitch = 32f;
+            surfaceLookElevation = 6f;
+            distance = Mathf.Clamp(viewDistance, 85f, planet.Radius * 6f);
+            UpdateCameraTransform();
+        }
+
+        public void FocusLandingApproach(Vector3 worldUp, Quaternion vesselRotation, float viewDistance)
+        {
+            if (target == null || worldUp.sqrMagnitude < 0.01f) return;
+            var direction = target.InverseTransformDirection(worldUp.normalized).normalized;
+            FocusSettlement(direction);
+            var up = target.TransformDirection(direction).normalized;
+            var frame = Quaternion.FromToRotation(Vector3.up, up);
+            var vesselForward = Vector3.ProjectOnPlane(vesselRotation * Vector3.forward, up).normalized;
+            var cameraOffset = Vector3.Cross(up, vesselForward).normalized;
+            var localOffset = Quaternion.Inverse(frame) * cameraOffset;
+            yaw = Mathf.Atan2(-localOffset.x, -localOffset.z) * Mathf.Rad2Deg;
+            surfaceLookElevation = 250f;
+            pitch = 30f;
+            distance = Mathf.Clamp(viewDistance, 85f, planet.Radius * 6f);
+            UpdateCameraTransform();
+        }
+
+        public void TransitionToLandingSite(Vector3 worldUp, float viewDistance, float duration = .9f)
+        {
+            if (target == null || worldUp.sqrMagnitude < 0.01f) return;
+            var direction = target.InverseTransformDirection(worldUp.normalized).normalized;
+            colonyDirection = navigationDirection = direction;
+            surfaceMode = true;
+            landingFrameStartDistance = distance;
+            landingFrameEndDistance = Mathf.Clamp(viewDistance, 85f, planet.Radius * 6f);
+            landingFrameStartPitch = pitch;
+            landingFrameEndPitch = 22f;
+            landingFrameStartLookElevation = surfaceLookElevation;
+            landingFrameEndLookElevation = 25f;
+            landingFrameStarted = Time.unscaledTime;
+            landingFrameDuration = Mathf.Max(.1f, duration);
+            landingFrameTransition = true;
             UpdateCameraTransform();
         }
 
