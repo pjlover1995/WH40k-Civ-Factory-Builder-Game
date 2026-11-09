@@ -37,5 +37,37 @@ internal static class OutputChecks
         check(description.Contains("Water reserve empty") && description.Contains("Food reserve empty") && description.Contains("Population is falling"),
             "empty reserve diagnostics state both shortages and their population effect");
         check(ColonyRules.LegacyProjectSupplyScale==.01f, "saved project work and paid fractions retain their units with explicit 100-to-1 physical supply pricing");
+        CheckReserveOutlook(check);
+    }
+
+    private static void CheckReserveOutlook(Action<bool, string> check)
+    {
+        var outlook = new ReserveOutlook();
+        outlook.Record(149.5f, 500, 299);
+        check(!outlook.Ready && outlook.Describe(true, 1800, 1200).Contains("Measuring inflow (149 / 150"),
+            "an incomplete month displays gross coverage and collection progress without a forecast");
+        outlook.Record(.5f, 100, 1);
+        var food = outlook.Describe(true, 1800, 1200);
+        check(outlook.Ready && food.Contains("Reserve coverage 1.5 mo")
+            && food.Contains("Farm food delivered 600") && food.Contains("Net change -600.0")
+            && food.Contains("Estimated time to empty 3.0 mo"),
+            "gross reserve coverage and net depletion use distinct demand and deficit rates");
+        check(outlook.Describe(false, 100, 300).Contains("roughly in balance")
+            && outlook.Describe(false, 100, 250).Contains("exceeds demand")
+            && !outlook.Describe(false, 100, 250).Contains("time to empty"),
+            "balanced and surplus reserves show their status without a depletion estimate");
+        check(outlook.Describe(true, 0, 1200).Contains("Reserve is empty."),
+            "an exhausted reserve reports its current state");
+        outlook.Record(0, 200, 200);
+        check(outlook.Describe(true, 1800, 1200) == food, "a paused tick and repeated reads do not change the outlook");
+        outlook.Record(.5f, 0, 0);
+        check(outlook.WaterPerMonth == 299 && outlook.FoodPerMonth == 600,
+            "water is prorated at the window boundary while discrete food deliveries remain whole");
+        outlook.Record(149.5f, 0, 0);
+        check(outlook.WaterPerMonth == 0 && outlook.FoodPerMonth == 0,
+            "stopped production and deliveries expire from the completed window");
+        outlook.Reset();
+        check(!outlook.Ready && outlook.FoodPerMonth == 0 && outlook.WaterPerMonth == 0,
+            "a newly configured colony has no inherited outlook observations");
     }
 }

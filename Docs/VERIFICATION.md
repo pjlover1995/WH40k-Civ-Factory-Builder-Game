@@ -8,6 +8,14 @@
 - `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` passed **3 focused Play Mode checks**: it finds a sampled 1 m-deep coastline inside the ocean mask and verifies the camera enters close-ground and regional surface views. Exploratory captures under `.utmp/shoreline-review/` show Orbit, but regional and close-ground are effectively blank; they do not establish shoreline appearance. Manual zoom/play inspection remains outstanding; Unity window screenshots timed out twice.
 - Review the actual shallow coast in Orbit, region and close-ground zoom before treating visual acceptance as complete.
 
+## Colony reserve outlook
+
+Run the simulation suite for observation warmup, rolling-window expiry, water proration, discrete food deliveries, pause, reset and deficit arithmetic. Run graphics-enabled Unity 2022.3.2f1 with `ArchitectureAppearanceChecks.RunBatch -wh30k-check supplies` and omit `-quit`. The fixture verifies HUD raycasts, measured pump output and farm deliveries, exclusion of an actual orbital ration run, stable saved state while reading the outlook and a fresh window after reload. Inspect `.utmp/ship-review/reserve-outlook-*.png` at 1280×800 and 1920×1080.
+
+On `12f83ab416c4e86093d6143b8133ecd0474181d7`, the engine-independent suite passed **621 checks**, including Player and Editor syntax parsing for 130 Unity C# sources. The shared UI style guard passed for 12 files, and the working-tree and base-to-head Git diff checks passed. Graphics-enabled Unity **2022.3.2f1** compiled the runtime and Editor assemblies and passed **47 focused scene assertions**. All four Food and Water renders showed the full text at 1280×800 and 1920×1080. The local logs are `Logs/reserve-outlook-simulation-12f83ab.log` and `Logs/reserve-outlook-supplies-12f83ab.log`. Physical-input playtesting remains pending.
+
+For physical-input acceptance, hover both reserve cells on a landed colony. Build a connected farm and pump, advance one simulated month and compare the net rates with demand. Suspend one facility, verify the outlook changes as the observation window advances, then pause and save/reload. The reserve coverage and observation progress should be visible immediately after load.
+
 ## Orbital discovery marker clarity — 2026-11-09
 
 - The screenshot's repeated dots match discovered-site pins: the HUD count is backed by `IndustrySystem.DiscoveredCount`, and `UpdateSurvey` rendered every discovered site on the visible hemisphere while enlarging pins to a 260 m cap. On the historical 12 km radius world, that produced a dense globe-wide pattern that could be mistaken for a water or terrain artifact.
@@ -27,7 +35,7 @@
 - Unity logs report a nonfatal `DirectoryNotFoundException` while package validation checks the Visual Scripting YamlDotNet assembly; Unity then completes script compilation/domain reload and all scene assertions, and the referenced package file is present afterward. Treat this as an Editor package-cache warning, not as evidence of a clean import.
 - Visual review found the first event-copy fix still clipped the final sentence at 1280×800 and 1920×1080. The acceptance check now measures full wrapped text with overflow enabled, and the event card/body were expanded to 380/140 px; the latest captures show the complete copy at all three review sizes. By the Game Director's 2026-11-08 scope decision, Urban integration is deferred to issue #29 and exhaustive long-copy/populated checks across panels to issue #30. The Game Director must complete the physical-input and save/load playtest before final approval.
 
-Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, then run `MainMenuSceneChecks.RunBatch -wh30k-panel-review` and `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` in Unity 2022.3.2f1 with graphics enabled.
+Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, then run `MainMenuSceneChecks.RunBatch -wh30k-panel-review` in Unity 2022.3.2f1 with graphics enabled.
 
 ## Shared UI panel layout - 2026-11-08
 

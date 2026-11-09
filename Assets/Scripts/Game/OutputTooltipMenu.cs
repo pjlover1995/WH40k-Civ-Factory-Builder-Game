@@ -1,6 +1,7 @@
 using UnityEngine;
 using UnityEngine.UI;
 using WH30K.Game;
+using WH30K.Sim;
 
 namespace WH30K.UI
 {
@@ -9,12 +10,13 @@ namespace WH30K.UI
         private GameObject outputTooltip;
         private Text outputTooltipText;
         private RectTransform outputTooltipAnchor;
+        private OutputHoverTopic outputTooltipTopic;
 
-        private void AddOutputHover(Transform parent, string name, float x, float width)
+        private void AddOutputHover(Transform parent, string name, float x, float width, OutputHoverTopic topic = OutputHoverTopic.Colony)
         {
             var target = Panel(name + "Hover", parent, new Vector2(width, 76), new Vector2(x, -10), TextAnchor.UpperLeft, false);
             target.GetComponent<Image>().color = Color.clear;
-            target.AddComponent<ColonyOutputHover>().Configure(this);
+            target.AddComponent<ColonyOutputHover>().Configure(this, topic);
         }
 
         private void BuildOutputTooltip()
@@ -22,13 +24,15 @@ namespace WH30K.UI
             outputTooltip = Panel("ColonyOutputTooltip", hudPanel.transform, new Vector2(500, 540), Vector2.zero, TextAnchor.UpperLeft);
             outputTooltip.GetComponent<Image>().raycastTarget = false;
             outputTooltipText = Label("OutputExplanation", outputTooltip.transform, "", 13, new Vector2(16, -14), 468, 512, Ivory);
+            outputTooltipText.verticalOverflow = VerticalWrapMode.Overflow;
             outputTooltip.SetActive(false);
         }
 
-        public void ShowOutputTooltip(RectTransform anchor)
+        internal void ShowOutputTooltip(RectTransform anchor, OutputHoverTopic topic)
         {
             if (!CanShowOutputTooltip()) return;
             outputTooltipAnchor = anchor;
+            outputTooltipTopic = topic;
             outputTooltip.SetActive(true);
             outputTooltip.transform.SetAsLastSibling();
             RefreshOutputTooltip();
@@ -48,7 +52,13 @@ namespace WH30K.UI
         {
             if (outputTooltipAnchor == null) return;
             if (!CanShowOutputTooltip()) { HideOutputTooltip(); return; }
-            outputTooltipText.text = settlement.OutputExplanation;
+            outputTooltipText.text = outputTooltipTopic switch
+            {
+                OutputHoverTopic.Food => Industry.SupplyOutlook.Describe(true, resourceSystem.Food, FarmRules.MonthlyDemand(settlement.Population)),
+                OutputHoverTopic.Water => Industry.SupplyOutlook.Describe(false, resourceSystem.Water,
+                    WaterRules.Demand(settlement.Population) * (float)ColonyCalendar.SecondsPerMonth),
+                _ => settlement.OutputExplanation
+            };
             var hud = (RectTransform)hudPanel.transform;
             var rect = (RectTransform)outputTooltip.transform;
             var width = Mathf.Min(500, hud.rect.width - 24);
@@ -56,7 +66,7 @@ namespace WH30K.UI
             outputTooltipText.fontSize = 13;
             while (outputTooltipText.preferredHeight > hud.rect.height - 52 && outputTooltipText.fontSize > 11)
                 outputTooltipText.fontSize--;
-            var height = outputTooltipText.preferredHeight + 28;
+            var height = Mathf.Ceil(outputTooltipText.preferredHeight) + 32;
             rect.sizeDelta = new Vector2(width, height);
             outputTooltipText.rectTransform.sizeDelta = new Vector2(width - 32, height - 28);
             // Anchor below the hovered metric, and clamp in canvas units for CanvasScaler.
