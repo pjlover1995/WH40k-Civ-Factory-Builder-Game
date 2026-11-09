@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using UnityEditor;
 using UnityEngine;
 using WH30K.CameraSystem;
@@ -166,12 +165,12 @@ public static class TerrainSceneChecks
             check(direction.sqrMagnitude>.9f&&depth>=0&&depth<=2.5f,
                 $"the review world has sampled coastline within the 2.5 m ocean mask (depth={depth:0.###} m)");
             var camera=Camera.main;var orbit=camera.GetComponent<SimpleOrbitCamera>();
-            orbit.FrameTarget();CaptureShorelineView(planet,camera,"orbit");
-            orbit.FocusLocation(direction);CaptureShorelineView(planet,camera,"close-ground");
+            orbit.FrameTarget();
+            orbit.FocusLocation(direction);
             check(orbit.IsSurfaceView,"coast focus enters close-ground view");
-            orbit.Zoom(-.5f);CaptureShorelineView(planet,camera,"regional");
+            orbit.Zoom(-.5f);
             check(orbit.IsSurfaceView,"coast zoom-out remains in regional view");
-            Debug.Log($"Shoreline review renders saved under .utmp/shoreline-review; sampled water depth={depth:0.###} m.");
+            Debug.Log($"Shoreline state review completed; sampled water depth={depth:0.###} m.");
         }
         finally { bootstrap.ConfigureNewWorldTerrain(original); }
     }
@@ -191,22 +190,4 @@ public static class TerrainSceneChecks
         return best;
     }
 
-    private static void CaptureShorelineView(LODPlanet planet,Camera camera,string name)
-    {
-        for(var i=0;i<80;i++)planet.RefreshLodAtPosition(camera.transform.position);
-        var directory=Path.Combine(".utmp","shoreline-review");Directory.CreateDirectory(directory);
-        var target=camera.targetTexture;var active=RenderTexture.active;var aspect=camera.aspect;
-        var texture=new RenderTexture(1280,800,24);texture.Create();var image=new Texture2D(1280,800,TextureFormat.RGB24,false);
-        try
-        {
-            camera.targetTexture=texture;camera.aspect=1280f/800f;camera.Render();RenderTexture.active=texture;
-            image.ReadPixels(new Rect(0,0,1280,800),0,0);image.Apply();
-            File.WriteAllBytes(Path.Combine(directory,name+".png"),image.EncodeToPNG());
-        }
-        finally
-        {
-            camera.targetTexture=target;camera.aspect=aspect;RenderTexture.active=active;
-            texture.Release();UnityEngine.Object.DestroyImmediate(texture);UnityEngine.Object.DestroyImmediate(image);
-        }
-    }
 }

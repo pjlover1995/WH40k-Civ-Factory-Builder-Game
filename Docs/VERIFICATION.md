@@ -5,8 +5,8 @@
 - The opaque ocean shader now discards fragments with less than **2.5 m** of sampled water depth. Its animated radial waves move the surface by at most **1.45 m**, so the mask keeps the water surface clear of terrain at shallow coasts without changing terrain heights, sea level, saves or placement rules. The intentional result is a narrow dry shoreline margin.
 - `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` passed **606 engine-independent checks**, including Player/Editor syntax parsing for **124 Unity C# sources**. `dotnet` was not on PATH; the repository-local .NET 9 SDK was used.
 - Unity **2022.3.2f1** imported and compiled the project and passed **56 Terrain Geometry checks**, including the new ocean shader import/clearance assertion (`zoom-geometry.log`, local). `git diff --check` passed.
-- `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` passed **3 focused Play Mode checks**: it finds a sampled 1 m-deep coastline inside the ocean mask and verifies the camera enters close-ground and regional surface views. Its orbit capture rendered, but the generated regional and close-ground images are effectively blank, so they do not establish shoreline appearance. Manual zoom/play inspection remains outstanding; Unity window screenshots timed out twice.
-- The generated images are local/ignored under `.utmp/shoreline-review/`. Review the actual shallow coast in Orbit, region and close-ground zoom before treating visual acceptance as complete.
+- `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` passed **3 focused Play Mode checks**: it finds a sampled 1 m-deep coastline inside the ocean mask and verifies the camera enters close-ground and regional surface views. Exploratory captures under `.utmp/shoreline-review/` show Orbit, but regional and close-ground are effectively blank; they do not establish shoreline appearance. Manual zoom/play inspection remains outstanding; Unity window screenshots timed out twice.
+- Review the actual shallow coast in Orbit, region and close-ground zoom before treating visual acceptance as complete.
 
 ## Cinematic menu and screen flow - 2026-11-08
 

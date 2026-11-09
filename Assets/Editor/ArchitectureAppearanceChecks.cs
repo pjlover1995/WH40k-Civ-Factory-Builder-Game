@@ -170,4 +170,5 @@ public static class ArchitectureAppearanceChecks
         }
         catch (Exception error) { Debug.LogException(error); SceneCheckExit.Exit(1); }
     }
+
 }
