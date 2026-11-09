@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Reflection;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.UI;
@@ -63,6 +64,7 @@ public static class LandingSceneChecks
     {
         bootstrap.ConfigureNewWorldTerrain(new WH30K.Planet.TerrainSettings());
         var industry = bootstrap.GetComponent<IndustrySystem>();
+        var resources = bootstrap.GetComponent<WH30K.Sim.Resources.ResourceSystem>();
         var settlement = bootstrap.GetComponent<Settlement>();
         var placement = bootstrap.GetComponent<BuildingPlacementController>();
         var clock = bootstrap.GetComponent<ColonyClock>();
@@ -84,11 +86,28 @@ public static class LandingSceneChecks
             "the colony awaits its ship with no prebuilt settlement facilities");
         var survey = industry.Capture();
         var suggested = bootstrap.LandingDirection;
-        check(bootstrap.LandingSites.Count == 10 && Enum.GetValues(typeof(GameSettings.Difficulty)).Cast<GameSettings.Difficulty>()
-            .Where(d => d != GameSettings.Difficulty.Grim).All(category => bootstrap.LandingSites.Count(site => site.category == category) == 2),
-            "the orbital survey offers two seed-stable candidate sites for each of the five landing categories");
-        check(bootstrap.LandingSites.Select(site => site.reserveMultiplier).SequenceEqual(new[] { 1.7f, 1.7f, 1.35f, 1.35f, 1f, 1f, .72f, .72f, .48f, .48f }),
-            "landing reserve multipliers step down from Easy through Extreme Hard");
+        check(bootstrap.LandingSites.Count == 6 && new[] { GameSettings.Difficulty.Easy, GameSettings.Difficulty.Standard, GameSettings.Difficulty.ExtremeHard }
+            .All(category => bootstrap.LandingSites.Count(site => site.category == category) == 2),
+            "the orbital survey offers two seed-stable candidate sites for each of three landing tiers");
+        check(bootstrap.LandingSites.Select(site => site.reserveMultiplier).SequenceEqual(new[] { 1.7f, 1.7f, 1.35f, 1.35f, .48f, .48f }),
+            "landing reserve multipliers step down from Easy through Hard");
+        check(ButtonLabel("LandingSiteOption0") == "EASY  /  I"
+            && ButtonLabel("LandingSiteOption2") == "MEDIUM  /  I"
+            && ButtonLabel("LandingSiteOption4") == "HARD  /  I"
+            && !FindObject("LandingDifficultyOptions").activeSelf,
+            "the translucent landing panel shows concise Easy, Medium, Hard cards and a collapsed comparison dropdown");
+        GameObject.Find("LandingDifficultyDropdown").GetComponent<Button>().onClick.Invoke();
+        var comparison = GameObject.Find("LandingDifficultyDetails").GetComponent<Text>().text;
+        check(GameObject.Find("LandingDifficultyOptions").activeSelf && comparison.Contains("EASY")
+            && comparison.Contains("MEDIUM") && comparison.Contains("HARD"),
+            "the site comparison dropdown reveals the three tier differences on demand");
+        GameObject.Find("LandingDifficultyDropdown").GetComponent<Button>().onClick.Invoke();
+        var originalCrew = bootstrap.LandingCrewAllocation;
+        GameObject.Find("LandingLoadoutMinus0").GetComponent<Button>().onClick.Invoke();
+        check(bootstrap.LandingCrewAllocation == originalCrew - 250
+            && GameObject.Find("LandingLoadoutValue0").GetComponent<Text>().text.Contains("750"),
+            "the initial crew loadout responds to the landing UI");
+        GameObject.Find("LandingLoadoutPlus0").GetComponent<Button>().onClick.Invoke();
         foreach (var site in bootstrap.LandingSites)
             foreach (var kind in new[] { MaterialKind.IronOre, MaterialKind.CopperOre, MaterialKind.Stone, MaterialKind.Biomass, MaterialKind.Crystal, MaterialKind.Promethium })
                 check(industry.Deposits.Any(d => d.Discovered && d.Kind == kind && Mathf.Abs(d.ReserveMultiplier - site.reserveMultiplier) < .001f
@@ -100,7 +119,7 @@ public static class LandingSceneChecks
         foreach (var kind in new[] { MaterialKind.IronOre, MaterialKind.CopperOre, MaterialKind.Stone, MaterialKind.Biomass, MaterialKind.Crystal, MaterialKind.Promethium })
             check(survey.deposits.Any(d => d.kind == (int)kind && d.discovered), kind + " is visible before building an outpost");
         var hardSiteIndex = Enumerable.Range(0, bootstrap.LandingSites.Count)
-            .First(i => bootstrap.LandingSites[i].category == GameSettings.Difficulty.Hard);
+            .First(i => bootstrap.LandingSites[i].category == GameSettings.Difficulty.ExtremeHard);
         var hardSite = bootstrap.LandingSites[hardSiteIndex];
         check(bootstrap.SelectLandingSite(hardSiteIndex) && Vector3.Angle(hardSite.direction, bootstrap.LandingDirection) < .001f,
             "a category card selects its scanned site and moves the ship preview");
@@ -111,13 +130,23 @@ public static class LandingSceneChecks
         check(blocked, "unfinished landing previews cannot overwrite a colony save");
         var selected = bootstrap.LandingDirection;
         GameObject.Find("LandColonyShip").GetComponent<Button>().onClick.Invoke();
-        check(GameObject.Find("ColonyGuide") != null && clock.Paused && GameSettings.CurrentDifficulty == GameSettings.Difficulty.Hard,
+        check(GameObject.Find("ColonyGuide") != null && clock.Paused && GameSettings.CurrentDifficulty == GameSettings.Difficulty.ExtremeHard,
             "touchdown applies the selected landing category and offers the optional paused guide");
         GameObject.Find("DeclineColonyGuide").GetComponent<Button>().onClick.Invoke();
-        check(!bootstrap.ChoosingLanding && !clock.Paused && settlement.CoreBuildings.Count == 1
-            && settlement.CoreBuildings[0].Id == "ColonyShip" && settlement.CoreBuildings[0].gameObject.activeInHierarchy
+        check(!bootstrap.ChoosingLanding && settlement.CoreBuildings.Count == 1,
+            "landing confirmation starts the colony");
+        check(!clock.Paused,
+            $"declining the guide releases the pause (decision={clock.DecisionPending}, mining={clock.MiningDecisionPending}, saved={clock.Snapshot.paused})");
+        check(settlement.CoreBuildings[0].Id == "ColonyShip" && settlement.CoreBuildings[0].gameObject.activeInHierarchy
             && Vector3.Angle(settlement.CreateSnapshot().normal, selected) < .001f,
-            "LAND COLONY SHIP deploys the actual ship and starts the colony at the selected site");
+            "DEPLOY LANDER places an active tender at the selected site");
+        var descendingTender = settlement.CoreBuildings[0].GetComponent<LandingVesselDescent>();
+        check(descendingTender != null && descendingTender.IsDescending,
+            "the selected tender begins its animated descent at touchdown");
+        check(settlement.Population == ShipRules.StartingCrew && resources.Food == ShipRules.StartingFood
+            && industry.TenderTripsRemaining == 4
+            && industry.OrbitalCrewAvailable == TenderLogisticsRules.MainVesselCrew - ShipRules.StartingCrew,
+            "initial tender crew, rations and cargo are applied and four orbital runs remain");
         check(industry.Capture().deposits.Select(d => (d.x, d.y, d.z, d.remaining, d.discovered))
             .SequenceEqual(survey.deposits.Select(d => (d.x, d.y, d.z, d.remaining, d.discovered))),
             "touchdown retains every previewed deposit direction and reserve");
@@ -130,7 +159,41 @@ public static class LandingSceneChecks
         var loadedSave = landedLoaded ? bootstrap.CaptureSaveJson() : "rejected";
         if (loadedSave != save) { System.IO.File.WriteAllText(".utmp/landing-before.json", save); System.IO.File.WriteAllText(".utmp/landing-after.json", loadedSave); }
         check(landedLoaded && loadedSave == save,
-            "schema 16 restores the ship, placement, exact survey, cargo and paused-time state");
+            "schema 16 restores the tender, placement, exact survey, cargo and paused-time state");
+        check(industry.TryOrbitalSupplyRun(250, 6000, 0, 0) && industry.TenderTripsRemaining == 3
+            && settlement.Population == ShipRules.StartingCrew + 250 && resources.Food == ShipRules.StartingFood + 6000,
+            "an orbital run transfers a chosen crew and ration mix");
+        check(industry.TryOrbitalSupplyRun(0, 1000, 5, .25f)
+            && industry.TryOrbitalSupplyRun(0, 1000, 5, .25f)
+            && industry.TryOrbitalSupplyRun(0, 1000, 5, .25f)
+            && industry.TenderTripsRemaining == 0,
+            "the tender completes exactly four selectable resupply runs");
+        var orbitalCrew = industry.OrbitalCrewAvailable;
+        var orbitalRations = industry.OrbitalRationsAvailable;
+        var components = industry.ShipCargo(MaterialKind.Components);
+        check(!industry.TryOrbitalSupplyRun(0, 1, 0, 0)
+            && industry.OrbitalCrewAvailable == orbitalCrew && industry.OrbitalRationsAvailable == orbitalRations
+            && industry.ShipCargo(MaterialKind.Components) == components,
+            "a fifth run is refused without mutating orbital or landed stores");
+        var tripSave = bootstrap.CaptureSaveJson();
+        check(bootstrap.TryLoadSaveJson(tripSave) && bootstrap.CaptureSaveJson() == tripSave
+            && industry.TenderTripsRemaining == 0,
+            "orbital supplies and exhausted trip fuel round-trip exactly through schema 16");
+        var preFeature = JsonUtility.FromJson<GameplayChecks.ReviewSave>(tripSave);
+        preFeature.settlement.shipLayoutVersion = 1;
+        preFeature.industry.tenderLogistics = new TenderLogisticsState { orbitalSupplies = Array.Empty<float>() };
+        var preFeatureJson = JsonUtility.ToJson(preFeature);
+        var preFeatureLoaded = bootstrap.TryLoadSaveJson(preFeatureJson);
+        check(preFeatureLoaded && settlement.ShipLayoutVersion == 1 && industry.Capture().tenderLogistics == null
+            && settlement.CoreBuildings[0].Economy.capacity == ShipRules.LegacyCrewCapacity,
+            "pre-feature schema 16 saves with zero-length optional orbital stock retain the historical ship layout");
+        var preFeatureResave = preFeatureLoaded ? bootstrap.CaptureSaveJson() : string.Empty;
+        check(preFeatureLoaded && bootstrap.TryLoadSaveJson(preFeatureResave)
+            && bootstrap.CaptureSaveJson() == preFeatureResave && settlement.ShipLayoutVersion == 1,
+            "pre-feature schema 16 saves resave and reload without inventing tender logistics");
+        check(bootstrap.TryLoadSaveJson(tripSave) && bootstrap.CaptureSaveJson() == tripSave
+            && industry.TenderTripsRemaining == 0,
+            "the new tender fixture restores exactly after the historical-schema migration check");
         check(PlaceNear(bootstrap, "StorageDepot", selected) && PlaceNear(bootstrap, "Manufactorum", selected)
             && PlaceNear(bootstrap, "GroundwaterPump", selected),
             "the manifest establishes storage, basic manufacturing and fresh water near the ship");
@@ -163,10 +226,26 @@ public static class LandingSceneChecks
         bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard, legacyCore: true);
         var legacy = JsonUtility.FromJson<GameplayChecks.ReviewSave>(bootstrap.CaptureSaveJson());
         legacy.version = 11; legacy.industry.materialVersion = 1; legacy.industry.geologyVersion = 3;
-        check(bootstrap.TryLoadSaveJson(JsonUtility.ToJson(legacy)) && settlement.CoreBuildings.Count == 3
+        Array.Resize(ref legacy.industry.producedTotals, IndustryRules.PreviousMaterialCount);
+        Array.Resize(ref legacy.industry.consumedTotals, IndustryRules.PreviousMaterialCount);
+        Array.Resize(ref legacy.industry.productionRates, IndustryRules.PreviousMaterialCount);
+        Array.Resize(ref legacy.industry.consumptionRates, IndustryRules.PreviousMaterialCount);
+        var legacyJson = JsonUtility.ToJson(legacy);
+        var prepare = typeof(PlanetBootstrap).GetMethod("TryPrepareSave", BindingFlags.Instance | BindingFlags.NonPublic);
+        var prepareArgs = new object[] { legacyJson, null, false, null };
+        var legacyValid = (bool)prepare.Invoke(bootstrap, prepareArgs);
+        var legacyLoaded = bootstrap.TryLoadSaveJson(legacyJson);
+        var legacyIndustryValid = IndustryRules.Valid(legacy.industry, legacy.structures.Length);
+        check(legacyLoaded && settlement.CoreBuildings.Count == 3
             && industry.Capture().expeditionCargo == null && settlement.CoreBuildings.All(b => b.Id != "ColonyShip"),
-            "schema 11 retains its established core and receives no replacement ship or free cargo");
+            $"schema 11 retains its established core and receives no replacement ship or free cargo (valid={legacyValid}, industry={legacyIndustryValid}, reason={prepareArgs[3]}, loaded={legacyLoaded}, terrain={legacy.terrainVersion}, exp={legacy.industry.explorationVersion}, facilityVersion={legacy.industry.facilityVersion}, core={settlement.CoreBuildings.Count}, ids={string.Join(",", settlement.CoreBuildings.Select(b => b.Id))}, cargoNull={industry.Capture().expeditionCargo == null})");
     }
+
+    private static string ButtonLabel(string name)
+        => GameObject.Find(name).transform.Find("Label").GetComponent<Text>().text;
+
+    private static GameObject FindObject(string name)
+        => Resources.FindObjectsOfTypeAll<GameObject>().FirstOrDefault(value => value.name == name);
     internal static bool PlaceNear(PlanetBootstrap bootstrap, string id, Vector3 direction)
     {
         var placement = bootstrap.GetComponent<BuildingPlacementController>();

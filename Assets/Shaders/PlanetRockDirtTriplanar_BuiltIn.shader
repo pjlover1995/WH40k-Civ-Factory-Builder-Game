@@ -42,6 +42,8 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
             sampler2D _RockTex, _SoilTex, _GrassTex, _SnowTex;
             float3 _PlanetCenter;
             float4 _EarthworkBrush, _EarthworkColor;
+            float4 _PlanetAtmosphericFog;
+            float4 _PlanetAtmosphericFogColor;
             struct appdata { float4 vertex:POSITION; float3 normal:NORMAL; float4 color:COLOR; float2 climate:TEXCOORD1; };
             struct v2f { float4 pos:SV_POSITION; float3 worldPos:TEXCOORD0; float3 normal:TEXCOORD1; float4 biome:COLOR; float2 climate:TEXCOORD3; SHADOW_COORDS(2) };
             v2f vert(appdata v)
@@ -84,7 +86,7 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                 float latitude=abs(radial.y);
                 float arid=smoothstep(0.46,0.68,climate)*(1-smoothstep(0.5,0.8,latitude));
                 float3 vegetation=lerp(_GrassColor.rgb*0.68,_GrassColor.rgb*1.25,fbm(radial*34));
-                float3 albedo=i.biome.rgb*lerp(0.8,1.2,fbm(radial*190));
+                float3 albedo=lerp(i.biome.rgb,vegetation,0.45)*lerp(0.8,1.2,fbm(radial*190));
                 float slope=smoothstep(0.12,0.5,physicalSlope);
                 albedo=lerp(albedo,lerp(_DirtColor.rgb,_RockColor.rgb,0.7),slope);
                 albedo=lerp(albedo,float3(0.49,0.45,0.31),(1-smoothstep(0,9,height))*0.7);
@@ -93,7 +95,7 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                 if(_TerrainRecipe>2.5) snow=i.climate.x;
                 albedo=lerp(albedo,_SnowColor.rgb,snow);
                 float detailFade=1-smoothstep(1200,7500,distance(_WorldSpaceCameraPos,i.worldPos));
-                albedo*=lerp(0.99,lerp(0.97,1.03,fbm(p*0.01)),detailFade);
+                albedo*=lerp(0.92,lerp(0.78,1.20,fbm(p*0.045)),detailFade);
                 // Sample optional textures only in local views. CPU climate colors remain
                 // the source of biome identity at every LOD and at orbital distances.
                 #if defined(_TERRAIN_TEXTURES)
@@ -123,6 +125,9 @@ Shader "WH30K/PlanetRockDirtTriplanar_BuiltIn"
                     float edge=smoothstep(_EarthworkBrush.w-2.5,_EarthworkBrush.w-1,d);
                     lit=lerp(lit,_EarthworkColor.rgb,area*(0.28+edge*0.52));
                 }
+                float fogAmount=saturate((distance(_WorldSpaceCameraPos,i.worldPos)-_PlanetAtmosphericFog.x)
+                    /max(1,_PlanetAtmosphericFog.y-_PlanetAtmosphericFog.x))*_PlanetAtmosphericFog.z;
+                lit=lerp(lit,_PlanetAtmosphericFogColor.rgb,fogAmount);
                 return float4(lit,1);
             }
             ENDCG

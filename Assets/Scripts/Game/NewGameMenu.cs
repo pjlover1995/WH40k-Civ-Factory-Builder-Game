@@ -360,7 +360,7 @@ namespace WH30K.UI
             startButton.onClick.AddListener(() =>
                 {
                     var seed = int.TryParse(seedInput.text, out var parsed) ? parsed : UnityEngine.Random.Range(0, int.MaxValue);
-                    bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true);
+                    bootstrap.BeginNewGame(seed, GameSettings.Difficulty.Standard, chooseLanding: true, cinematicArrival: true);
                 });
         }
 
@@ -604,6 +604,7 @@ namespace WH30K.UI
             ShowLandingPanel(false); ResetGuideForNewExpedition();
             selectedBuilding = null;
             if (shipPanel != null) shipPanel.SetActive(false);
+            if (shipSupplyPanel != null) shipSupplyPanel.SetActive(false);
             if (inspector != null) inspector.SetActive(false);
         }
         public void FocusLocation(Vector3 direction){Orbit?.FocusLocation(direction);}

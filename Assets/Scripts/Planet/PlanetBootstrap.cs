@@ -72,11 +72,19 @@ namespace WH30K.Gameplay
         private EarthworksController earthworks;
         private readonly List<GameSettings.LandingSite> landingSites = new List<GameSettings.LandingSite>();
         private int selectedLandingSiteIndex = -1;
+        private GameObject orbitalMainVessel;
+        private bool awaitingCaptainBriefing;
+        private float landingCrewAllocation = ShipRules.StartingCrew;
+        private float landingRationAllocation = ShipRules.StartingFood;
+        private float landingSupplyFraction = 1f;
         public LODPlanet ActivePlanet => planet;
         public bool ChoosingLanding { get; private set; }
         public Vector3 LandingDirection { get; private set; }
         public IReadOnlyList<GameSettings.LandingSite> LandingSites => landingSites;
         public int SelectedLandingSiteIndex => selectedLandingSiteIndex;
+        public float LandingCrewAllocation => landingCrewAllocation;
+        public float LandingRationAllocation => landingRationAllocation;
+        public float LandingSupplyFraction => landingSupplyFraction;
 
 #if UNITY_EDITOR
         private Transform debugMarkerRoot;
@@ -149,11 +157,17 @@ namespace WH30K.Gameplay
             menu = newGameMenu;
         }
 
-        public void BeginNewGame(int seed, GameSettings.Difficulty difficulty, bool chooseLanding = false, bool legacyCore = false)
+        public void BeginNewGame(int seed, GameSettings.Difficulty difficulty, bool chooseLanding = false,
+            bool legacyCore = false, bool cinematicArrival = false)
         {
             ChoosingLanding = false;
+            awaitingCaptainBriefing = false;
             landingSites.Clear();
             selectedLandingSiteIndex = -1;
+            landingCrewAllocation = ShipRules.StartingCrew;
+            landingRationAllocation = ShipRules.StartingFood;
+            landingSupplyFraction = 1f;
+            if (orbitalMainVessel != null) { Destroy(orbitalMainVessel); orbitalMainVessel = null; }
             menu?.ResetSessionUi();
             ResolveOrbitCamera();
             colonyEventSystem.EndSession();
@@ -191,14 +205,15 @@ namespace WH30K.Gameplay
 
             settlement.BeginNewGame(definition, planet, surfacePosition, surfaceNormal, resourceSystem, environmentState, !legacyCore);
             planet.GetComponent<PlanetPresentation>().LightLandingSite(surfaceNormal);
-            orbitCamera?.SetColonyLocation(surfaceNormal, settlement.HasExplorator ? ShipRules.Length * 1.3f : 220);
+            orbitCamera?.SetColonyLocation(surfaceNormal, settlement.HasExplorator
+                ? (settlement.ShipLayoutVersion >= 2 ? ShipRules.Length : ShipRules.LegacyLength) * 1.3f : 220);
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, seed);
             industry.Configure(planet, surfaceNormal);
             research.Configure(buildingPlacement, industry);
             if (!legacyCore)
             {
-                if (chooseLanding && landingSites.Count > 0) industry.PrepareExpedition(landingSites);
-                else industry.PrepareExpedition(surfaceNormal);
+                if (chooseLanding && landingSites.Count > 0) industry.PrepareOrbitalExpedition(landingSites);
+                else industry.PrepareImmediateLanding(surfaceNormal);
             }
             earthworks.Configure(planet, surfaceNormal, spawnVehicle: !chooseLanding);
 
@@ -225,13 +240,50 @@ namespace WH30K.Gameplay
                 selectedLandingSiteIndex = FindLandingSite(GameSettings.Difficulty.Standard, 0);
                 if (selectedLandingSiteIndex < 0 && landingSites.Count > 0) selectedLandingSiteIndex = 0;
                 LandingDirection = selectedLandingSiteIndex >= 0 ? landingSites[selectedLandingSiteIndex].direction : SuggestedLanding(surfaceNormal);
-                orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 1.3f);
+                CreateOrbitalMainVessel(LandingDirection);
+                orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 3.6f);
                 settlement.SetLandingPreview(true);
                 clock.DecisionPending = true;
-                menu?.ShowHud(false); menu?.ShowLandingPanel(true);
+                menu?.ShowHud(false); menu?.ShowLandingPanel(!cinematicArrival);
                 menu?.UpdateLandingOptions(landingSites, selectedLandingSiteIndex);
+                menu?.UpdateLandingLoadout();
                 menu?.UpdateLandingReadout(SelectedLandingSiteIndex >= 0 ? LandingSummary(landingSites[selectedLandingSiteIndex]) : LandingSummary(LandingDirection));
+                if (cinematicArrival)
+                {
+                    awaitingCaptainBriefing = true;
+                    orbitCamera?.FocusOrbitalArrival(LandingDirection);
+                    var arrival = orbitalMainVessel.GetComponent<OrbitalVesselArrival>();
+                    arrival.Begin(planet.transform, LandingDirection, planet.Radius, 12000f, () =>
+                        menu?.ShowDiscoveryPanel("CAPTAIN / WARP EXIT REPORT",
+                            "The main vessel suffered critical drive and keel damage during warp translation. We are stable in orbit, but the hull cannot survive atmospheric entry.\n\nThe landing tender is intact. Select a surveyed surface site, choose its crew and supply loadout, then deploy the tender.",
+                            "PROCEED TO LANDING SITES", () =>
+                            {
+                                awaitingCaptainBriefing = false;
+                                clock.DecisionPending = true;
+                                orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 3.6f);
+                                orbitCamera?.FocusSettlement(LandingDirection);
+                                menu?.ShowLandingPanel(true);
+                                menu?.UpdateLandingOptions(landingSites, selectedLandingSiteIndex);
+                                menu?.UpdateLandingLoadout();
+                                if (SelectedLandingSiteIndex >= 0) menu?.UpdateLandingReadout(LandingSummary(landingSites[selectedLandingSiteIndex]));
+                            }));
+                }
+                else
+                {
+                    orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 3.6f);
+                    orbitCamera?.FocusSettlement(LandingDirection);
+                }
             }
+        }
+
+        private void CreateOrbitalMainVessel(Vector3 direction)
+        {
+            if (orbitalMainVessel != null) Destroy(orbitalMainVessel);
+            if (planet == null) return;
+            orbitalMainVessel = BuildingVisuals.Create("ColonyShip", "Damaged main vessel in stable orbit", planet.transform,
+                BuildingVisuals.LegacyShipDimensions);
+            orbitalMainVessel.AddComponent<OrbitalVesselArrival>()
+                .SetOrbit(planet.transform, direction, planet.Radius, 12000f);
         }
 
         private void GenerateLandingSites(int seed, Vector3 fallback)
@@ -253,8 +305,8 @@ namespace WH30K.Gameplay
             candidates.Sort((a, b) => a.relief.CompareTo(b.relief));
             var categories = new[]
             {
-                GameSettings.Difficulty.Easy, GameSettings.Difficulty.Standard, GameSettings.Difficulty.Moderate,
-                GameSettings.Difficulty.Hard, GameSettings.Difficulty.ExtremeHard
+                GameSettings.Difficulty.Easy, GameSettings.Difficulty.Standard,
+                GameSettings.Difficulty.ExtremeHard
             };
             var selected = new List<Vector3>(categories.Length * 2);
             for (var slot = 0; slot < categories.Length * 2 && candidates.Count > 0; slot++)
@@ -368,14 +420,25 @@ namespace WH30K.Gameplay
 
         public bool SelectLandingSite(int index)
         {
-            if (!ChoosingLanding || index < 0 || index >= landingSites.Count) return false;
+            if (!ChoosingLanding || awaitingCaptainBriefing || index < 0 || index >= landingSites.Count) return false;
             var site = landingSites[index];
             if (!ValidLandingSite(site.direction)) return false;
             selectedLandingSiteIndex = index;
             LandingDirection = site.direction;
-            orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 1.3f);
+            orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 3.6f);
+            orbitCamera?.FocusSettlement(LandingDirection);
             menu?.UpdateLandingReadout(LandingSummary(site));
             menu?.UpdateLandingOptions(landingSites, selectedLandingSiteIndex);
+            return true;
+        }
+
+        public bool SetLandingLoadout(float crew, float rations, float supplyFraction)
+        {
+            if (!ChoosingLanding || awaitingCaptainBriefing || !industry.CanApplyInitialLandingLoadout(crew, rations, supplyFraction)) return false;
+            landingCrewAllocation = crew;
+            landingRationAllocation = rations;
+            landingSupplyFraction = supplyFraction;
+            menu?.UpdateLandingLoadout();
             return true;
         }
 
@@ -420,7 +483,7 @@ namespace WH30K.Gameplay
 
         public string LandingSummary(GameSettings.LandingSite site)
         {
-            var text = new System.Text.StringBuilder($"{GameSettings.GetDefinition(site.category).displayName.ToUpperInvariant()} / {planet.Biome(site.direction)} / local relief {site.localRelief:0} m / reserves within 1,200 m\n");
+            var text = new System.Text.StringBuilder($"{LandingTierLabel(site.category)} / {planet.Biome(site.direction)} / local relief {site.localRelief:0} m / reserves within 1,200 m\n");
             var totals = new float[IndustryRules.MaterialCount];
             foreach (var deposit in industry.Deposits)
                 if (deposit.Discovered && planet.SurfaceDistance(site.direction, deposit.Direction) <= 1200)
@@ -430,10 +493,15 @@ namespace WH30K.Gameplay
             return text.ToString();
         }
 
+        private static string LandingTierLabel(GameSettings.Difficulty difficulty)
+            => difficulty == GameSettings.Difficulty.Easy ? "EASY"
+                : difficulty == GameSettings.Difficulty.ExtremeHard || difficulty == GameSettings.Difficulty.Hard ? "HARD" : "MEDIUM";
+
         public bool ConfirmLanding()
         {
-            if (!ChoosingLanding || selectedLandingSiteIndex < 0 || selectedLandingSiteIndex >= landingSites.Count
-                || !ValidLandingSite(LandingDirection)) return false;
+            if (!ChoosingLanding || awaitingCaptainBriefing || selectedLandingSiteIndex < 0 || selectedLandingSiteIndex >= landingSites.Count
+                || !ValidLandingSite(LandingDirection)
+                || !industry.CanApplyInitialLandingLoadout(landingCrewAllocation, landingRationAllocation, landingSupplyFraction)) return false;
             ChoosingLanding = false;
             var site = landingSites[selectedLandingSiteIndex];
             var difficulty = site.category;
@@ -444,11 +512,11 @@ namespace WH30K.Gameplay
             colonyEventSystem.EndSession();
             var point = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(LandingDirection));
             settlement.BeginNewGame(definition, planet, point, LandingDirection, resourceSystem, environmentState);
+            if (!industry.ApplyInitialLandingLoadout(landingCrewAllocation, landingRationAllocation, landingSupplyFraction)) return false;
             colonyEventSystem.BeginSession(definition, resourceSystem, environmentState, settlement, GameSettings.CurrentSeed);
             settlement.SetLandingPreview(false);
+            settlement.BeginLanderDescent();
             planet.GetComponent<PlanetPresentation>().LightLandingSite(LandingDirection);
-            orbitCamera?.SetColonyLocation(LandingDirection, ShipRules.Length * 1.3f);
-            orbitCamera?.FocusSettlement(LandingDirection);
             earthworks.Configure(planet, LandingDirection);
             menu?.SetDifficulty(difficulty);
             menu?.ShowLandingPanel(false); menu?.ShowHud(true);
@@ -586,9 +654,12 @@ namespace WH30K.Gameplay
             // Install earthworks before reconstructing foundations and geological presentation.
             earthworks.Configure(planet, save.settlement.normal, save.earthworks, false);
             settlement.LoadFromSnapshot(save.settlement, planet, definition, resourceSystem, environmentState);
+            if (settlement.ShipLayoutVersion >= 2) CreateOrbitalMainVessel(save.settlement.normal);
+            else if (orbitalMainVessel != null) { Destroy(orbitalMainVessel); orbitalMainVessel = null; }
             var loadedNormal = settlement.CreateSnapshot().normal;
             planet.GetComponent<PlanetPresentation>().LightLandingSite(loadedNormal);
-            orbitCamera?.SetColonyLocation(loadedNormal, settlement.HasExplorator ? ShipRules.Length * 1.3f : 220);
+            orbitCamera?.SetColonyLocation(loadedNormal, settlement.HasExplorator
+                ? (settlement.ShipLayoutVersion >= 2 ? ShipRules.Length : ShipRules.LegacyLength) * 1.3f : 220);
             buildingPlacement.RestoreSnapshot(save.structures);
             settlement.RefreshReadout();
             clock.Restore(save.clock);
@@ -623,6 +694,8 @@ namespace WH30K.Gameplay
                     recoveredDozerHeading=EarthworksRules.RecoverZeroHeading(save.earthworks);
                 if (save != null && save.version < 15) save.settlement.shipLayoutVersion = 0;
                 if (save != null && save.version < 16) save.research = null;
+                if (save?.industry != null)
+                    save.industry.tenderLogistics = TenderLogisticsRules.NormalizeOptional(save.industry.tenderLogistics);
                 // JsonUtility may create an empty nested object for a missing field in older JSON.
                 if(save != null && save.version < 5) save.industry = null;
                 if (save?.industry?.expeditionCargo != null && save.industry.expeditionCargo.Length == 0)
@@ -666,9 +739,11 @@ namespace WH30K.Gameplay
                 || !IndustryRules.Valid(save.industry, save.structures != null ? save.structures.Length : 0)
                 || !Enum.IsDefined(typeof(GameSettings.Difficulty), save.difficulty)) return false;
             var colony = save.settlement;
-            if (colony.shipLayoutVersion < 0 || colony.shipLayoutVersion > 1
+            if (colony.shipLayoutVersion < 0 || colony.shipLayoutVersion > 2
                 || save.version < 15 && colony.shipLayoutVersion != 0
-                || colony.shipLayoutVersion == 1 && (colony.buildings == null || colony.buildings.Length != 1 || colony.buildings[0] != "ColonyShip")) return false;
+                || save.version < 16 && colony.shipLayoutVersion > 1
+                || colony.shipLayoutVersion >= 2 && (save.industry?.tenderLogistics == null || !save.industry.tenderLogistics.initialLoadoutApplied)
+                || colony.shipLayoutVersion > 0 && (colony.buildings == null || colony.buildings.Length != 1 || colony.buildings[0] != "ColonyShip")) return false;
             var resources = save.resources;
             var environment = save.environment;
             var values = new[]

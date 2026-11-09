@@ -9,9 +9,11 @@ namespace WH30K.Gameplay.Construction
     {
         public const float WorldScale = 0.2f;
         public static Vector3 ShipDimensions => new Vector3(WH30K.Sim.ShipRules.Beam, WH30K.Sim.ShipRules.Height, WH30K.Sim.ShipRules.Length);
+        public static Vector3 LegacyShipDimensions => new Vector3(WH30K.Sim.ShipRules.LegacyBeam, WH30K.Sim.ShipRules.LegacyHeight, WH30K.Sim.ShipRules.LegacyLength);
         private static readonly Dictionary<string, Mesh> Meshes = new Dictionary<string, Mesh>();
         private static Material[] materials;
         private static Material[] shipMaterials;
+        private static Material[] tenderMaterials;
         private const int Stone = 0, Iron = 1, Roof = 2, Brass = 3, Amber = 4, Cyan = 5, Dark = 6;
         public static Material[] ServiceRoadMaterials => new[] { GetMaterials()[Iron], GetMaterials()[Brass] };
         public static Material[] ArchitectureMaterials => GetMaterials();
@@ -24,15 +26,21 @@ namespace WH30K.Gameplay.Construction
             go.transform.localScale = dimensions;
             if (!Meshes.TryGetValue(id, out var mesh) || mesh == null)
             {
-                if(id=="Farm")mesh=FarmMesh(0);
+                if (id == "LandingVessel")
+                {
+                    var authoredTender = Resources.Load<GameObject>("Architecture/TenderHull");
+                    mesh = authoredTender != null ? authoredTender.GetComponentInChildren<MeshFilter>()?.sharedMesh : null;
+                }
+                else if(id=="Farm")mesh=FarmMesh(0);
                 else if(id=="HabBlock")mesh=ResidentialVisual.PreviewCoreMesh;
                 else
                 {
                 var builder = new Architecture();
-                if (id != "ColonyShip") Foundation(builder);
+                if (id != "ColonyShip" && id != "LandingVessel") Foundation(builder);
                 switch (id)
                 {
                     case "ColonyShip": ExploratorShip(builder); break;
+                    case "LandingVessel": LandingShip(builder); break;
                     case "ColonyShipLegacy": LandingShip(builder); break;
                     case "HabBlock": Habitation(builder); break;
                     case "Factory": Manufactorum(builder); break;
@@ -54,6 +62,10 @@ namespace WH30K.Gameplay.Construction
                 }
                 mesh = builder.Build(id);
                 }
+                if (mesh == null)
+                {
+                    var fallback = new Architecture(); LandingShip(fallback); mesh = fallback.Build(id);
+                }
                 Meshes[id] = mesh;
             }
             go.GetComponent<MeshFilter>().sharedMesh = mesh;
@@ -67,7 +79,10 @@ namespace WH30K.Gameplay.Construction
             }
             else
             {
-                renderer.sharedMaterials = id == "Farm" ? FarmMaterials : id == "ColonyShip" ? GetShipMaterials() : GetMaterials();
+                renderer.sharedMaterials = id == "Farm" ? FarmMaterials
+                    : id == "LandingVessel" ? GetTenderMaterials()
+                    : id == "ColonyShip" || id == "ColonyShipLegacy" ? GetShipMaterials()
+                    : GetMaterials();
                 if (WH30K.Sim.IndustryRules.Facility(id)) go.AddComponent<FacilityAnimation>().Configure(id);
             }
             if (id == "ColonyShip") AddDistantShip(go, renderer);
@@ -76,23 +91,57 @@ namespace WH30K.Gameplay.Construction
 
         private static void LandingShip(Architecture b)
         {
-            b.Box(Iron, new Vector3(0, 40, 0), new Vector3(54, 38, 100));
-            b.Box(Brass, new Vector3(0, 61, -20), new Vector3(36, 9, 48));
-            b.Gable(Iron, new Vector3(0, 59, 20), 45, 20, 58);
-            b.Box(Cyan, new Vector3(0, 52, 51), new Vector3(31, 9, 2));
-            for (var side = -1; side <= 1; side += 2)
+            // Distinct from the orbiting Explorator: a low, armoured 500 m landing craft
+            // with a blunt heat-shielded ram, broad lift nacelles and a stepped command deck.
+            b.Box(Dark, new Vector3(0, 25, 0), new Vector3(62, 23, 100));
+            b.Box(Iron, new Vector3(0, 38, 4), new Vector3(57, 23, 88));
+            b.Box(Brass, new Vector3(0, 50, 16), new Vector3(49, 3, 55));
+            b.Gable(Iron, new Vector3(0, 44, -25), 54, 18, 42);
+            b.Box(Brass, new Vector3(0, 23, -49), new Vector3(46, 23, 3));
+            b.Box(Amber, new Vector3(0, 25, -51), new Vector3(34, 7, 2));
+            for (var deck = 0; deck < 4; deck++)
             {
-                b.Box(Iron, new Vector3(side * 36, 30, -10), new Vector3(22, 26, 65));
-                b.Cylinder(Dark, new Vector3(side * 36, 9, -28), 10, 12, 10, 12);
-                b.Cylinder(Amber, new Vector3(side * 36, 9, 12), 9, 11, 10, 12);
-                for (var end = -1; end <= 1; end += 2)
+                var z = -20 + deck * 15;
+                b.Box(Brass, new Vector3(0, 51 + deck % 2 * 4, z), new Vector3(45 - deck * 2, 1.3f, 9));
+                for (var side = -1; side <= 1; side += 2)
                 {
-                    b.Beam(Brass, new Vector3(side * 25, 30, end * 34), new Vector3(side * 42, 5, end * 42), 5);
-                    b.Box(Iron, new Vector3(side * 42, 4, end * 42), new Vector3(18, 6, 18));
+                    b.Box(Dark, new Vector3(side * 26, 39, z), new Vector3(2, 10, 8));
+                    b.Box(Amber, new Vector3(side * 27.2f, 40, z), new Vector3(.7f, 5.5f, 3.5f));
+                    b.Beam(Brass, new Vector3(side * 25, 32, z - 5), new Vector3(side * 31, 24, z - 6), 1.6f);
                 }
             }
-            b.Box(Brass, new Vector3(0, 16, 57), new Vector3(24, 6, 23));
-            Crest(b, new Vector3(0, 40, 51));
+            for (var side = -1; side <= 1; side += 2)
+            {
+                var x = side * 40;
+                b.Box(Iron, new Vector3(x, 28, 8), new Vector3(17, 30, 68));
+                b.Box(Dark, new Vector3(x, 14, 4), new Vector3(13, 4, 84));
+                b.Box(Brass, new Vector3(x, 45, 14), new Vector3(18, 2, 42));
+                for (var engine = -1; engine <= 1; engine++)
+                {
+                    var z = 31 + engine * 17;
+                    b.Cylinder(Iron, new Vector3(x, 25, z), 8, 6.5f, 19, 24);
+                    b.Cylinder(Dark, new Vector3(x, 25, z + 10), 7, 4, 6, 24);
+                    b.Cylinder(Cyan, new Vector3(x, 25, z + 15), 3.7f, 2.8f, 1, 24);
+                    b.Cylinder(Brass, new Vector3(x, 25, z - 5), 9, 9, 1.5f, 24);
+                }
+                for (var leg = -1; leg <= 1; leg += 2)
+                {
+                    var z = leg * 36;
+                    b.Beam(Iron, new Vector3(x * .72f, 23, z), new Vector3(x, 3, z), 4);
+                    b.Box(Brass, new Vector3(x, 2, z), new Vector3(18, 3, 12));
+                }
+            }
+            b.Box(Roof, new Vector3(0, 59, 22), new Vector3(29, 8, 24));
+            b.Box(Iron, new Vector3(0, 68, 24), new Vector3(20, 12, 20));
+            b.Box(Cyan, new Vector3(0, 69, 13), new Vector3(16, 6, 2));
+            b.Cylinder(Brass, new Vector3(0, 76, 24), 9, 7, 5, 12);
+            for (var side = -1; side <= 1; side += 2)
+                for (var z = -38; z <= 35; z += 9)
+                {
+                    b.Box(Dark, new Vector3(side * 29.2f, 36, z), new Vector3(1.5f, 3, 4));
+                    b.Box(Amber, new Vector3(side * 30.1f, 36, z), new Vector3(.6f, 1.2f, 2));
+                }
+            Crest(b, new Vector3(0, 52, -28));
         }
 
         private static void ExtractionRig(Architecture b, bool quarry)
@@ -471,6 +520,59 @@ namespace WH30K.Gameplay.Construction
             return shipMaterials;
         }
 
+        private static Material[] GetTenderMaterials()
+        {
+            if (tenderMaterials != null && tenderMaterials[0] != null) return tenderMaterials;
+            var atlas = UnityEngine.Resources.Load<Texture2D>("Architecture/TenderSurfaceAtlas");
+            var template = UnityEngine.Resources.Load<Material>("Architecture/BuildingSurface");
+            var authoredTender = UnityEngine.Resources.Load<GameObject>("Architecture/TenderHull");
+            var authoredSlots = authoredTender != null
+                ? authoredTender.GetComponentInChildren<MeshRenderer>()?.sharedMaterials
+                : null;
+            if (atlas == null || template == null)
+                throw new System.InvalidOperationException("Missing tender surface atlas or architecture shader material.");
+
+            // Unity's FBX importer groups slots by its own material ordering. Build logical
+            // photographic materials first, then align each submesh slot by its authored name.
+            var logical = new[]
+            {
+                ShipSurface(template, atlas, "Tender primary armour", new Vector2(0, .5f), .018f, .006f, .25f, .42f),
+                ShipSurface(template, atlas, "Tender engine machinery", new Vector2(.5f, .5f), .022f, .006f, .42f, .39f),
+                ShipSurface(template, atlas, "Tender oxblood plating", Vector2.zero, .020f, .006f, .22f, .41f),
+                ShipSurface(template, atlas, "Tender aged brass", new Vector2(.5f, 0), .028f, .005f, .38f, .40f),
+                Emissive("Tender amber signal", new Color(.85f, .33f, .06f)),
+                Emissive("Tender cyan exhaust", new Color(.01f, .63f, .72f)),
+                ShipSurface(template, atlas, "Tender recessed iron", new Vector2(.5f, .5f), .024f, .003f, .28f, .37f)
+            };
+            if (authoredSlots == null) return logical; // Keep the procedural tender fallback usable without an FBX import.
+            if (authoredSlots.Length != logical.Length)
+                throw new System.InvalidOperationException("Tender FBX must retain all seven authored material slots.");
+            tenderMaterials = new Material[authoredSlots.Length];
+            for (var slot = 0; slot < authoredSlots.Length; slot++)
+            {
+                var logicalIndex = TenderMaterialIndex(authoredSlots[slot] != null ? authoredSlots[slot].name : string.Empty);
+                if (logicalIndex < 0)
+                    throw new System.InvalidOperationException("Unknown landing tender FBX material slot: "
+                        + (authoredSlots[slot] != null ? authoredSlots[slot].name : "<null>"));
+                tenderMaterials[slot] = logical[logicalIndex];
+            }
+            return tenderMaterials;
+        }
+
+        private static int TenderMaterialIndex(string name)
+        {
+            switch (name)
+            {
+                case "Tender primary armour": return 0;
+                case "Tender engine machinery": return 1;
+                case "Tender oxblood plating": return 2;
+                case "Tender aged brass": return 3;
+                case "Tender amber signal": return 4;
+                case "Tender cyan exhaust": return 5;
+                case "Tender recessed iron": return 6;
+                default: return -1;
+            }
+        }
         private static Material ShipSurface(Material template, Texture2D atlas, string name, Vector2 quadrant,
             float scale, float relief, float metal, float smoothness)
         {
@@ -615,11 +717,28 @@ namespace WH30K.Gameplay.Construction
 
             public Mesh Build(string id)
             {
+                if (id == "LandingVessel")
+                {
+                    var minimum = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+                    var maximum = new Vector3(float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity);
+                    foreach (var vertex in vertices) { minimum = Vector3.Min(minimum, vertex); maximum = Vector3.Max(maximum, vertex); }
+                    var extent = maximum - minimum;
+                    var middle = (maximum + minimum) * .5f;
+                    for (var i = 0; i < vertices.Count; i++)
+                    {
+                        var vertex = vertices[i];
+                        vertices[i] = new Vector3((vertex.x - middle.x) / extent.x, (vertex.y - middle.y) / extent.y,
+                            (vertex.z - middle.z) / extent.z);
+                        var normal = normals[i];
+                        normal = new Vector3(normal.x / extent.x, normal.y / extent.y, normal.z / extent.z);
+                        normals[i] = normal.sqrMagnitude > .000001f ? normal.normalized : Vector3.up;
+                    }
+                }
                 if (id == "ColonyShip")
                 {
                     // Bake the asymmetric crash into the mesh so the game's tangent-aligned
                     // placement anchor, footprint and colony services remain stable.
-                    var dimensions = ShipDimensions;
+                    var dimensions = LegacyShipDimensions;
                     var impactPose = Quaternion.Euler(.65f, 0, -5.5f);
                     var sink = Vector3.down * 65f;
                     for (var i = 0; i < vertices.Count; i++)

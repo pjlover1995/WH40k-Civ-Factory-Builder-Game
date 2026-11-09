@@ -66,6 +66,7 @@ namespace WH30K.Sim.Settlements
 
         private float population;
         public bool HasExplorator { get; private set; }
+        public int ShipLayoutVersion { get; private set; }
         private float workforce;
         private float productionModifier = 1f;
         private float upkeepModifier = 1f;
@@ -270,6 +271,7 @@ namespace WH30K.Sim.Settlements
             industryModifier = 1f;
             constructedBuildings.Clear();
             HasExplorator = colonyShip;
+            ShipLayoutVersion = colonyShip ? 2 : 0;
             population = colonyShip ? ShipRules.StartingCrew : Mathf.Max(120f, 160f * definition.resourceYieldMultiplier);
             workforce = population * workforceRatio;
             tickTimer = 0f;
@@ -295,7 +297,8 @@ namespace WH30K.Sim.Settlements
             industryModifier = snapshot.industryModifier > 0f ? snapshot.industryModifier : 1f;
             constructedBuildings.Clear();
             population = snapshot.population;
-            HasExplorator = snapshot.shipLayoutVersion == 1;
+            ShipLayoutVersion = snapshot.shipLayoutVersion;
+            HasExplorator = ShipLayoutVersion > 0;
             workforce = snapshot.workforce;
             tickTimer = Mathf.Clamp(snapshot.tickTimer, 0f, tickInterval);
             // Keep a saved unit direction byte-for-byte stable. Re-normalizing it adds
@@ -347,7 +350,7 @@ namespace WH30K.Sim.Settlements
 
             return new SettlementSnapshot
             {
-                shipLayoutVersion = HasExplorator ? 1 : 0,
+                shipLayoutVersion = ShipLayoutVersion,
                 population = population,
                 workforce = workforce,
                 productionModifier = productionModifier,
@@ -526,7 +529,7 @@ namespace WH30K.Sim.Settlements
             switch (id)
             {
                 case "ColonyShip":
-                    return new ColonyShip(HasExplorator);
+                    return new ColonyShip(HasExplorator, ShipLayoutVersion);
                 case "HabBlock":
                     return new HabBlock();
                 case "Factory":
@@ -554,15 +557,20 @@ namespace WH30K.Sim.Settlements
                 var dimensions = building.Id == "ColonyShip" ? new Vector3(240f, 145f, 380f) : building.Id == "Factory" ? new Vector3(155f, 175f, 135f)
                     : building.Id == "Utility" ? new Vector3(125f, 145f, 115f) : new Vector3(120f, 195f, 120f);
                 var ship = building.Id == "ColonyShip";
-                var visual = BuildingVisuals.Create(ship && !HasExplorator ? "ColonyShipLegacy" : building.Id,
-                    building.DisplayName, settlementAnchor, ship && HasExplorator ? BuildingVisuals.ShipDimensions : dimensions * BuildingVisuals.WorldScale);
+                var visualId = ship && ShipLayoutVersion >= 2 ? "LandingVessel" : ship && !HasExplorator ? "ColonyShipLegacy" : building.Id;
+                var visualDimensions = ship && HasExplorator
+                    ? ShipLayoutVersion >= 2 ? BuildingVisuals.ShipDimensions : BuildingVisuals.LegacyShipDimensions
+                    : dimensions * BuildingVisuals.WorldScale;
+                var visual = BuildingVisuals.Create(visualId, building.DisplayName, settlementAnchor, visualDimensions);
                 var angle = (Mathf.PI * 2f / Mathf.Max(1, count)) * i;
                 var offset = count == 1 ? Vector3.zero : new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * buildingSpacing * BuildingVisuals.WorldScale;
                 var localDirection = planet.transform.InverseTransformPoint(settlementAnchor.TransformPoint(offset)).normalized;
                 var ground = planet.transform.TransformPoint(planet.EvaluateSurfacePoint(localDirection));
                 var normal = planet.transform.TransformDirection(localDirection);
                 var forward = Vector3.ProjectOnPlane(settlementAnchor.forward, normal).normalized;
-                visual.transform.SetPositionAndRotation(ground, Quaternion.LookRotation(forward, normal));
+                var restingCenter = visualId == "LandingVessel" ? ground + normal * (WH30K.Sim.ShipRules.Height * .5f) : ground;
+                visual.transform.SetPositionAndRotation(restingCenter, Quaternion.LookRotation(forward, normal));
+                if (visualId == "LandingVessel") visual.AddComponent<LandingVesselDescent>();
                 buildingVisuals.Add(visual);
                 var managed = visual.AddComponent<ManagedBuilding>();
                 managed.Configure(building.Id, building.DisplayName, new BuildingEconomy
@@ -578,6 +586,40 @@ namespace WH30K.Sim.Settlements
         public void SetLandingPreview(bool preview)
         {
             if (settlementAnchor != null) settlementAnchor.gameObject.SetActive(!preview);
+        }
+
+        public bool CanReceiveTenderCrew(float crew)
+            => ShipLayoutVersion >= 2 && ColonyRules.IsFinite(crew) && crew >= 0
+                && population + crew <= ShipRules.CrewCapacity + .001f;
+
+        public bool ReceiveTenderCrew(float crew)
+        {
+            if (!CanReceiveTenderCrew(crew)) return false;
+            population += crew;
+            workforce = population * workforceRatio;
+            RefreshReadout();
+            return true;
+        }
+
+        public bool SetTenderCrew(float crew)
+        {
+            if (ShipLayoutVersion < 2 || !ColonyRules.IsFinite(crew) || crew < 250 || crew > ShipRules.CrewCapacity) return false;
+            population = crew;
+            workforce = population * workforceRatio;
+            RefreshReadout();
+            return true;
+        }
+
+        public void BeginLanderDescent()
+        {
+            if (ShipLayoutVersion < 2 || planet == null) return;
+            foreach (var visual in buildingVisuals)
+            {
+                var descent = visual != null ? visual.GetComponent<LandingVesselDescent>() : null;
+                if (descent == null) continue;
+                descent.Begin(visual.transform.position, visual.transform.rotation, planet.transform.TransformDirection(storedNormal));
+                return;
+            }
         }
 
         private void BuildServiceRoads()

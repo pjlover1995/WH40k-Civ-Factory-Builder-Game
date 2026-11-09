@@ -40,6 +40,16 @@ namespace WH30K.Planet
         public double LastLodMilliseconds { get; private set; }
         public int LiveMeshCount { get; internal set; }
         public int LiveTriangleCount { get; internal set; }
+        public int FarViewRootCellCount => GetResolutionForDepth(0) - 1;
+        public int FarViewRootTriangleCount => 6 * (2 * FarViewRootCellCount * FarViewRootCellCount + 8 * FarViewRootCellCount);
+        public int VisibleTerrainPatchCount
+        {
+            get { var patches = 0; var triangles = 0; if (rootPatches != null) foreach (var patch in rootPatches) patch?.AccumulateVisibleCounts(ref patches, ref triangles); return patches; }
+        }
+        public int VisibleTerrainTriangleCount
+        {
+            get { var patches = 0; var triangles = 0; if (rootPatches != null) foreach (var patch in rootPatches) patch?.AccumulateVisibleCounts(ref patches, ref triangles); return triangles; }
+        }
         // Skirts descend below the full terrain envelope, including a coarse face's chord.
         // They seal unequal LODs without modifying the sampled construction surface.
         internal float SkirtFloor => radius * .80f;
@@ -236,10 +246,11 @@ namespace WH30K.Planet
             // Power-of-two cells give exactly matching samples at parent/child boundaries.
             // Roots need fewer vertices; only nearby subdivided patches receive full density.
             var cells = Mathf.NextPowerOfTwo(Mathf.Clamp(BaseResolution - 1, 8, 64));
-            // At continental radii a 16-cell root has kilometre-deep chords, hiding
-            // entire continents underneath the ocean shell in orbital views.
-            // Only the two coarsest levels need the denser spherical silhouette.
-            if (radius > 50000 && depth < 2) cells = 128 >> depth;
+            // Large-world roots represent the far view. Atmospheric perspective hides
+            // fine horizon detail, so cap each of the six root faces at 64 cells; near
+            // views still subdivide into progressively finer patches.
+            if (radius > 50000 && depth == 0) cells = 64;
+            else if (radius > 50000 && depth == 1) cells = 64;
             while (cells + 1 > MaxPatchResolution && cells > 8) cells /= 2;
             if (depth < 2 && radius <= 50000) cells = Mathf.Max(8, cells / 2);
             return cells + 1;

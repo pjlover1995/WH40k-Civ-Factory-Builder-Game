@@ -124,7 +124,7 @@ namespace WH30K.Planet
                         position+rotation*new Vector3(reed*.6f,1.5f,reed%2),rotation,new Vector3(.18f,3+reed*.5f,.18f));
                     if(chance<.4) Add(groups[3],WorldArt.Octahedron,position,rotation,new Vector3(12,.35f,9));
                 }
-                else if(chance<.13 || ((biome=="Mountain range" || biome=="Rocky highlands") && chance<.7))
+                else if(chance<.07 || ((biome=="Mountain range" || biome=="Rocky highlands") && chance<.7))
                     Add(groups[2],WorldArt.Octahedron,position+n*1.4f,rotation,new Vector3(4+(float)chance*9,4+(float)chance*5,5));
             }
             if((y+20)%4==3)yield return null;
