@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using UnityEditor;
 using UnityEngine;
 using WH30K.CameraSystem;
@@ -7,6 +9,7 @@ using WH30K.Game;
 using WH30K.Gameplay;
 using WH30K.Gameplay.Construction;
 using WH30K.Planet;
+using WH30K.Sim;
 
 public static class TerrainSceneChecks
 {
@@ -32,7 +35,7 @@ public static class TerrainSceneChecks
             foreach (TerrainMethod method in Enum.GetValues(typeof(TerrainMethod)))
             {
                 planet.ApplyConfiguration(6000, 33, 6, 1200, 1.8f, .25f, 65, 10);
-                planet.BuildPlanet(1234, material, 3, new TerrainSettings { radius=6000, method = method });
+                planet.BuildPlanet(1234, material, 3, new TerrainSettings { radius=6000, method = method }, oceanMaterial);
                 Check(planet.LiveMeshCount == 6 && planet.GetComponentsInChildren<MeshFilter>().Length == 6,
                     method + " builds only six coarse root meshes");
                 ValidateMeshes(planet);
@@ -45,12 +48,22 @@ public static class TerrainSceneChecks
                 }
                 Check(planet.LiveMeshCount > 6, method + " refines geometry near the surface camera");
                 ValidateMeshes(planet);
+                Check(HasVisibleOcean(planet), method + " ocean reuses the terrain topology in a separate draw");
                 planet.RefreshLodAtPosition(Vector3.one * 1000000);
                 Check(planet.LiveMeshCount == 6, method + " releases child meshes after returning to orbit");
                 var oldMesh = oldMeshes[0].sharedMesh;
-                planet.BuildPlanet(1234, material, 3, new TerrainSettings { radius=6000, method = method });
+                planet.BuildPlanet(1234, material, 3, new TerrainSettings { radius=6000, method = method }, oceanMaterial);
                 Check(oldMesh == null && planet.LiveMeshCount == 6, method + " regeneration destroys replaced mesh assets");
             }
+            planet.EarthworksHeight = (_, _) => planet.SeaLevel + 5f;
+            planet.RefreshExcavation(Vector3.up, planet.Radius * 3);
+            planet.RebuildExcavatedSurface();
+            Check(!HasVisibleOcean(planet), "rebuilding filled terrain removes water indices from dry patches");
+            planet.EarthworksHeight = (_, _) => planet.SeaLevel - 5f;
+            planet.RefreshExcavation(Vector3.up, planet.Radius * 3);
+            planet.RebuildExcavatedSurface();
+            Check(HasVisibleOcean(planet), "rebuilding submerged terrain restores water indices");
+
             // Import validates the changed shader on the actual graphics backend when available.
             Check(!ShaderUtil.ShaderHasError(material.shader), "terrain shader has no reported import errors");
             Check(oceanShader != null && oceanMaterial != null
@@ -153,41 +166,135 @@ public static class TerrainSceneChecks
         finally { bootstrap.ConfigureNewWorldTerrain(original); }
     }
 
-    public static void RunShorelineReview(PlanetBootstrap bootstrap,Action<bool,string> check)
+    public static IEnumerator RunShorelineReview(PlanetBootstrap bootstrap, Action<bool, string> check)
     {
-        if(bootstrap==null||check==null)throw new ArgumentNullException(bootstrap==null?nameof(bootstrap):nameof(check));
-        var original=bootstrap.NewWorldTerrain;
+        var original = bootstrap.NewWorldTerrain;
         try
         {
-            bootstrap.ConfigureNewWorldTerrain(new TerrainSettings{radius=PlanetScale.DefaultRadius});
-            bootstrap.BeginNewGame(1234,GameSettings.Difficulty.Standard,legacyCore:true);
-            var planet=bootstrap.ActivePlanet;var direction=FindShallowCoast(planet,out var depth);
-            check(direction.sqrMagnitude>.9f&&depth>=0&&depth<=2.5f,
-                $"the review world has sampled coastline within the 2.5 m ocean mask (depth={depth:0.###} m)");
-            var camera=Camera.main;var orbit=camera.GetComponent<SimpleOrbitCamera>();
-            orbit.FrameTarget();
+            bootstrap.ConfigureNewWorldTerrain(new TerrainSettings { radius = PlanetScale.DefaultRadius });
+            bootstrap.BeginNewGame(1234, GameSettings.Difficulty.Standard, legacyCore: true);
+            bootstrap.GetComponent<ColonyClock>().TogglePause();
+            var planet = bootstrap.ActivePlanet;
+            var direction = FindShallowCoast(planet, out var depth);
+            check(direction.sqrMagnitude > .9f,
+                $"the default world has a shallow crossing within the ocean mask ({depth:0.##} m)");
+
+            planet.GetComponent<PlanetPresentation>().LightLandingSite(direction);
+            var camera = Camera.main;
+            var orbit = camera.GetComponent<SimpleOrbitCamera>();
             orbit.FocusLocation(direction);
-            check(orbit.IsSurfaceView,"coast focus enters close-ground view");
-            orbit.Zoom(-.5f);
-            check(orbit.IsSurfaceView,"coast zoom-out remains in regional view");
-            Debug.Log($"Shoreline state review completed; sampled water depth={depth:0.###} m.");
+            orbit.FrameTarget();
+            yield return null;
+            check(!orbit.IsSurfaceView, "the coast is centred on the orbital hemisphere");
+            CaptureShoreline(camera, "orbit");
+
+            orbit.FocusLandingSite(direction, 620);
+            for (var i = 0; i < 80; i++) yield return null;
+            check(orbit.IsSurfaceView, "the coast is in the regional surface view");
+            CaptureShoreline(camera, "regional");
+
+            orbit.Zoom(.58f);
+            for (var i = 0; i < 50; i++) yield return null;
+            check(orbit.IsSurfaceView && HasVisibleOcean(planet),
+                "the close oblique view uses ocean submeshes on the terrain patches");
+            CaptureShoreline(camera, "close-ground");
+            var time = Shader.GetGlobalFloat("_PlanetSimulationTime");
+            try
+            {
+                Shader.SetGlobalFloat("_PlanetSimulationTime", time + 1.1f);
+                CaptureShoreline(camera, "close-ground-next-wave");
+            }
+            finally { Shader.SetGlobalFloat("_PlanetSimulationTime", time); }
         }
         finally { bootstrap.ConfigureNewWorldTerrain(original); }
     }
 
-    private static Vector3 FindShallowCoast(LODPlanet planet,out float depth)
+    private static bool HasVisibleOcean(LODPlanet planet)
     {
-        var best=Vector3.zero;depth=float.PositiveInfinity;
-        const int samples=160000;
-        for(var i=0;i<samples;i++)
+        var hasWater = false;
+        foreach (var patch in planet.GetComponentsInChildren<LODPatch>())
         {
-            var y=1-2*(i+.5f)/samples;var angle=i*2.39996323f;var r=Mathf.Sqrt(1-y*y);
-            var direction=new Vector3(Mathf.Cos(angle)*r,y,Mathf.Sin(angle)*r);
-            var height=planet.SeaLevel-planet.EvaluateSurfacePoint(direction).magnitude;
-            if(height<0&&-height<depth){depth=-height;best=direction;}
-            if(height<=0&&height>=-2.5f){depth=-height;return direction;}
+            var mesh = patch.GetComponent<MeshFilter>().sharedMesh;
+            var renderer = patch.GetComponent<MeshRenderer>();
+            if (renderer == null || !renderer.enabled || mesh == null || mesh.subMeshCount != 2) continue;
+            var water = mesh.GetSubMesh(1);
+            if (water.indexCount == 0) continue;
+            var land = mesh.GetSubMesh(0);
+            if (water.indexStart < land.indexStart + land.indexCount || water.indexCount != land.indexCount)
+                throw new InvalidOperationException($"Unexpected {mesh.name} water index range.");
+            hasWater = true;
         }
-        return best;
+        return hasWater;
     }
 
+    private static Vector3 FindShallowCoast(LODPlanet planet, out float depth)
+    {
+        float Depth(Vector3 direction) => planet.SeaLevel - planet.EvaluateSurfacePoint(direction).magnitude;
+        const int samples = 12000;
+        for (var i = 0; i < samples; i++)
+        {
+            var y = 1 - 2 * (i + .5f) / samples;
+            var angle = i * 2.39996323f;
+            var r = Mathf.Sqrt(1 - y * y);
+            var start = new Vector3(Mathf.Cos(angle) * r, y, Mathf.Sin(angle) * r);
+            var tangent = Vector3.Cross(start, Vector3.up).normalized;
+            var end = (start + tangent * .005f).normalized;
+            var startDepth = Depth(start);
+            var endDepth = Depth(end);
+            if ((startDepth > 0) == (endDepth > 0)) continue;
+
+            var land = startDepth <= 0 ? start : end;
+            var sea = startDepth > 0 ? start : end;
+            var crossing = sea;
+            for (var step = 0; step < 20; step++)
+            {
+                crossing = (land + sea).normalized;
+                depth = Depth(crossing);
+                if (depth > 1.25f) sea = crossing;
+                else land = crossing;
+            }
+            depth = Depth(crossing);
+            var across = (tangent - crossing * Vector3.Dot(tangent, crossing)).normalized * (350 / planet.Radius);
+            var before = Depth((crossing - across).normalized);
+            var after = Depth((crossing + across).normalized);
+            if (depth >= 0 && depth <= 2.5f && Mathf.Min(before, after) is < -.5f and > -25
+                && Mathf.Max(before, after) > 3.5f)
+                return crossing;
+        }
+        depth = float.NaN;
+        return Vector3.zero;
+    }
+
+    private static void CaptureShoreline(Camera camera, string name)
+    {
+        const int width = 1280, height = 800;
+        var directory = Path.Combine(".utmp", "shoreline-review-final");
+        Directory.CreateDirectory(directory);
+        var target = camera.targetTexture;
+        var active = RenderTexture.active;
+        var aspect = camera.aspect;
+        var clear = camera.clearFlags;
+        var texture = new RenderTexture(width, height, 24);
+        var image = new Texture2D(width, height, TextureFormat.RGB24, false);
+        try
+        {
+            camera.targetTexture = texture;
+            camera.aspect = (float)width / height;
+            camera.clearFlags = CameraClearFlags.Skybox;
+            camera.Render();
+            RenderTexture.active = texture;
+            image.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+            image.Apply();
+            File.WriteAllBytes(Path.Combine(directory, name + ".png"), image.EncodeToPNG());
+        }
+        finally
+        {
+            camera.targetTexture = target;
+            camera.aspect = aspect;
+            camera.clearFlags = clear;
+            RenderTexture.active = active;
+            UnityEngine.Object.DestroyImmediate(texture);
+            UnityEngine.Object.DestroyImmediate(image);
+        }
+    }
 }

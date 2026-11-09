@@ -27,6 +27,8 @@ namespace WH30K.Planet
             UpdateAtmosphericPerspective();
         }
 
+        internal Material CreateOceanMaterial() => MakeMaterial("PlanetOcean");
+
         public void Configure(LODPlanet planet)
         {
             this.planet = planet;
@@ -59,9 +61,8 @@ namespace WH30K.Planet
             QualitySettings.shadowCascades = 4;
             QualitySettings.shadows = ShadowQuality.All;
             QualitySettings.shadowResolution = ShadowResolution.High;
-            Shell("Ocean", planet.SeaLevel, MakeMaterial("PlanetOcean"), planet);
-            Shell("Cloud layer", planet.Radius + (planet.Radius > 50000 ? 12000f : 135f), MakeMaterial("PlanetClouds"), null);
-            Shell("Atmospheric scattering", planet.Radius * 1.022f, MakeMaterial("PlanetAtmosphere"), null);
+            Shell("Cloud layer", planet.Radius + (planet.Radius > 50000 ? 12000f : 135f), MakeMaterial("PlanetClouds"));
+            Shell("Atmospheric scattering", planet.Radius * 1.022f, MakeMaterial("PlanetAtmosphere"));
             gameObject.AddComponent<PlanetEcology>().Configure(planet);
             gameObject.AddComponent<PlanetarySystem>().Configure(planet);
             var camera = Camera.main;
@@ -130,12 +131,11 @@ namespace WH30K.Planet
             return material;
         }
 
-        private void Shell(string name, float radius, Material material, LODPlanet ocean)
+        private void Shell(string name, float radius, Material material)
         {
             const int segments = 192, rings = 96;
             var vertices = new Vector3[(segments + 1) * (rings + 1)];
             var normals = new Vector3[vertices.Length];
-            var colors = new Color[vertices.Length];
             var triangles = new int[segments * rings * 6];
             for (var y = 0; y <= rings; y++)
                 for (var x = 0; x <= segments; x++)
@@ -144,8 +144,6 @@ namespace WH30K.Planet
                     var n = new Vector3(Mathf.Sin(theta) * Mathf.Cos(phi), Mathf.Cos(theta), Mathf.Sin(theta) * Mathf.Sin(phi));
                     var i = y * (segments + 1) + x;
                     vertices[i] = n * radius; normals[i] = n;
-                    var depth = ocean != null ? Mathf.Clamp01((radius - ocean.EvaluateHeight(n)) / 110f) : 0f;
-                    colors[i] = new Color(depth, depth, depth, 1);
                 }
             var t = 0;
             for (var y = 0; y < rings; y++)
@@ -155,7 +153,7 @@ namespace WH30K.Planet
                     triangles[t++] = i; triangles[t++] = i + segments + 2; triangles[t++] = i + segments + 1;
                     triangles[t++] = i; triangles[t++] = i + 1; triangles[t++] = i + segments + 2;
                 }
-            var mesh = new Mesh { name = name + " sphere", vertices = vertices, normals = normals, colors = colors, triangles = triangles };
+            var mesh = new Mesh { name = name + " sphere", vertices = vertices, normals = normals, triangles = triangles };
             mesh.RecalculateBounds(); meshes.Add(mesh);
             var go = new GameObject(name, typeof(MeshFilter), typeof(MeshRenderer));
             go.transform.SetParent(transform, false);

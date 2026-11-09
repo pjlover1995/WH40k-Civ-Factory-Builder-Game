@@ -210,7 +210,7 @@ public static class GameplayChecks
             "new worlds open in a free planetary view rather than a locked building view");
         Check(Mathf.Abs(Camera.main.projectionMatrix.determinant) > 0.00001f,
             "camera has a valid perspective projection for rendering the world");
-        Check(planet.Radius == 6000f && planet.transform.Find("Ocean") != null
+        Check(planet.Radius == 6000f && planet.OceanMaterial != null
             && planet.transform.Find("Cloud layer") != null && planet.transform.Find("Atmospheric scattering") != null,
             "larger planet includes ocean, clouds and atmosphere");
         foreach (var id in new[] { "HabBlock", "Factory", "Utility", "Outpost", "Mine", "Quarry", "Harvester", "Smelter", "Works",

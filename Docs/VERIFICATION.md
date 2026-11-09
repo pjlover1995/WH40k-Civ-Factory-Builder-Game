@@ -2,11 +2,14 @@
 
 ## Close-zoom shoreline depth artifact — 2026-11-09
 
-- The opaque ocean shader now discards fragments with less than **2.5 m** of sampled water depth. Its animated radial waves move the surface by at most **1.45 m**, so the mask keeps the water surface clear of terrain at shallow coasts without changing terrain heights, sea level, saves or placement rules. The intentional result is a narrow dry shoreline margin.
-- `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` passed **606 engine-independent checks**, including Player/Editor syntax parsing for **124 Unity C# sources**. `dotnet` was not on PATH; the repository-local .NET 9 SDK was used.
-- Unity **2022.3.2f1** imported and compiled the project and passed **56 Terrain Geometry checks**, including the new ocean shader import/clearance assertion (`zoom-geometry.log`, local). `git diff --check` passed.
-- `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` passed **3 focused Play Mode checks**: it finds a sampled 1 m-deep coastline inside the ocean mask and verifies the camera enters close-ground and regional surface views. Exploratory captures under `.utmp/shoreline-review/` show Orbit, but regional and close-ground are effectively blank; they do not establish shoreline appearance. Manual zoom/play inspection remains outstanding; Unity window screenshots timed out twice.
-- Review the actual shallow coast in Orbit, region and close-ground zoom before treating visual acceptance as complete.
+- The ocean now follows terrain LOD patches in a separate draw using the same vertex samples and triangle layout. Submerged patches project water vertices to sea level, and their skirts close seams between LODs. Dry patches have no water indices. Signed depth is recorded before adding the planet radius, preserving sub-metre differences that were lost when the shader estimated depth from globe-scale coordinates. Terrain edits update the water mask when a patch rebuilds.
+- The mask discards the shallowest **2.5 m** of interpolated depth and tapers geometric waves near the edge. This leaves a dry margin whose width depends on the local slope. The fixture reproduced the orbital grid and close speckling with the earlier shader-only mask.
+- The simulation suite passed **621 engine-independent checks**, including Player and Editor syntax parsing for **130 Unity C# sources**. The shared UI check passed for 12 files. The base-to-head and working-tree Git diff checks passed.
+- Graphics-enabled Unity **2022.3.2f1** imported and compiled the runtime and Editor code. The terrain geometry suite passed **61 checks** across all three recipes, including the ocean shader, LOD split/merge, and filled/submerged terrain rebuilds. The shoreline Play Mode suite passed **4 checks** in the playable scene at the default radius. Local logs are `Logs/pr40-geometry.log` and `Logs/pr40-shoreline.log`.
+- Inspected 1280×800 Unity renders in Orbit, at regional zoom, and close to the ground in two wave phases. The orbital grid, close shoreline speckling and offshore seam seen in earlier iterations are absent in these views. The close view shows small stationary notches at the waterline. Physical-input playtesting, other GPUs and sustained performance profiling remain unverified.
+
+Repeat with `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .` and `git diff --check`. Run `TerrainSceneChecks.RunGeometry` and `ArchitectureAppearanceChecks.RunBatch -wh30k-check shoreline` in graphics-enabled Unity **2022.3.2f1**. Omit `-quit` for the shoreline suite and inspect `.utmp/shoreline-review-final/`.
+
 
 ## Colony reserve outlook
 
@@ -25,6 +28,7 @@ For physical-input acceptance, hover both reserve cells on a landed colony. Buil
 - The focused `ArchitectureAppearanceChecks.RunBatch -wh30k-check discovery` passed **11 runtime assertions** in the real playable scene. It builds a survey outpost, verifies discovered pins are hidden in Orbit and with the overlay off, visible in surface/regional mode when enabled, opens the SITES browser while still in Orbit, selects a discovered ruin, and verifies LOCATE enables the overlay and focuses that selection. UI callbacks are invoked directly by the fixture; this is not physical-input play testing.
 - Visually inspected the actual Unity-rendered fixture captures in `.utmp/discovery-marker-review/{orbit,regional,close-ground}.png`: Orbit has no field of discovery pins, and the regional and close-ground views show the selected marker against the terrain. Manual mouse/keyboard play remains separate and was not performed.
 
+Repeat: `dotnet run --project Tests/Simulation/SimulationChecks.csproj -- .`, `node Tools/Workflow/ui-style.mjs`, `git diff --check`, `Tests/CompileUnityReferences.ps1`, then run `ArchitectureAppearanceChecks.RunBatch -wh30k-check discovery` in Unity **2022.3.2f1** and inspect its Orbit, regional and close-ground captures.
 
 ## Cinematic menu and screen flow - 2026-11-08
 
