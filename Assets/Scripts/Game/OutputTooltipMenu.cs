@@ -24,6 +24,7 @@ namespace WH30K.UI
             outputTooltip = Panel("ColonyOutputTooltip", hudPanel.transform, new Vector2(500, 540), Vector2.zero, TextAnchor.UpperLeft);
             outputTooltip.GetComponent<Image>().raycastTarget = false;
             outputTooltipText = Label("OutputExplanation", outputTooltip.transform, "", 13, new Vector2(16, -14), 468, 512, Ivory);
+            outputTooltipText.verticalOverflow = VerticalWrapMode.Overflow;
             outputTooltip.SetActive(false);
         }
 
@@ -65,7 +66,7 @@ namespace WH30K.UI
             outputTooltipText.fontSize = 13;
             while (outputTooltipText.preferredHeight > hud.rect.height - 52 && outputTooltipText.fontSize > 11)
                 outputTooltipText.fontSize--;
-            var height = outputTooltipText.preferredHeight + 28;
+            var height = Mathf.Ceil(outputTooltipText.preferredHeight) + 32;
             rect.sizeDelta = new Vector2(width, height);
             outputTooltipText.rectTransform.sizeDelta = new Vector2(width - 32, height - 28);
             // Anchor below the hovered metric, and clamp in canvas units for CanvasScaler.

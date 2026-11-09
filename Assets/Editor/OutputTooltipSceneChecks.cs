@@ -227,6 +227,8 @@ public static class OutputTooltipSceneChecks
                 metric.source + " is shown alongside current demand and net change after measurement");
             CheckLayout(tooltip, text, check);
             ShipSceneChecks.CaptureReview(bootstrap, colony.CoreBuildings[0], metric.capture);
+            check(text.cachedTextGenerator.lineCount >= text.text.Count(c => c == '\n') + 1,
+                metric.source + " tooltip renders every line including the observation note");
             ExecuteEvents.Execute(target.gameObject, pointer, ExecuteEvents.pointerExitHandler);
         }
         check(bootstrap.CaptureSaveJson() == before, "reading the measured reserve outlook cannot change saved colony state");
